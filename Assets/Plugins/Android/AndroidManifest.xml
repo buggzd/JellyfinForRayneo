@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+  <application android:allowBackup="true"
+               android:supportsRtl="true"
+               android:usesCleartextTraffic="true"
+               android:theme="@style/Theme.UnityAdapter">
+    <activity android:name="com.tcl.unity.unityadapter.UnityXRSupportActivity"
+              android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale|layoutDirection|density"
+              android:exported="true"
+              android:hardwareAccelerated="false"
+              android:launchMode="singleTask"
+              android:resizeableActivity="false"
+              android:screenOrientation="portrait"
+              android:theme="@style/Theme.UnityAdapter.NoActionBar">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="com.tcl.xr.aries.action.LAUNCHER_MAIN" />
+        <category android:name="android.intent.category.DEFAULT" />
+      </intent-filter>
+      <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
+      <meta-data android:name="android.notch_support" android:value="true" />
+    </activity>
+  </application>
+
+  <queries>
+    <package android:name="com.tcl.xrmanager.main" />
+  </queries>
+</manifest>
+

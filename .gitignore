@@ -1,0 +1,41 @@
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# IDE and generated project files
+.idea/
+.vscode/
+.vs/
+*.csproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Unity-generated crash reports and Android artifacts
+sysinfo.txt
+*.apk
+*.aab
+*.unitypackage
+
+# RayNeo's redistributable SDK is installed from the official source by script.
+Packages/com.ffalcon.plugin.xr/
+Packages/com.google.xr.cardboard/
+
