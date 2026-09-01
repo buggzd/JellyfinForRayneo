@@ -81,15 +81,43 @@ namespace JellyfinForRayNeo.Tests
             Transform login = FindDescendant(canvas.transform, "Login Screen");
             Transform home = FindDescendant(canvas.transform, "Home Screen");
             Transform phoneHint = FindDescendant(canvas.transform, "Phone Connection Hint");
+            Transform homeContent = FindDescendant(canvas.transform, "Home Content");
             Assert.NotNull(login);
             Assert.NotNull(home);
             Assert.NotNull(phoneHint);
+            Assert.NotNull(homeContent);
             Assert.IsTrue(login.gameObject.activeInHierarchy);
             Assert.IsFalse(home.gameObject.activeSelf);
             Assert.AreEqual(0, login.GetComponentsInChildren<InputField>(true).Length);
+            Assert.IsTrue(
+                homeContent.GetComponent<VerticalLayoutGroup>().childControlHeight,
+                "Home shelves must honor their LayoutElement height instead of collapsing posters into strips.");
             Assert.AreEqual(
                 CompanionLoginState.LoginRequired,
                 CompanionLoginRuntime.Current.State);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator PosterCards_KeepPortraitAndLandscapeArtworkRatios()
+        {
+            GameObject host = new GameObject("Poster Card Test Host", typeof(RectTransform));
+            PosterCardView portrait = PosterCardView.Create(host.transform);
+            PosterCardView landscape = PosterCardView.Create(host.transform, true);
+            yield return null;
+
+            RectTransform portraitArtwork = FindDescendant(portrait.transform, "Artwork Frame") as RectTransform;
+            RectTransform landscapeArtwork = FindDescendant(landscape.transform, "Artwork Frame") as RectTransform;
+            Assert.NotNull(portraitArtwork);
+            Assert.NotNull(landscapeArtwork);
+            Assert.That(
+                portraitArtwork.rect.width / portraitArtwork.rect.height,
+                Is.EqualTo(2f / 3f).Within(0.01f));
+            Assert.That(
+                landscapeArtwork.rect.width / landscapeArtwork.rect.height,
+                Is.EqualTo(16f / 9f).Within(0.01f));
+
+            Object.Destroy(host);
             yield return null;
         }
 

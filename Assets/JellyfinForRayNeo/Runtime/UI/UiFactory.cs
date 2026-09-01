@@ -6,6 +6,8 @@ namespace JellyfinForRayNeo
 {
     internal static class UiFactory
     {
+        private static Sprite _roundedSprite;
+
         public static RectTransform CreateRect(string name, Transform parent)
         {
             GameObject gameObject = new GameObject(name, typeof(RectTransform));
@@ -21,6 +23,30 @@ namespace JellyfinForRayNeo
             Image image = rect.gameObject.AddComponent<Image>();
             image.color = color;
             image.raycastTarget = true;
+            return image;
+        }
+
+        public static Image CreateRoundedPanel(string name, Transform parent, Color color)
+        {
+            Image image = CreatePanel(name, parent, color);
+            image.sprite = RoundedSprite;
+            image.type = Image.Type.Sliced;
+            return image;
+        }
+
+        public static Image CreateGradientPanel(
+            string name,
+            Transform parent,
+            Color startColor,
+            Color endColor,
+            bool horizontal = false)
+        {
+            Image image = CreatePanel(name, parent, Color.white);
+            image.raycastTarget = false;
+            UiGradient gradient = image.gameObject.AddComponent<UiGradient>();
+            gradient.StartColor = startColor;
+            gradient.EndColor = endColor;
+            gradient.Horizontal = horizontal;
             return image;
         }
 
@@ -56,7 +82,7 @@ namespace JellyfinForRayNeo
             Color foreground,
             int fontSize = 28)
         {
-            Image image = CreatePanel(name, parent, background);
+            Image image = CreateRoundedPanel(name, parent, background);
             Button button = image.gameObject.AddComponent<Button>();
             button.targetGraphic = image;
             button.transition = Selectable.Transition.ColorTint;
@@ -81,7 +107,7 @@ namespace JellyfinForRayNeo
             string placeholderValue,
             InputField.ContentType contentType)
         {
-            Image background = CreatePanel(name, parent, UiTheme.SurfaceRaised);
+            Image background = CreateRoundedPanel(name, parent, UiTheme.SurfaceRaised);
             InputField input = background.gameObject.AddComponent<InputField>();
             input.targetGraphic = background;
             input.contentType = contentType;
@@ -191,9 +217,64 @@ namespace JellyfinForRayNeo
         {
             for (int index = parent.childCount - 1; index >= 0; index--)
             {
-                Object.Destroy(parent.GetChild(index).gameObject);
+                GameObject child = parent.GetChild(index).gameObject;
+                child.SetActive(false);
+                Object.Destroy(child);
+            }
+        }
+
+        private static Sprite RoundedSprite
+        {
+            get
+            {
+                if (_roundedSprite != null)
+                {
+                    return _roundedSprite;
+                }
+
+                const int size = 64;
+                const float radius = 18f;
+                float half = size * 0.5f;
+                Color[] pixels = new Color[size * size];
+                for (int y = 0; y < size; y++)
+                {
+                    for (int x = 0; x < size; x++)
+                    {
+                        float px = Mathf.Abs(x + 0.5f - half) - half + radius;
+                        float py = Mathf.Abs(y + 0.5f - half) - half + radius;
+                        float outside = Mathf.Sqrt(
+                            Mathf.Max(px, 0f) * Mathf.Max(px, 0f)
+                            + Mathf.Max(py, 0f) * Mathf.Max(py, 0f));
+                        float inside = Mathf.Min(Mathf.Max(px, py), 0f);
+                        float signedDistance = inside + outside - radius;
+                        float alpha = Mathf.Clamp01(0.5f - signedDistance);
+                        pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                    }
+                }
+
+                Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false, true)
+                {
+                    name = "Runtime Rounded Rectangle",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp,
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                texture.SetPixels(pixels);
+                texture.Apply(false, true);
+
+                float border = radius + 2f;
+                _roundedSprite = Sprite.Create(
+                    texture,
+                    new Rect(0f, 0f, size, size),
+                    new Vector2(0.5f, 0.5f),
+                    100f,
+                    0,
+                    SpriteMeshType.FullRect,
+                    new Vector4(border, border, border, border));
+                _roundedSprite.name = "Runtime Rounded Rectangle";
+                _roundedSprite.hideFlags = HideFlags.HideAndDontSave;
+                return _roundedSprite;
             }
         }
     }
 }
-
