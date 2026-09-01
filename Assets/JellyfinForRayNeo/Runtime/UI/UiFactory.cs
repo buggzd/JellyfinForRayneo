@@ -1,3 +1,4 @@
+using Type = System.Type;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -132,8 +133,8 @@ namespace JellyfinForRayNeo
                 "Jellyfin Spatial Canvas",
                 typeof(RectTransform),
                 typeof(Canvas),
-                typeof(CanvasScaler),
-                typeof(GraphicRaycaster));
+                typeof(CanvasScaler));
+            AddSpatialRaycaster(canvasObject);
             Canvas canvas = canvasObject.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.worldCamera = camera;
@@ -157,6 +158,20 @@ namespace JellyfinForRayNeo
             scaler.scaleFactor = 1f;
             scaler.dynamicPixelsPerUnit = 1.5f;
             return canvas;
+        }
+
+        private static void AddSpatialRaycaster(GameObject canvasObject)
+        {
+            Type rayNeoRaycaster = Type.GetType(
+                "FfalconXR.InputModule.XRGraphicRaycaster, UnityXRSDKCore",
+                false);
+            if (rayNeoRaycaster != null && typeof(BaseRaycaster).IsAssignableFrom(rayNeoRaycaster))
+            {
+                canvasObject.AddComponent(rayNeoRaycaster);
+                return;
+            }
+
+            canvasObject.AddComponent<GraphicRaycaster>();
         }
 
         public static Camera EnsureMainCamera()

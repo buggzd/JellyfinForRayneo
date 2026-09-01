@@ -76,7 +76,15 @@ namespace JellyfinForRayNeo.Tests
             Assert.NotNull(canvas);
             Assert.AreEqual("Jellyfin Spatial Canvas", canvas.name);
             Assert.AreEqual(RenderMode.WorldSpace, canvas.renderMode);
-            Assert.NotNull(canvas.GetComponent<GraphicRaycaster>());
+            BaseRaycaster raycaster = canvas.GetComponent<BaseRaycaster>();
+            Assert.NotNull(raycaster);
+            Assert.AreEqual(
+                "FfalconXR.InputModule.XRGraphicRaycaster",
+                raycaster.GetType().FullName,
+                "RayNeo's custom ray input requires XRGraphicRaycaster instead of Unity's screen-point raycaster.");
+            Assert.IsNull(
+                canvas.GetComponent<GraphicRaycaster>(),
+                "A standard GraphicRaycaster would make the Editor mouse and RayNeo laser target different UI positions.");
 
             Transform login = FindDescendant(canvas.transform, "Login Screen");
             Transform home = FindDescendant(canvas.transform, "Home Screen");
