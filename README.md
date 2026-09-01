@@ -73,6 +73,14 @@ Jellyfin for RayNeo > Configure Project and Scene
 3. 项目已预设 ARM64、IL2CPP、最低 API 26、自定义 Manifest、Gradle 模板和 Android XR Loader。
 4. 点击 `Build` 生成 APK，或 `Build And Run` 安装到 RayNeo 配套设备。
 
+默认输出路径为 `Builds/Android/JellyfinForRayNeo.apk`（构建产物已被 Git 忽略），可通过 ADB 侧载：
+
+```bash
+adb install -r Builds/Android/JellyfinForRayNeo.apk
+```
+
+项目按 RayNeo Air SDK `1.0.3` 的兼容要求固定为 target SDK 29，适合向配套设备侧载，但不满足当前 Google Play 的 target SDK 上架要求。正式分发前还需要在 Unity Player Settings 中配置自有 keystore；未配置时 Unity 会使用 Android Debug 证书签名。
+
 启动 Activity 使用 RayNeo 文档要求的 `com.tcl.unity.unityadapter.UnityXRSupportActivity`。最终发布前，应在目标 RayNeo Air 型号和配套手机上验证登录、触摸射线、双眼显示、HLS 转码和长时间播放。
 
 ## 测试
@@ -95,7 +103,7 @@ EditMode 测试覆盖 URL、认证响应、媒体元数据、会话和播放设�
   -logFile /tmp/jellyfin-rayneo-playmode.log
 ```
 
-当前验证结果：EditMode `11/11`、PlayMode `3/3`。
+当前验证结果：EditMode `11/11`、PlayMode `3/3`，Android ARM64 IL2CPP APK 构建成功。
 
 ## 代码结构
 
@@ -117,6 +125,7 @@ Assets/JellyfinForRayNeo/
 - 图片缓存仅在内存中，默认最多 192 张、最多 4 个并发下载；选集页只加载当前季海报。
 - 单次选集请求最多加载 500 集，超大型剧集库后续需要分页。
 - 播放能力受 Unity Android `VideoPlayer`、设备解码器和 Jellyfin 转码配置影响。
+- RayNeo 官方导入指南要求将 `Active Input Handling` 设为 `Both`；SDK `1.0.3` 的 XR 输入模块同时使用旧版 `StandaloneInputModule` 与新版触摸处理，因此 Unity 会在 Android 构建时提示 `Both` 性能警告。在替换官方输入模块前不要改为单一后端。
 - RayNeo SDK `1.0.3` 的编辑器环境检查窗口在 Unity 批处理模式下可能打印空引用告警；它来自官方 SDK 的 Editor 代码，不影响本项目 PlayMode 测试结果。
 
 ## 第三方声明
