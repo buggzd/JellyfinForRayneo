@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -90,19 +91,69 @@ namespace JellyfinForRayNeo.Tests
             Transform home = FindDescendant(canvas.transform, "Home Screen");
             Transform phoneHint = FindDescendant(canvas.transform, "Phone Connection Hint");
             Transform homeContent = FindDescendant(canvas.transform, "Home Content");
+            Transform homeViewport = FindDescendant(canvas.transform, "Home Viewport");
             Assert.NotNull(login);
             Assert.NotNull(home);
             Assert.NotNull(phoneHint);
             Assert.NotNull(homeContent);
+            Assert.NotNull(homeViewport);
             Assert.IsTrue(login.gameObject.activeInHierarchy);
             Assert.IsFalse(home.gameObject.activeSelf);
             Assert.AreEqual(0, login.GetComponentsInChildren<InputField>(true).Length);
             Assert.IsTrue(
                 homeContent.GetComponent<VerticalLayoutGroup>().childControlHeight,
                 "Home shelves must honor their LayoutElement height instead of collapsing posters into strips.");
+            AssertTransparentDragSurface(homeViewport);
             Assert.AreEqual(
                 CompanionLoginState.LoginRequired,
                 CompanionLoginRuntime.Current.State);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator HomeShelves_AcceptDragFromTransparentBackground()
+        {
+            GameObject host = new GameObject("Home Drag Test Host", typeof(RectTransform));
+            JellyfinApiClient api = new JellyfinApiClient("play-mode-test-device");
+            api.SetSession(new JellyfinSession
+            {
+                ServerUrl = "http://127.0.0.1:8096",
+                AccessToken = "play-mode-token",
+                UserId = "play-mode-user",
+                DeviceId = "play-mode-test-device"
+            });
+            HomeView home = new HomeView(
+                host.transform,
+                api,
+                new JellyfinImageCache());
+            home.SetSections(
+                new List<JellyfinHomeSection>
+                {
+                    new JellyfinHomeSection
+                    {
+                        Key = "latest-movies",
+                        Title = "可拖拽",
+                        Items = new List<JellyfinItem>
+                        {
+                            new JellyfinItem { Id = "item-1", Name = "测试影片", Type = "Movie" }
+                        }
+                    }
+                },
+                CancellationToken.None);
+            yield return null;
+
+            Transform shelf = FindDescendant(host.transform, "Shelf - 可拖拽");
+            Assert.NotNull(shelf);
+            Transform viewport = FindDescendant(shelf, "Viewport");
+            Assert.NotNull(viewport);
+            AssertTransparentDragSurface(viewport);
+
+            ScrollRect scroll = shelf.GetComponent<ScrollRect>();
+            Assert.NotNull(scroll);
+            Assert.IsTrue(scroll.horizontal);
+            Assert.AreSame(viewport, scroll.viewport);
+
+            Object.Destroy(host);
             yield return null;
         }
 
@@ -142,7 +193,28 @@ namespace JellyfinForRayNeo.Tests
             Assert.AreEqual("MainCamera", head.tag);
             Assert.AreSame(head.GetComponent<Camera>(), Camera.main);
             Assert.NotNull(EventSystem.current);
-            Assert.IsTrue(EventSystem.current.GetComponents<BaseInputModule>().Any());
+            BaseInputModule[] inputModules = EventSystem.current.GetComponents<BaseInputModule>();
+            Assert.IsTrue(
+                inputModules.Any(module =>
+                    module.GetType().FullName == "JellyfinForRayNeo.RayNeoEditorInputModule"
+                    && module.enabled),
+                "Editor play mode must use the input module that supports dragging while the mouse is captured.");
+            Assert.IsFalse(
+                inputModules.Any(module =>
+                    module.GetType().FullName == "FfalconXR.InputModule.XRInputModule"
+                    && module.enabled),
+                "The official module ignores drag events while the Editor cursor is locked.");
+
+            RayNeoEditorInputSimulator simulator =
+                Object.FindObjectOfType<RayNeoEditorInputSimulator>();
+            Assert.NotNull(simulator);
+            Assert.IsTrue(simulator.enabled);
+            Assert.IsTrue(
+                simulator.GetComponents<Component>().Any(component =>
+                    component != null
+                    && component.GetType().FullName
+                        == "FfalconXR.InputModule.UnityInputKeyHandler"),
+                "The Editor simulator must forward the left mouse button through the same input chain as the ray module.");
             yield return null;
         }
 
@@ -150,6 +222,14 @@ namespace JellyfinForRayNeo.Tests
         {
             return root.GetComponentsInChildren<Transform>(true)
                 .FirstOrDefault(candidate => candidate.name == objectName);
+        }
+
+        private static void AssertTransparentDragSurface(Transform viewport)
+        {
+            Image surface = viewport.GetComponent<Image>();
+            Assert.NotNull(surface, "A ScrollRect viewport needs a Graphic to receive ray drag events on empty space.");
+            Assert.IsTrue(surface.raycastTarget);
+            Assert.AreEqual(0f, surface.color.a, 0.0001f);
         }
     }
 }

@@ -44,6 +44,7 @@ namespace JellyfinForRayNeo
 
             RectTransform viewport = UiFactory.CreateRect("Home Viewport", rootRect);
             viewport.gameObject.AddComponent<RectMask2D>();
+            AddTransparentDragSurface(viewport);
             UiFactory.Stretch(viewport);
 
             _content = UiFactory.CreateRect("Home Content", viewport);
@@ -545,6 +546,7 @@ namespace JellyfinForRayNeo
 
             RectTransform viewport = UiFactory.CreateRect("Viewport", shelf);
             viewport.gameObject.AddComponent<RectMask2D>();
+            AddTransparentDragSurface(viewport);
             UiFactory.SetRect(
                 viewport,
                 new Vector2(0f, 0f),
@@ -599,6 +601,13 @@ namespace JellyfinForRayNeo
                     cancellationToken,
                     landscape ? 760 : 480);
             }
+        }
+
+        private static void AddTransparentDragSurface(RectTransform viewport)
+        {
+            Image dragSurface = viewport.gameObject.AddComponent<Image>();
+            dragSurface.color = Color.clear;
+            dragSurface.raycastTarget = true;
         }
 
         private static JellyfinItem SelectHeroItem(IList<JellyfinHomeSection> sections)

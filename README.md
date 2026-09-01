@@ -75,7 +75,8 @@ Unity Editor 流程：
 1. 打开 `Main` 场景并进入 Play Mode。
 2. `RayNeo Phone` 模拟器窗口会自动打开，也可通过 `Jellyfin for RayNeo > Companion Simulator` 手动打开。
 3. 在模拟器窗口输入 Jellyfin 信息；`Game View` 同时作为眼镜画面。
-4. 保持 `Game View` 聚焦，继续使用 RayNeo SDK 的 Ctrl、鼠标和 WASD 编辑器模拟方式测试射线与选择。
+4. 点击 `Game View`，按一次左 Ctrl 捕获鼠标。系统光标会隐藏并固定在窗口中心，这是相对鼠标输入的正常表现；此时观察 RayNeo 激光点的位置。
+5. 移动鼠标瞄准，使用左键点击菜单；按住左键可从黑色空白处或海报区域横向/纵向拖拽。再次按左 Ctrl 或按 Esc 释放鼠标。
 
 局域网 HTTP 服务器需要同时放行 Android 明文网络和 Unity Player 的非安全 HTTP 选项，本项目已在 Manifest 与 Player Settings 中开启。跨公网使用时仍应配置 HTTPS。
 
@@ -152,7 +153,7 @@ EditMode 测试覆盖 URL、认证响应、媒体元数据、会话和播放设�
   -logFile /tmp/jellyfin-rayneo-playmode.log
 ```
 
-当前验证结果：EditMode `18/18`、PlayMode `3/3`；Android ARM64 IL2CPP APK 构建成功。产物为约 25 MB，包名 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29，并使用 APK Signature Scheme v2 调试签名。
+当前验证结果：EditMode `18/18`、PlayMode `5/5`；Android ARM64 IL2CPP APK 构建成功。产物为约 43 MB，包名 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29，并使用 APK Signature Scheme v2 调试签名。
 
 ## 代码结构
 

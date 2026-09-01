@@ -39,6 +39,12 @@ namespace JellyfinForRayNeo
 
         private void Start()
         {
+#if UNITY_EDITOR
+            if (GetComponent<RayNeoEditorInputSimulator>() == null)
+            {
+                gameObject.AddComponent<RayNeoEditorInputSimulator>();
+            }
+#endif
             _lifetime = new CancellationTokenSource();
             _companionBridge = new CompanionLoginBridge();
             _companionBridge.LoginRequested += HandleCompanionLoginRequested;
