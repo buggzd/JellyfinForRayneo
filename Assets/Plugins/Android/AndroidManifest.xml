@@ -8,14 +8,15 @@
                android:supportsRtl="true"
                android:usesCleartextTraffic="true"
                android:theme="@style/Theme.UnityAdapter">
-    <activity android:name="com.tcl.unity.unityadapter.UnityXRSupportActivity"
+    <activity android:name="com.jellyfinforrayneo.companion.JellyfinRayNeoActivity"
               android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale|layoutDirection|density"
               android:exported="true"
               android:hardwareAccelerated="false"
               android:launchMode="singleTask"
               android:resizeableActivity="false"
               android:screenOrientation="portrait"
-              android:theme="@style/Theme.UnityAdapter.NoActionBar">
+              android:theme="@style/Theme.UnityAdapter.NoActionBar"
+              android:windowSoftInputMode="adjustResize">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />
@@ -33,4 +34,3 @@
     <package android:name="com.tcl.xrmanager.main" />
   </queries>
 </manifest>
-

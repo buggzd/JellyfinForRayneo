@@ -7,6 +7,8 @@
 ## 当前能力
 
 - Jellyfin 服务器探测、用户名/密码登录和本地会话恢复
+- 手机端原生 Android 登录页；RayNeo Air 眼镜端只显示连接状态与媒体内容
+- Unity Editor 手机伴侣模拟器，可与 Game View 组成双端调试环境
 - 加载用户媒体库、继续观看、下一集、最新电影和最新剧集
 - 按媒体库与流派生成横向海报架
 - 海报、背景图和用户观看进度展示，带内存图片缓存与并发限制
@@ -59,12 +61,23 @@ Jellyfin for RayNeo > Configure Project and Scene
 
 ## 运行与登录
 
-1. 打开 `Main` 场景并进入 Play Mode，或将应用安装到 RayNeo 配套手机。
-2. 输入 Jellyfin 地址，例如 `http://192.168.1.20:8096`；反向代理子路径也受支持，例如 `https://media.example.com/jellyfin`。
-3. 输入 Jellyfin 用户名和密码。密码仅用于本次登录，不会保存。
-4. 转动手机/眼镜使射线指向控件，触摸屏幕确认；拖动可浏览海报架。
+应用采用两个显示端协作：配套手机运行原生 Android 登录页，负责键盘输入；RayNeo Air 运行 Unity XR 画面，负责连接等待、海报墙、详情和播放。登录成功后手机登录层自动隐藏，露出 RayNeo SDK 原有遥控界面。
 
-局域网 HTTP 服务器需要 Android 明文网络访问，本项目已在 Manifest 中开启。跨公网使用时应配置 HTTPS。
+真机流程：
+
+1. 将 RayNeo Air 接到配套手机并启动应用。
+2. 在手机上输入 Jellyfin 地址，例如 `http://192.168.1.20:8096`；反向代理子路径也受支持，例如 `https://media.example.com/jellyfin`。
+3. 输入 Jellyfin 用户名和密码，点击“连接并在眼镜中打开”。密码只在进程内传递本次登录，不会保存。
+4. 连接成功后戴上眼镜，使用 RayNeo 头控射线与手机遥控区浏览海报墙。
+
+Unity Editor 流程：
+
+1. 打开 `Main` 场景并进入 Play Mode。
+2. `RayNeo Phone` 模拟器窗口会自动打开，也可通过 `Jellyfin for RayNeo > Companion Simulator` 手动打开。
+3. 在模拟器窗口输入 Jellyfin 信息；`Game View` 同时作为眼镜画面。
+4. 保持 `Game View` 聚焦，继续使用 RayNeo SDK 的 Ctrl、鼠标和 WASD 编辑器模拟方式测试射线与选择。
+
+局域网 HTTP 服务器需要同时放行 Android 明文网络和 Unity Player 的非安全 HTTP 选项，本项目已在 Manifest 与 Player Settings 中开启。跨公网使用时仍应配置 HTTPS。
 
 ## Android 构建
 
@@ -81,7 +94,43 @@ adb install -r Builds/Android/JellyfinForRayNeo.apk
 
 项目按 RayNeo Air SDK `1.0.3` 的兼容要求固定为 target SDK 29，适合向配套设备侧载，但不满足当前 Google Play 的 target SDK 上架要求。正式分发前还需要在 Unity Player Settings 中配置自有 keystore；未配置时 Unity 会使用 Android Debug 证书签名。
 
-启动 Activity 使用 RayNeo 文档要求的 `com.tcl.unity.unityadapter.UnityXRSupportActivity`。最终发布前，应在目标 RayNeo Air 型号和配套手机上验证登录、触摸射线、双眼显示、HLS 转码和长时间播放。
+启动 Activity 为 `com.jellyfinforrayneo.companion.JellyfinRayNeoActivity`，它继承 RayNeo 文档要求的 `UnityXRSupportActivity`：手机显示原生登录层，外接眼镜仍由 SDK 的 `UnityPresentation` 承载 Unity 画面。最终发布前，应在目标 RayNeo Air 型号和配套手机上验证登录、触摸射线、双眼显示、HLS 转码和长时间播放。
+
+## 双显示端调试
+
+Editor 中无法真实创建 Android 外接显示器的 `Presentation`，因此用两个窗口替代：`RayNeo Phone` 模拟手机，`Game View` 模拟眼镜。登录桥、状态切换和密码清理逻辑与 Android 真机共用；只有手机 UI 的实现不同。
+
+在 macOS 上首次连接局域网 Jellyfin 前，还要到 `系统设置 > 隐私与安全性 > 本地网络` 允许 Unity 访问本地网络。若 curl 可以访问服务器、Unity 却报告 `Cannot connect to destination host`，可用以下命令确认是否被系统权限拦截：
+
+```bash
+/usr/bin/log show --last 5m --style compact \
+  --predicate 'process == "Unity" AND eventMessage CONTAINS[c] "Local network prohibited"'
+```
+
+真机可同时观察手机和眼镜显示：
+
+```bash
+adb devices
+scrcpy --list-displays
+scrcpy --display-id=0 --window-title="Phone"
+scrcpy --display-id=<RayNeo-display-id> --window-title="RayNeo Air"
+```
+
+如果外接显示 ID 不明确，可检查 Android 显示拓扑：
+
+```bash
+adb shell dumpsys display | rg 'DisplayDeviceInfo|displayId|FLAG_PRESENTATION'
+```
+
+不同手机系统或 scrcpy 版本可能不允许捕获外接 `Presentation`；此时保留手机 scrcpy 窗口，并直接观察眼镜画面。Android Studio 的 Layout Inspector 用于检查手机原生登录层，Unity Profiler 用于检查眼镜端 Unity 帧与内存，`adb logcat` 用于定位 Activity、网络和 RayNeo SDK 问题。
+
+开发机上运行 Jellyfin 时，可通过 USB 端口反向映射让手机访问：
+
+```bash
+adb reverse tcp:8096 tcp:8096
+```
+
+随后在手机登录页使用 `http://127.0.0.1:8096`。需要脱离 USB 时，可使用 Android 开发者选项中的无线调试；手机、开发机和 Jellyfin 服务器应处于可互访网络。
 
 ## 测试
 
@@ -103,24 +152,28 @@ EditMode 测试覆盖 URL、认证响应、媒体元数据、会话和播放设�
   -logFile /tmp/jellyfin-rayneo-playmode.log
 ```
 
-当前验证结果：EditMode `11/11`、PlayMode `3/3`，Android ARM64 IL2CPP APK 构建成功。
+当前验证结果：EditMode `18/18`、PlayMode `3/3`；Android ARM64 IL2CPP APK 构建成功。产物为约 25 MB，包名 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29，并使用 APK Signature Scheme v2 调试签名。
 
 ## 代码结构
 
 ```text
 Assets/JellyfinForRayNeo/
-├── Editor/          # Unity 项目、Android XR 与主场景配置入口
+├── Editor/          # Unity 项目配置与手机伴侣模拟器
 ├── Runtime/Api/     # Jellyfin HTTP API、模型、URL 与认证头
+├── Runtime/Companion/ # Android/Editor 登录消息桥与状态快照
 ├── Runtime/Core/    # 会话、持久化和任务辅助
-├── Runtime/Services/# 首页聚合、图片缓存和播放历史上报
+├── Runtime/Services/ # 首页聚合、图片缓存和播放历史上报
 ├── Runtime/UI/      # 登录、海报墙、详情、选集和播放器
 ├── Scenes/          # Main.unity
 └── Tests/           # EditMode 与 PlayMode 测试
+
+Assets/Plugins/Android/
+└── com/jellyfinforrayneo/companion/ # 手机原生登录 Activity
 ```
 
 ## 安全与已知边界
 
-- 密码从不落盘；MVP 为恢复登录将 Jellyfin access token 存在 Unity `PlayerPrefs` 中，它不等同于系统安全存储。
+- 密码从不落盘，也不会进入状态快照或日志；Android/Editor 桥完成派发后会清空请求对象中的密码。MVP 为恢复登录将 Jellyfin access token 存在 Unity `PlayerPrefs` 中，它不等同于系统安全存储。
 - Android Manifest 允许明文 HTTP，以支持常见局域网 Jellyfin 部署；公网环境请使用受信任的 HTTPS 反向代理。
 - 图片缓存仅在内存中，默认最多 192 张、最多 4 个并发下载；选集页只加载当前季海报。
 - 单次选集请求最多加载 500 集，超大型剧集库后续需要分页。

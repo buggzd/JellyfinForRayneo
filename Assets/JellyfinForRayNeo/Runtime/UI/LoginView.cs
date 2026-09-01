@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,14 +6,8 @@ namespace JellyfinForRayNeo
     public sealed class LoginView
     {
         private readonly GameObject _root;
-        private readonly InputField _serverInput;
-        private readonly InputField _usernameInput;
-        private readonly InputField _passwordInput;
-        private readonly Button _loginButton;
-        private readonly Text _loginButtonLabel;
+        private readonly Text _stateLabel;
         private readonly Text _message;
-
-        public event Action<string, string, string> LoginRequested;
 
         public LoginView(Transform parent)
         {
@@ -22,82 +15,119 @@ namespace JellyfinForRayNeo
             UiFactory.Stretch(rootRect);
             _root = rootRect.gameObject;
 
-            Image card = UiFactory.CreatePanel("Login Card", rootRect, UiTheme.Surface);
+            Image card = UiFactory.CreatePanel("Phone Connection Card", rootRect, UiTheme.Surface);
             UiFactory.SetRect(
                 card.rectTransform,
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
                 Vector2.zero,
-                new Vector2(920f, 760f));
+                new Vector2(1040f, 700f));
 
             Text eyebrow = UiFactory.CreateText(
                 "Eyebrow",
                 card.transform,
-                "RAYNEO AIR  ·  第三方客户端",
+                "RAYNEO AIR  ·  JELLYFIN COMPANION",
                 22,
                 UiTheme.AccentBright,
                 TextAnchor.MiddleCenter,
                 FontStyle.Bold);
-            UiFactory.SetRect(eyebrow.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -50f), new Vector2(820f, 42f));
+            UiFactory.SetRect(
+                eyebrow.rectTransform,
+                new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, -48f),
+                new Vector2(900f, 42f));
 
-            Text title = UiFactory.CreateText("Title", card.transform, "连接 Jellyfin", 54, UiTheme.TextPrimary, TextAnchor.MiddleCenter, FontStyle.Bold);
-            UiFactory.SetRect(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -102f), new Vector2(820f, 80f));
-
-            Text subtitle = UiFactory.CreateText(
-                "Subtitle",
+            Text title = UiFactory.CreateText(
+                "Title",
                 card.transform,
-                "在眼镜中浏览海报墙，并同步你的继续观看与播放进度",
+                "请在手机上连接 Jellyfin",
+                50,
+                UiTheme.TextPrimary,
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                title.rectTransform,
+                new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, -106f),
+                new Vector2(900f, 74f));
+
+            Text hint = UiFactory.CreateText(
+                "Phone Connection Hint",
+                card.transform,
+                "地址、用户名和密码输入已移至手机屏幕，眼镜中无需使用遥控器打字。",
                 24,
                 UiTheme.TextSecondary,
                 TextAnchor.MiddleCenter);
-            UiFactory.SetRect(subtitle.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -174f), new Vector2(820f, 52f));
-
-            _serverInput = CreateLabeledInput(card.transform, "服务器地址", "例如：http://192.168.1.20:8096", -252f, InputField.ContentType.Standard);
-            _serverInput.keyboardType = TouchScreenKeyboardType.URL;
-            _usernameInput = CreateLabeledInput(card.transform, "用户名", "Jellyfin 用户名", -374f, InputField.ContentType.Standard);
-            _passwordInput = CreateLabeledInput(card.transform, "密码", "密码不会保存在设备上", -496f, InputField.ContentType.Password);
-
-            _loginButton = UiFactory.CreateButton("Login Button", card.transform, "登录并加载媒体库", UiTheme.Accent, UiTheme.TextPrimary, 30);
             UiFactory.SetRect(
-                _loginButton.GetComponent<RectTransform>(),
-                new Vector2(0.5f, 0f),
-                new Vector2(0.5f, 0f),
-                new Vector2(0.5f, 0f),
-                new Vector2(0f, 82f),
-                new Vector2(760f, 70f));
-            _loginButtonLabel = _loginButton.GetComponentInChildren<Text>();
-            _loginButton.onClick.AddListener(() => LoginRequested?.Invoke(_serverInput.text, _usernameInput.text, _passwordInput.text));
+                hint.rectTransform,
+                new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, -176f),
+                new Vector2(900f, 62f));
 
-            _message = UiFactory.CreateText("Message", card.transform, string.Empty, 22, UiTheme.TextSecondary, TextAnchor.MiddleCenter);
-            UiFactory.SetRect(_message.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 25f), new Vector2(800f, 46f));
+            CreateStep(card.transform, "1", "摘下眼镜或查看手机屏幕", -270f);
+            CreateStep(card.transform, "2", "输入 Jellyfin 地址与帐号并点击连接", -362f);
+            CreateStep(card.transform, "3", "连接成功后回到眼镜浏览海报墙", -454f);
+
+            Image statusPanel = UiFactory.CreatePanel(
+                "Companion Status",
+                card.transform,
+                new Color(0.06f, 0.07f, 0.11f, 0.98f));
+            UiFactory.SetRect(
+                statusPanel.rectTransform,
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 42f),
+                new Vector2(900f, 112f));
+
+            _stateLabel = UiFactory.CreateText(
+                "Connection State",
+                statusPanel.transform,
+                "等待手机操作",
+                23,
+                UiTheme.AccentBright,
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                _stateLabel.rectTransform,
+                new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, -24f),
+                new Vector2(840f, 36f));
+
+            _message = UiFactory.CreateText(
+                "Message",
+                statusPanel.transform,
+                "请在手机端完成连接。",
+                21,
+                UiTheme.TextSecondary,
+                TextAnchor.MiddleCenter);
+            UiFactory.SetRect(
+                _message.rectTransform,
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 22f),
+                new Vector2(840f, 46f));
         }
 
         public void Show(bool visible)
         {
             _root.SetActive(visible);
-            _passwordInput.text = string.Empty;
-        }
-
-        public void SetInitialValues(string serverUrl, string username)
-        {
-            if (!string.IsNullOrWhiteSpace(serverUrl))
-            {
-                _serverInput.text = serverUrl;
-            }
-            if (!string.IsNullOrWhiteSpace(username))
-            {
-                _usernameInput.text = username;
-            }
         }
 
         public void SetBusy(bool busy)
         {
-            _loginButton.interactable = !busy;
-            _serverInput.interactable = !busy;
-            _usernameInput.interactable = !busy;
-            _passwordInput.interactable = !busy;
-            _loginButtonLabel.text = busy ? "正在连接…" : "登录并加载媒体库";
+            _stateLabel.text = busy ? "正在连接 Jellyfin…" : "等待手机操作";
+            _stateLabel.color = busy ? UiTheme.AccentBright : UiTheme.TextSecondary;
         }
 
         public void SetMessage(string message, bool isError)
@@ -106,25 +136,51 @@ namespace JellyfinForRayNeo
             _message.color = isError ? UiTheme.Danger : UiTheme.TextSecondary;
         }
 
-        private static InputField CreateLabeledInput(
-            Transform parent,
-            string label,
-            string placeholder,
-            float y,
-            InputField.ContentType contentType)
+        private static void CreateStep(Transform parent, string number, string description, float y)
         {
-            Text labelText = UiFactory.CreateText(label + " Label", parent, label, 22, UiTheme.TextSecondary, TextAnchor.MiddleLeft, FontStyle.Bold);
-            UiFactory.SetRect(labelText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, y), new Vector2(760f, 34f));
-
-            InputField input = UiFactory.CreateInputField(label + " Input", parent, placeholder, contentType);
+            Image row = UiFactory.CreatePanel(
+                "Phone Step " + number,
+                parent,
+                new Color(0.08f, 0.09f, 0.14f, 0.96f));
             UiFactory.SetRect(
-                input.GetComponent<RectTransform>(),
+                row.rectTransform,
                 new Vector2(0.5f, 1f),
                 new Vector2(0.5f, 1f),
                 new Vector2(0.5f, 1f),
-                new Vector2(0f, y - 42f),
-                new Vector2(760f, 66f));
-            return input;
+                new Vector2(0f, y),
+                new Vector2(820f, 70f));
+
+            Text numberLabel = UiFactory.CreateText(
+                "Step Number",
+                row.transform,
+                number,
+                28,
+                UiTheme.AccentBright,
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                numberLabel.rectTransform,
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(38f, 0f),
+                new Vector2(56f, 56f));
+
+            Text descriptionLabel = UiFactory.CreateText(
+                "Step Description",
+                row.transform,
+                description,
+                24,
+                UiTheme.TextPrimary,
+                TextAnchor.MiddleLeft,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                descriptionLabel.rectTransform,
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(440f, 0f),
+                new Vector2(700f, 56f));
         }
     }
 }

@@ -70,7 +70,7 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [UnityTest]
-        public IEnumerator NoSavedSession_ShowsSpatialLoginUi()
+        public IEnumerator NoSavedSession_ShowsPhoneConnectionWaitingUi()
         {
             Canvas canvas = Object.FindObjectOfType<Canvas>();
             Assert.NotNull(canvas);
@@ -80,11 +80,16 @@ namespace JellyfinForRayNeo.Tests
 
             Transform login = FindDescendant(canvas.transform, "Login Screen");
             Transform home = FindDescendant(canvas.transform, "Home Screen");
+            Transform phoneHint = FindDescendant(canvas.transform, "Phone Connection Hint");
             Assert.NotNull(login);
             Assert.NotNull(home);
+            Assert.NotNull(phoneHint);
             Assert.IsTrue(login.gameObject.activeInHierarchy);
             Assert.IsFalse(home.gameObject.activeSelf);
-            Assert.AreEqual(3, login.GetComponentsInChildren<InputField>(true).Length);
+            Assert.AreEqual(0, login.GetComponentsInChildren<InputField>(true).Length);
+            Assert.AreEqual(
+                CompanionLoginState.LoginRequired,
+                CompanionLoginRuntime.Current.State);
             yield return null;
         }
 

@@ -14,6 +14,7 @@ namespace JellyfinForRayNeo
         private JellyfinImageCache _imageCache;
         private HomeCatalogService _catalog;
         private PlaybackReporter _playbackReporter;
+        private CompanionLoginBridge _companionBridge;
         private LoginView _loginView;
         private HomeView _homeView;
         private DetailView _detailView;
@@ -26,6 +27,9 @@ namespace JellyfinForRayNeo
         private float _toastHideAt;
         private float _nextProgressCheck;
         private bool _stoppingPlayback;
+        private bool _loginInProgress;
+        private string _pendingServerUrl = "http://";
+        private string _pendingUserName = string.Empty;
         private JellyfinPlaybackPlan _currentPlan;
         private CancellationTokenSource _lifetime;
         private CancellationTokenSource _operation;
@@ -36,6 +40,14 @@ namespace JellyfinForRayNeo
         private void Start()
         {
             _lifetime = new CancellationTokenSource();
+            _companionBridge = new CompanionLoginBridge();
+            _companionBridge.LoginRequested += HandleCompanionLoginRequested;
+            _companionBridge.PublishState(
+                CompanionLoginState.Initializing,
+                "正在启动 Jellyfin 客户端…",
+                false,
+                _pendingServerUrl,
+                _pendingUserName);
             InitializeAsync().Forget(HandleFatalError);
         }
 
@@ -70,13 +82,25 @@ namespace JellyfinForRayNeo
             JellyfinSession saved;
             if (!_sessionStore.TryLoad(out saved))
             {
-                _loginView.SetInitialValues("http://", string.Empty);
-                _loginView.SetMessage("请输入局域网内的 Jellyfin 地址。", false);
+                ShowLogin(
+                    "请在手机端输入局域网内的 Jellyfin 地址。",
+                    false,
+                    "http://",
+                    string.Empty);
                 return;
             }
 
-            _loginView.SetInitialValues(saved.ServerUrl, saved.UserName);
+            _pendingServerUrl = saved.ServerUrl;
+            _pendingUserName = saved.UserName;
             _api.SetSession(saved);
+            _loginInProgress = true;
+            _loginView.SetBusy(true);
+            _companionBridge.PublishState(
+                CompanionLoginState.Connecting,
+                "正在恢复登录并同步媒体库…",
+                false,
+                saved.ServerUrl,
+                saved.UserName);
             ShowLoading(true, "正在恢复登录并同步媒体库…");
             try
             {
@@ -94,13 +118,14 @@ namespace JellyfinForRayNeo
             }
             finally
             {
+                _loginInProgress = false;
+                _loginView.SetBusy(false);
                 ShowLoading(false);
             }
         }
 
         private void WireEvents()
         {
-            _loginView.LoginRequested += (server, username, password) => LoginAsync(server, username, password).Forget(HandleFatalError);
             _homeView.ItemSelected += item => ShowDetailsAsync(item).Forget(HandleFatalError);
             _homeView.RefreshRequested += () => RefreshHomeAsync().Forget(HandleFatalError);
             _homeView.LogoutRequested += Logout;
@@ -115,14 +140,45 @@ namespace JellyfinForRayNeo
             _playerView.PlaybackCompleted += () => StopPlaybackAsync(false, null, true).Forget(HandleFatalError);
         }
 
+        private void HandleCompanionLoginRequested(CompanionLoginRequest request)
+        {
+            if (request == null)
+            {
+                return;
+            }
+
+            if (_loginInProgress)
+            {
+                _companionBridge.PublishState(
+                    CompanionLoginState.Connecting,
+                    "连接正在进行，请稍候…",
+                    false,
+                    _pendingServerUrl,
+                    _pendingUserName);
+                return;
+            }
+
+            LoginAsync(request.ServerUrl, request.UserName, request.Password).Forget(HandleFatalError);
+        }
+
         private async Task LoginAsync(string serverInput, string username, string password)
         {
+            _loginInProgress = true;
+            _pendingServerUrl = serverInput != null ? serverInput.Trim() : string.Empty;
+            _pendingUserName = username != null ? username.Trim() : string.Empty;
             CancellationToken token = BeginOperation();
             _loginView.SetBusy(true);
             _loginView.SetMessage("正在验证服务器与用户…", false);
+            _companionBridge.PublishState(
+                CompanionLoginState.Connecting,
+                "正在验证服务器与用户…",
+                false,
+                _pendingServerUrl,
+                _pendingUserName);
             try
             {
                 string serverUrl = JellyfinUrl.NormalizeServerUrl(serverInput);
+                _pendingServerUrl = serverUrl;
                 JellyfinPublicSystemInfo publicInfo = await _api.GetPublicSystemInfoAsync(serverUrl, token);
                 JellyfinAuthenticationResult authentication = await _api.AuthenticateAsync(serverUrl, username, password, token);
                 if (authentication == null
@@ -156,10 +212,15 @@ namespace JellyfinForRayNeo
             }
             catch (Exception exception)
             {
-                _loginView.SetMessage(UserMessage(exception), true);
+                ShowLogin(
+                    UserMessage(exception),
+                    true,
+                    _pendingServerUrl,
+                    _pendingUserName);
             }
             finally
             {
+                _loginInProgress = false;
                 _loginView.SetBusy(false);
             }
         }
@@ -177,6 +238,14 @@ namespace JellyfinForRayNeo
             _detailView.Hide();
             _episodeBrowser.Hide();
             _homeView.Show(true);
+            _pendingServerUrl = session.ServerUrl;
+            _pendingUserName = session.UserName;
+            _companionBridge.PublishState(
+                CompanionLoginState.Ready,
+                "已连接，媒体库正在眼镜中显示。",
+                false,
+                session.ServerUrl,
+                session.UserName);
             ShowLoading(false);
         }
 
@@ -361,6 +430,12 @@ namespace JellyfinForRayNeo
 
         private void Logout()
         {
+            JellyfinSession activeSession = _api.Session;
+            if (activeSession != null)
+            {
+                _pendingServerUrl = activeSession.ServerUrl;
+                _pendingUserName = activeSession.UserName;
+            }
             if (_playerView.IsVisible)
             {
                 StopPlaybackAsync(false, null).Forget(HandleNonFatalError);
@@ -374,21 +449,46 @@ namespace JellyfinForRayNeo
             _detailView.Hide();
             _episodeBrowser.Hide();
             _homeView.Show(false);
-            ShowLogin("已退出当前 Jellyfin 用户。", false);
+            ShowLogin(
+                "已退出当前 Jellyfin 用户，请在手机端重新连接。",
+                false,
+                _pendingServerUrl,
+                _pendingUserName);
         }
 
-        private void ShowLogin(string message, bool isError)
+        private void ShowLogin(
+            string message,
+            bool isError,
+            string serverUrl = null,
+            string userName = null)
         {
+            if (!string.IsNullOrWhiteSpace(serverUrl))
+            {
+                _pendingServerUrl = serverUrl;
+            }
+            if (userName != null)
+            {
+                _pendingUserName = userName;
+            }
+
             ShowLoading(false);
             _homeView.Show(false);
             _detailView.Hide();
             _episodeBrowser.Hide();
             _loginView.Show(true);
             _loginView.SetMessage(message, isError);
+            _companionBridge.PublishState(
+                CompanionLoginState.LoginRequired,
+                message,
+                isError,
+                _pendingServerUrl,
+                _pendingUserName);
         }
 
         private void Update()
         {
+            _companionBridge?.Pump();
+
             if (_playerView == null)
             {
                 return;
@@ -438,6 +538,18 @@ namespace JellyfinForRayNeo
             CancelAndDispose(ref _homeImages);
             CancelAndDispose(ref _detailImages);
             CancelAndDispose(ref _episodeImages);
+            if (_companionBridge != null)
+            {
+                _companionBridge.LoginRequested -= HandleCompanionLoginRequested;
+                _companionBridge.PublishState(
+                    CompanionLoginState.Offline,
+                    "Jellyfin 客户端已停止。",
+                    false,
+                    _pendingServerUrl,
+                    _pendingUserName);
+                _companionBridge.Dispose();
+                _companionBridge = null;
+            }
             if (_lifetime != null)
             {
                 _lifetime.Cancel();

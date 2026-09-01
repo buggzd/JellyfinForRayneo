@@ -34,9 +34,10 @@ namespace JellyfinForRayNeo.Editor
             PlayerSettings.productName = "Jellyfin for RayNeo";
             PlayerSettings.bundleVersion = AppConstants.ClientVersion;
             PlayerSettings.runInBackground = true;
+            PlayerSettings.insecureHttpOption = InsecureHttpOption.AlwaysAllowed;
             PlayerSettings.SetApplicationIdentifier(BuildTargetGroup.Android, "com.jellyfinforrayneo.client");
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel26;
-            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevelAuto;
+            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel29;
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
             PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
             PlayerSettings.SetApiCompatibilityLevel(BuildTargetGroup.Android, ApiCompatibilityLevel.NET_Standard_2_0);
