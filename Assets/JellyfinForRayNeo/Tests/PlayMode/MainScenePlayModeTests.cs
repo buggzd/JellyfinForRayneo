@@ -1,13 +1,16 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 namespace JellyfinForRayNeo.Tests
 {
@@ -1041,6 +1044,79 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [UnityTest]
+        public IEnumerator PlayerSeek_PreservesRewindTargetUntilEngineConfirms()
+        {
+            GameObject host = new GameObject("Player Seek Test Host", typeof(RectTransform));
+            host.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
+            FakePlaybackEngine hardwareEngine = new FakePlaybackEngine();
+            FakePlaybackEngine libVlcEngine = new FakePlaybackEngine();
+            FakePlaybackEngine softwareEngine = new FakePlaybackEngine();
+            PlayerView player = new PlayerView(
+                host.transform,
+                hardwareEngine,
+                libVlcEngine,
+                softwareEngine);
+            Task playback = player.PrepareAndPlayAsync(
+                new JellyfinPlaybackPlan
+                {
+                    Item = new JellyfinItem { Id = "seek-test", Name = "Seek Test" },
+                    Url = "https://example.invalid/video.mp4",
+                    Tier = PlaybackTier.HardwareDirect,
+                    StartPositionTicks = 100L * AppConstants.TicksPerSecond
+                },
+                CancellationToken.None);
+            while (!playback.IsCompleted)
+            {
+                yield return null;
+            }
+            Assert.IsFalse(playback.IsFaulted, playback.Exception?.ToString());
+
+            hardwareEngine.PositionSeconds = 100d;
+            player.Update();
+            DirectionalFocusNavigator navigator = new DirectionalFocusNavigator();
+
+            Assert.IsTrue(player.HandleRemoteCommand(
+                CompanionRemoteCommand.Left,
+                navigator));
+            Assert.AreEqual(90d, hardwareEngine.LastSeekSeconds, 0.001d);
+            Assert.AreEqual(
+                90L * AppConstants.TicksPerSecond,
+                player.CurrentPositionTicks,
+                "The stale pre-seek engine position must not overwrite a rewind target.");
+
+            Assert.IsTrue(player.HandleRemoteCommand(
+                CompanionRemoteCommand.Left,
+                navigator));
+            Assert.AreEqual(
+                80d,
+                hardwareEngine.LastSeekSeconds,
+                0.001d,
+                "Rapid gestures must accumulate from the pending seek target.");
+            Assert.AreEqual(
+                80L * AppConstants.TicksPerSecond,
+                player.CurrentPositionTicks);
+
+            hardwareEngine.PositionSeconds = 80.4d;
+            player.Update();
+            Assert.AreEqual(
+                80.4d * AppConstants.TicksPerSecond,
+                player.CurrentPositionTicks,
+                AppConstants.TicksPerSecond * 0.01d,
+                "Once the decoder confirms the seek, reporting should follow its real clock.");
+
+            hardwareEngine.PositionSeconds = 81.25d;
+            player.Update();
+            Assert.AreEqual(
+                81.25d * AppConstants.TicksPerSecond,
+                player.CurrentPositionTicks,
+                AppConstants.TicksPerSecond * 0.01d);
+
+            player.Dispose();
+            Object.Destroy(host);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator DetailView_UsesReadableGlassHeroAndLayeredMotion()
         {
             GameObject host = new GameObject("Detail Motion Test Host", typeof(RectTransform));
@@ -1295,6 +1371,78 @@ namespace JellyfinForRayNeo.Tests
             Assert.NotNull(surface, "A ScrollRect viewport needs a Graphic to receive ray drag events on empty space.");
             Assert.IsTrue(surface.raycastTarget);
             Assert.AreEqual(0f, surface.color.a, 0.0001f);
+        }
+
+        private sealed class FakePlaybackEngine : IPlaybackEngine
+        {
+            public event Action<string> Failed
+            {
+                add { }
+                remove { }
+            }
+
+            public event Action Completed
+            {
+                add { }
+                remove { }
+            }
+
+            public Texture OutputTexture => null;
+            public bool FlipOutputVertically => false;
+            public bool IsPrepared { get; private set; }
+            public bool IsPlaying { get; private set; }
+            public bool IsPaused { get; private set; }
+            public bool CanSeek => IsPrepared;
+            public double PositionSeconds { get; set; }
+            public double DurationSeconds { get; set; } = 600d;
+            public double LastSeekSeconds { get; private set; } = -1d;
+
+            public Task PrepareAndPlayAsync(
+                JellyfinPlaybackPlan plan,
+                CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                PositionSeconds = Math.Max(
+                    0d,
+                    plan.StartPositionTicks / (double)AppConstants.TicksPerSecond);
+                IsPrepared = true;
+                IsPlaying = true;
+                IsPaused = false;
+                return Task.CompletedTask;
+            }
+
+            public void Update()
+            {
+            }
+
+            public void Play()
+            {
+                IsPlaying = IsPrepared;
+                IsPaused = false;
+            }
+
+            public void Pause()
+            {
+                IsPlaying = false;
+                IsPaused = IsPrepared;
+            }
+
+            public void Seek(double seconds)
+            {
+                LastSeekSeconds = seconds;
+            }
+
+            public void Stop()
+            {
+                IsPrepared = false;
+                IsPlaying = false;
+                IsPaused = false;
+            }
+
+            public void Dispose()
+            {
+                Stop();
+            }
         }
     }
 }

@@ -1,17 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
+[assembly: InternalsVisibleTo("JellyfinForRayNeo.PlayModeTests")]
+
 namespace JellyfinForRayNeo
 {
     public sealed class PlayerView : IDisposable
     {
         private const float ControlsAutoHideSeconds = 3.2f;
+        private const float SeekConfirmationTimeoutSeconds = 2.5f;
+        private const double SeekConfirmationToleranceSeconds = 1.5d;
         private const double RemoteSeekSeconds = 10d;
 
         private readonly GameObject _root;
@@ -56,6 +61,8 @@ namespace JellyfinForRayNeo
         private JellyfinPlaybackPlan _plan;
         private SubtitleTrack _subtitleTrack;
         private long _lastPositionTicks;
+        private long _pendingSeekTargetTicks = -1L;
+        private float _pendingSeekDeadline;
         private bool _updatingSlider;
         private bool _disposed;
         private bool _controlsVisible;
@@ -71,6 +78,15 @@ namespace JellyfinForRayNeo
         public Transform FocusRoot => _root.transform;
 
         public PlayerView(Transform parent)
+            : this(parent, null, null, null)
+        {
+        }
+
+        internal PlayerView(
+            Transform parent,
+            IPlaybackEngine unityEngine,
+            IPlaybackEngine libVlcHardwareEngine,
+            IPlaybackEngine softwareEngine)
         {
             Image rootImage = UiFactory.CreatePanel("Player Screen", parent, Color.black);
             UiFactory.Stretch(rootImage.rectTransform);
@@ -86,9 +102,9 @@ namespace JellyfinForRayNeo
             _videoAspect.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
             _videoAspect.aspectRatio = 16f / 9f;
 
-            _unityEngine = new UnityVideoPlaybackEngine(rootImage.gameObject);
-            _libVlcHardwareEngine = new LibVlcPlaybackEngine(false);
-            _softwareEngine = new LibVlcPlaybackEngine(true);
+            _unityEngine = unityEngine ?? new UnityVideoPlaybackEngine(rootImage.gameObject);
+            _libVlcHardwareEngine = libVlcHardwareEngine ?? new LibVlcPlaybackEngine(false);
+            _softwareEngine = softwareEngine ?? new LibVlcPlaybackEngine(true);
             _unityEngine.Failed += message => HandleEngineFailure(_unityEngine, message);
             _libVlcHardwareEngine.Failed += message =>
                 HandleEngineFailure(_libVlcHardwareEngine, message);
@@ -440,16 +456,7 @@ namespace JellyfinForRayNeo
 
         public long CurrentPositionTicks
         {
-            get
-            {
-                if (_activeEngine != null && _activeEngine.IsPrepared)
-                {
-                    return Math.Max(
-                        _lastPositionTicks,
-                        (long)(_activeEngine.PositionSeconds * AppConstants.TicksPerSecond));
-                }
-                return _lastPositionTicks;
-            }
+            get { return SamplePositionTicks(); }
         }
 
         private Vector2 HiddenTopControlsPosition =>
@@ -470,6 +477,7 @@ namespace JellyfinForRayNeo
             StopVideoOnly();
             _plan = plan ?? throw new ArgumentNullException(nameof(plan));
             _lastPositionTicks = plan.StartPositionTicks;
+            ClearPendingSeek();
             switch (plan.Tier)
             {
                 case PlaybackTier.HardwareLibVlcDirect:
@@ -640,10 +648,8 @@ namespace JellyfinForRayNeo
             }
 
             double duration = _activeEngine.DurationSeconds;
-            double position = Math.Max(0d, _activeEngine.PositionSeconds);
-            _lastPositionTicks = Math.Max(
-                _lastPositionTicks,
-                (long)(position * AppConstants.TicksPerSecond));
+            double position = SamplePositionTicks()
+                / (double)AppConstants.TicksPerSecond;
             if (duration > 0.01d && !double.IsInfinity(duration) && !double.IsNaN(duration))
             {
                 _updatingSlider = true;
@@ -860,15 +866,61 @@ namespace JellyfinForRayNeo
             }
 
             double duration = _activeEngine.DurationSeconds;
-            double target = Math.Max(0d, _activeEngine.PositionSeconds + deltaSeconds);
+            double current = CurrentPositionTicks
+                / (double)AppConstants.TicksPerSecond;
+            double target = Math.Max(0d, current + deltaSeconds);
             if (duration > 0.01d && !double.IsInfinity(duration) && !double.IsNaN(duration))
             {
                 target = Math.Min(duration, target);
             }
 
             _activeEngine.Seek(target);
-            _lastPositionTicks = (long)(target * AppConstants.TicksPerSecond);
+            BeginPendingSeek(target);
             ShowSeekFeedback(deltaSeconds < 0d ? "‹‹  10 秒" : "10 秒  ››");
+        }
+
+        private long SamplePositionTicks()
+        {
+            if (_activeEngine == null || !_activeEngine.IsPrepared)
+            {
+                return _lastPositionTicks;
+            }
+
+            double engineSeconds = Math.Max(0d, _activeEngine.PositionSeconds);
+            long engineTicks = (long)(engineSeconds * AppConstants.TicksPerSecond);
+            if (_pendingSeekTargetTicks >= 0L)
+            {
+                long toleranceTicks = (long)(
+                    SeekConfirmationToleranceSeconds * AppConstants.TicksPerSecond);
+                bool confirmed = Math.Abs(engineTicks - _pendingSeekTargetTicks)
+                    <= toleranceTicks;
+                bool timedOut = Time.unscaledTime >= _pendingSeekDeadline;
+                if (!confirmed && !timedOut)
+                {
+                    return _pendingSeekTargetTicks;
+                }
+
+                ClearPendingSeek();
+                _lastPositionTicks = engineTicks;
+                return _lastPositionTicks;
+            }
+
+            _lastPositionTicks = Math.Max(_lastPositionTicks, engineTicks);
+            return _lastPositionTicks;
+        }
+
+        private void BeginPendingSeek(double targetSeconds)
+        {
+            _pendingSeekTargetTicks = (long)(
+                Math.Max(0d, targetSeconds) * AppConstants.TicksPerSecond);
+            _lastPositionTicks = _pendingSeekTargetTicks;
+            _pendingSeekDeadline = Time.unscaledTime + SeekConfirmationTimeoutSeconds;
+        }
+
+        private void ClearPendingSeek()
+        {
+            _pendingSeekTargetTicks = -1L;
+            _pendingSeekDeadline = 0f;
         }
 
         private void UpdateVideoSurface()
@@ -936,7 +988,7 @@ namespace JellyfinForRayNeo
             }
             double seconds = value * _activeEngine.DurationSeconds;
             _activeEngine.Seek(seconds);
-            _lastPositionTicks = (long)(seconds * AppConstants.TicksPerSecond);
+            BeginPendingSeek(seconds);
         }
 
         private void ShowTrackMenu(bool audio)
@@ -1123,6 +1175,7 @@ namespace JellyfinForRayNeo
 
         private void StopVideoOnly()
         {
+            ClearPendingSeek();
             _unityEngine.Stop();
             _libVlcHardwareEngine.Stop();
             _softwareEngine.Stop();
