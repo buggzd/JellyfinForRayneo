@@ -34,6 +34,7 @@ namespace JellyfinForRayNeo
         private Color _focusShadowColor;
         private ScrollRect _horizontalScroll;
         private ScrollRect _verticalScroll;
+        private bool _scrollRectsResolved;
         private Vector3 _scaleVelocity;
         private float _depthVelocity;
         private float _pressAmount;
@@ -77,6 +78,25 @@ namespace JellyfinForRayNeo
         {
             _horizontalScroll = horizontalScroll;
             _verticalScroll = verticalScroll;
+            _scrollRectsResolved = true;
+        }
+
+        internal ScrollRect HorizontalScroll
+        {
+            get
+            {
+                ResolveScrollRects();
+                return _horizontalScroll;
+            }
+        }
+
+        internal ScrollRect VerticalScroll
+        {
+            get
+            {
+                ResolveScrollRects();
+                return _verticalScroll;
+            }
         }
 
         private void Update()
@@ -190,8 +210,37 @@ namespace JellyfinForRayNeo
             _focused = focused;
             if (focused)
             {
+                ResolveScrollRects();
                 EnsureVisible(_horizontalScroll);
                 EnsureVisible(_verticalScroll);
+            }
+        }
+
+        private void ResolveScrollRects()
+        {
+            if (_scrollRectsResolved)
+            {
+                return;
+            }
+
+            _scrollRectsResolved = true;
+            foreach (ScrollRect scrollRect in GetComponentsInParent<ScrollRect>(true))
+            {
+                if (scrollRect == null
+                    || scrollRect.content == null
+                    || !transform.IsChildOf(scrollRect.content))
+                {
+                    continue;
+                }
+
+                if (_horizontalScroll == null && scrollRect.horizontal)
+                {
+                    _horizontalScroll = scrollRect;
+                }
+                if (_verticalScroll == null && scrollRect.vertical)
+                {
+                    _verticalScroll = scrollRect;
+                }
             }
         }
 
@@ -341,9 +390,21 @@ namespace JellyfinForRayNeo
                 }
             }
 
-            Selectable best = Mathf.Abs(direction.y) > Mathf.Abs(direction.x)
-                ? FindAdjacentVerticalRow(current, candidates, direction.y)
-                : FindAdjacentInRow(current, candidates, direction.x);
+            bool vertical = Mathf.Abs(direction.y) > Mathf.Abs(direction.x);
+            List<Selectable> contextualCandidates = NavigationContextCandidates(
+                current,
+                candidates,
+                vertical);
+            Selectable best = vertical
+                ? FindAdjacentVerticalRow(current, contextualCandidates, direction.y)
+                : FindAdjacentInRow(current, contextualCandidates, direction.x);
+
+            if (best == null && contextualCandidates.Count != candidates.Count)
+            {
+                best = vertical
+                    ? FindAdjacentVerticalRow(current, candidates, direction.y)
+                    : FindAdjacentInRow(current, candidates, direction.x);
+            }
 
             if (best == null)
             {
@@ -463,6 +524,52 @@ namespace JellyfinForRayNeo
                 .OrderByDescending(candidate => ScreenRect(candidate).center.y)
                 .ThenBy(candidate => ScreenRect(candidate).center.x)
                 .FirstOrDefault();
+        }
+
+        private static List<Selectable> NavigationContextCandidates(
+            Selectable current,
+            List<Selectable> candidates,
+            bool vertical)
+        {
+            FocusScale currentFocus = current != null
+                ? current.GetComponent<FocusScale>()
+                : null;
+            if (currentFocus == null)
+            {
+                return candidates;
+            }
+
+            ScrollRect context = vertical
+                ? currentFocus.VerticalScroll
+                : currentFocus.HorizontalScroll ?? currentFocus.VerticalScroll;
+            if (context == null)
+            {
+                return candidates;
+            }
+
+            List<Selectable> contextual = candidates.Where(candidate =>
+                {
+                    if (candidate == null)
+                    {
+                        return false;
+                    }
+
+                    FocusScale focus = candidate.GetComponent<FocusScale>();
+                    if (focus == null)
+                    {
+                        return false;
+                    }
+
+                    return vertical
+                        ? focus.VerticalScroll == context
+                        : (currentFocus.HorizontalScroll != null
+                            ? focus.HorizontalScroll == context
+                            : focus.VerticalScroll == context);
+                })
+                .ToList();
+            return contextual.Contains(current) && contextual.Count > 1
+                ? contextual
+                : candidates;
         }
 
         private static Selectable FindAdjacentVerticalRow(

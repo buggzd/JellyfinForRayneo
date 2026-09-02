@@ -1234,6 +1234,7 @@ namespace JellyfinForRayNeo
             }
 
             CancellationToken token = BeginOperation();
+            _detailView.SetInteractionEnabled(false);
             ShowLoading(true, "正在与 Jellyfin 协商播放格式…");
             _playingItem = item;
             _playbackSelection = new JellyfinPlaybackSelection();
@@ -1250,6 +1251,12 @@ namespace JellyfinForRayNeo
             }
             catch (OperationCanceledException)
             {
+                _playerView.Stop();
+                _currentPlan = null;
+                _playingItem = null;
+                _playbackSelection = null;
+                _playbackReporter.Reset();
+                _detailView.SetInteractionEnabled(true);
             }
             catch (Exception exception)
             {
@@ -1257,6 +1264,7 @@ namespace JellyfinForRayNeo
                 _currentPlan = null;
                 _playingItem = null;
                 _playbackSelection = null;
+                _detailView.SetInteractionEnabled(true);
                 SelectInScope(_detailView.FocusRoot, "Continue", "From Start", "Close");
                 ShowToast("无法播放：" + UserMessage(exception), true);
             }
@@ -1400,6 +1408,7 @@ namespace JellyfinForRayNeo
                 _playingItem = null;
                 _playbackSelection = null;
                 _playbackReporter.Reset();
+                _detailView.SetInteractionEnabled(true);
                 SelectInScope(_detailView.FocusRoot, "Continue", "From Start", "Close");
                 string detail = string.IsNullOrWhiteSpace(errorMessage)
                     ? UserMessage(exception)
@@ -1478,6 +1487,7 @@ namespace JellyfinForRayNeo
                     _currentPlan = null;
                     _playingItem = null;
                     _playbackReporter.Reset();
+                    _detailView.SetInteractionEnabled(true);
                     SelectInScope(_detailView.FocusRoot, "Continue", "From Start", "Close");
                     ShowToast(
                         "切换失败且无法恢复：" + UserMessage(restoreException),
@@ -1546,6 +1556,7 @@ namespace JellyfinForRayNeo
                 _playbackSelection = null;
                 _playbackReporter.Reset();
                 _stoppingPlayback = false;
+                _detailView.SetInteractionEnabled(true);
                 SelectInScope(_detailView.FocusRoot, "Continue", "From Start", "Close");
             }
 

@@ -21,8 +21,11 @@ namespace JellyfinForRayNeo
         private Vector3 _restScale;
         private Coroutine _routine;
         private bool _targetVisible = true;
+        private bool _interactionAllowed = true;
 
         public bool IsVisible => _targetVisible;
+
+        public bool InteractionAllowed => _interactionAllowed;
 
         private void Awake()
         {
@@ -54,8 +57,8 @@ namespace JellyfinForRayNeo
 
             RestoreTransform();
             _group.alpha = visible ? 1f : 0f;
-            _group.interactable = visible;
-            _group.blocksRaycasts = visible;
+            _group.interactable = visible && _interactionAllowed;
+            _group.blocksRaycasts = visible && _interactionAllowed;
             if (!visible && gameObject.activeSelf)
             {
                 gameObject.SetActive(false);
@@ -72,7 +75,7 @@ namespace JellyfinForRayNeo
             }
 
             _group.alpha = 0f;
-            _group.interactable = true;
+            _group.interactable = _interactionAllowed;
             _group.blocksRaycasts = false;
             if (_rect != null)
             {
@@ -110,6 +113,21 @@ namespace JellyfinForRayNeo
             _routine = StartCoroutine(AnimateOut());
         }
 
+        public void SetInteractionAllowed(bool allowed)
+        {
+            _interactionAllowed = allowed;
+            if (_group == null)
+            {
+                return;
+            }
+
+            _group.interactable = _targetVisible && allowed;
+            _group.blocksRaycasts = _targetVisible
+                && allowed
+                && _routine == null
+                && _group.alpha >= 0.999f;
+        }
+
         private IEnumerator AnimateIn(float delay)
         {
             if (delay > 0f)
@@ -140,8 +158,8 @@ namespace JellyfinForRayNeo
 
             RestoreTransform();
             _group.alpha = 1f;
-            _group.interactable = true;
-            _group.blocksRaycasts = true;
+            _group.interactable = _interactionAllowed;
+            _group.blocksRaycasts = _interactionAllowed;
             _routine = null;
         }
 

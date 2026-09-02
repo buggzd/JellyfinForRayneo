@@ -913,6 +913,66 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [UnityTest]
+        public IEnumerator RemoteNavigation_PrefersContentFlowOverFixedOverlay()
+        {
+            GameObject canvasObject = new GameObject(
+                "Navigation Context Canvas",
+                typeof(RectTransform),
+                typeof(Canvas));
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            RectTransform scope = CreateTestRect(
+                "Navigation Context Scope",
+                canvasObject.transform,
+                new Vector2(1920f, 1080f));
+            RectTransform viewport = CreateTestRect(
+                "Navigation Context Viewport",
+                scope,
+                new Vector2(1920f, 1080f));
+            viewport.gameObject.AddComponent<RectMask2D>();
+            RectTransform content = CreateTestRect(
+                "Navigation Context Content",
+                viewport,
+                new Vector2(1920f, 1080f));
+            ScrollRect scroll = scope.gameObject.AddComponent<ScrollRect>();
+            scroll.viewport = viewport;
+            scroll.content = content;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+
+            Button current = CreateNavigationButton(
+                "Current Content Item",
+                content,
+                new Vector2(520f, 250f));
+            Button nextContentRow = CreateNavigationButton(
+                "Next Content Row",
+                content,
+                new Vector2(-520f, 40f));
+            Button fixedOverlay = CreateNavigationButton(
+                "Fixed Overlay Intruder",
+                scope,
+                new Vector2(520f, 150f));
+            current.gameObject.AddComponent<FocusScale>();
+            nextContentRow.gameObject.AddComponent<FocusScale>();
+            fixedOverlay.gameObject.AddComponent<FocusScale>();
+            Canvas.ForceUpdateCanvases();
+            yield return null;
+
+            DirectionalFocusNavigator navigator = new DirectionalFocusNavigator();
+            navigator.SetScope(scope);
+            EventSystem.current.SetSelectedGameObject(current.gameObject);
+
+            Assert.IsTrue(navigator.Handle(CompanionRemoteCommand.Down));
+            Assert.AreSame(
+                nextContentRow.gameObject,
+                EventSystem.current.currentSelectedGameObject,
+                "A fixed header or overlay must not intercept movement between adjacent content rows.");
+
+            Object.Destroy(canvasObject);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator PlayerRemoteNavigation_IsScopedAndConsumesHorizontalSeek()
         {
             GameObject host = new GameObject("Player Navigation Test Host", typeof(RectTransform));
@@ -1005,18 +1065,51 @@ namespace JellyfinForRayNeo.Tests
 
             Transform detailRoot = FindDescendant(host.transform, "Detail Screen");
             Transform backdrop = FindDescendant(detailRoot, "Backdrop");
+            Transform backdropShade = FindDescendant(detailRoot, "Backdrop Content Shade");
             Transform glass = FindDescendant(detailRoot, "Hero Information Glass");
+            Transform heroGlow = FindDescendant(detailRoot, "Hero Information Glow");
+            Transform heroAccent = FindDescendant(detailRoot, "Hero Information Accent");
             Transform poster = FindDescendant(detailRoot, "Poster Frame");
+            Transform posterPlaceholder = FindDescendant(
+                detailRoot,
+                "Poster Placeholder Layer");
             Transform information = FindDescendant(detailRoot, "Hero Information");
             Transform facts = FindDescendant(detailRoot, "Details Card");
+            Transform continueButton = FindDescendant(detailRoot, "Continue");
             Assert.NotNull(backdrop);
             Assert.NotNull(backdrop.GetComponent<UiHeroBreath>());
+            Assert.NotNull(backdropShade);
+            Assert.NotNull(backdropShade.GetComponent<UiGradient>());
             Assert.NotNull(glass);
             Assert.IsFalse(glass.GetComponent<Image>().raycastTarget);
             Assert.IsTrue(glass.GetComponent<LayoutElement>().ignoreLayout);
+            Assert.NotNull(heroGlow);
+            Assert.NotNull(heroGlow.GetComponent<UiAmbientFloat>());
+            Assert.NotNull(heroAccent);
+            Assert.NotNull(heroAccent.GetComponent<UiGradient>());
+            Assert.NotNull(poster.GetComponent<Shadow>());
             Assert.NotNull(poster.GetComponent<UiItemReveal>());
+            Assert.NotNull(poster.GetComponent<UiArtworkPlaceholderMotion>());
+            Assert.NotNull(posterPlaceholder);
+            Assert.IsTrue(posterPlaceholder.gameObject.activeSelf);
             Assert.NotNull(information.GetComponent<UiItemReveal>());
             Assert.NotNull(facts.GetComponent<UiScrollReveal>());
+            Assert.NotNull(continueButton);
+            Assert.AreEqual(
+                300f,
+                continueButton.GetComponent<LayoutElement>().preferredWidth,
+                0.1f,
+                "Movie playback should use a compact primary action.");
+
+            detail.SetInteractionEnabled(false);
+            CanvasGroup detailGroup = detailRoot.GetComponent<CanvasGroup>();
+            Assert.IsFalse(detailRoot.GetComponent<UiViewMotion>().InteractionAllowed);
+            Assert.IsFalse(detailGroup.interactable);
+            Assert.IsFalse(
+                detailGroup.blocksRaycasts,
+                "The page behind playback must not receive pointer or remote input.");
+            detail.SetInteractionEnabled(true);
+            Assert.IsTrue(detailRoot.GetComponent<UiViewMotion>().InteractionAllowed);
 
             detail.Hide();
             Object.Destroy(host);
