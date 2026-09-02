@@ -12,7 +12,9 @@ namespace JellyfinForRayNeo
     public sealed class JellyfinApiClient
     {
         private const int DefaultItemLimit = 18;
-        private const int DefaultMaxBitrate = 20_000_000;
+        private const int DirectPlayMaxBitrate = 120_000_000;
+        private const int TranscodeMaxBitrate = 20_000_000;
+        private const int SubtitleRequestTimeoutSeconds = 300;
         private const string ItemFields =
             "PrimaryImageAspectRatio,Overview,OriginalTitle,Genres,Studios,People,ProviderIds," +
             "ExternalUrls,Tags,Taglines,ProductionLocations,MediaSources,MediaStreams,DateCreated";
@@ -300,77 +302,212 @@ namespace JellyfinForRayNeo
             long startPositionTicks,
             CancellationToken cancellationToken)
         {
+            List<JellyfinPlaybackPlan> plans = await GetPlaybackPlansAsync(
+                item,
+                startPositionTicks,
+                null,
+                PlaybackCapabilities.Detect(),
+                cancellationToken);
+            return plans[0];
+        }
+
+        public async Task<List<JellyfinPlaybackPlan>> GetPlaybackPlansAsync(
+            JellyfinItem item,
+            long startPositionTicks,
+            JellyfinPlaybackSelection selection,
+            PlaybackCapabilities capabilities,
+            CancellationToken cancellationToken)
+        {
             if (item == null || string.IsNullOrWhiteSpace(item.Id))
             {
                 throw new ArgumentException("A playable Jellyfin item is required.", nameof(item));
             }
 
             JellyfinSession session = RequireSession();
-            JellyfinPlaybackInfoRequest body = new JellyfinPlaybackInfoRequest
+            capabilities = capabilities ?? PlaybackCapabilities.Detect();
+            long startTicks = Math.Max(0L, startPositionTicks);
+            JellyfinPlaybackInfoRequest directRequest = new JellyfinPlaybackInfoRequest
             {
                 UserId = session.UserId,
-                StartTimeTicks = Math.Max(0L, startPositionTicks),
-                MaxStreamingBitrate = DefaultMaxBitrate,
-                MaxAudioChannels = 2,
-                DeviceProfile = JellyfinDeviceProfile.CreateRayNeoAirProfile(DefaultMaxBitrate)
+                StartTimeTicks = startTicks,
+                MediaSourceId = selection != null ? selection.MediaSourceId : null,
+                AudioStreamIndex = selection != null ? selection.AudioStreamIndex : null,
+                SubtitleStreamIndex = selection != null ? selection.SubtitleStreamIndex : null,
+                MaxStreamingBitrate = DirectPlayMaxBitrate,
+                MaxAudioChannels = 8,
+                DeviceProfile = JellyfinDeviceProfile.CreateRayNeoAirProfile(
+                    DirectPlayMaxBitrate,
+                    capabilities)
             };
 
             string endpoint = BuildSessionUrl("/Items/" + Uri.EscapeDataString(item.Id) + "/PlaybackInfo", null);
-            JellyfinPlaybackInfoResponse response = await SendJsonAsync<JellyfinPlaybackInfoResponse>(
+            JellyfinPlaybackInfoResponse directResponse = await SendJsonAsync<JellyfinPlaybackInfoResponse>(
                 UnityWebRequest.kHttpVerbPOST,
                 endpoint,
-                body,
+                directRequest,
                 true,
                 cancellationToken);
 
-            if (response == null || response.MediaSources == null || response.MediaSources.Count == 0)
+            if (directResponse == null
+                || directResponse.MediaSources == null
+                || directResponse.MediaSources.Count == 0)
             {
-                string reason = response != null ? response.ErrorCode : null;
+                string reason = directResponse != null ? directResponse.ErrorCode : null;
                 throw new JellyfinApiException(
                     "服务器没有返回可播放的媒体源" + (string.IsNullOrEmpty(reason) ? "。" : "：" + reason),
                     0,
                     endpoint);
             }
 
-            JellyfinMediaSource source = response.MediaSources[0];
-            bool unityDirectPlay = source.SupportsDirectPlay && IsUnityDirectPlayContainer(source.Container);
-            string streamUrl;
-            string playMethod;
+            JellyfinMediaSource directSource = PlaybackLadder.SelectMediaSource(
+                directResponse.MediaSources,
+                selection != null ? selection.MediaSourceId : null);
+            int? audioStreamIndex = PlaybackLadder.ResolveAudioIndex(
+                directSource,
+                selection != null ? selection.AudioStreamIndex : null);
+            int? subtitleStreamIndex = PlaybackLadder.ResolveSubtitleIndex(
+                directSource,
+                selection != null ? selection.SubtitleStreamIndex : null);
+            bool burnSubtitle = PlaybackLadder.RequiresSubtitleBurnIn(
+                directSource,
+                subtitleStreamIndex);
 
-            if (unityDirectPlay)
+            JellyfinPlaybackInfoResponse transcodeResponse = null;
+            Exception transcodeError = null;
+            JellyfinPlaybackInfoRequest transcodeRequest = new JellyfinPlaybackInfoRequest
             {
-                streamUrl = BuildDirectStreamUrl(item.Id, source.Id, startPositionTicks);
-                playMethod = "DirectPlay";
-            }
-            else if (!string.IsNullOrWhiteSpace(source.TranscodingUrl))
-            {
-                streamUrl = JellyfinUrl.AppendApiKey(
-                    JellyfinUrl.Combine(session.ServerUrl, source.TranscodingUrl),
-                    session.AccessToken);
-                playMethod = "Transcode";
-            }
-            else if (!string.IsNullOrWhiteSpace(source.DirectStreamUrl))
-            {
-                streamUrl = JellyfinUrl.AppendApiKey(
-                    JellyfinUrl.Combine(session.ServerUrl, source.DirectStreamUrl),
-                    session.AccessToken);
-                playMethod = "DirectStream";
-            }
-            else
-            {
-                streamUrl = BuildDirectStreamUrl(item.Id, source.Id, startPositionTicks);
-                playMethod = "DirectPlay";
-            }
-
-            return new JellyfinPlaybackPlan
-            {
-                Item = item,
-                MediaSource = source,
-                Url = streamUrl,
-                PlaySessionId = response.PlaySessionId,
-                PlayMethod = playMethod,
-                StartPositionTicks = Math.Max(0L, startPositionTicks)
+                UserId = session.UserId,
+                StartTimeTicks = startTicks,
+                MediaSourceId = directSource.Id,
+                AudioStreamIndex = audioStreamIndex,
+                SubtitleStreamIndex = subtitleStreamIndex,
+                MaxStreamingBitrate = TranscodeMaxBitrate,
+                MaxAudioChannels = 2,
+                EnableDirectPlay = false,
+                EnableDirectStream = false,
+                EnableTranscoding = true,
+                AllowVideoStreamCopy = false,
+                AllowAudioStreamCopy = false,
+                AlwaysBurnInSubtitleWhenTranscoding = burnSubtitle,
+                DeviceProfile = JellyfinDeviceProfile.CreateRayNeoAirProfile(
+                    TranscodeMaxBitrate,
+                    capabilities)
             };
+            try
+            {
+                transcodeResponse = await SendJsonAsync<JellyfinPlaybackInfoResponse>(
+                    UnityWebRequest.kHttpVerbPOST,
+                    endpoint,
+                    transcodeRequest,
+                    true,
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                transcodeError = exception;
+            }
+
+            JellyfinMediaSource transcodeSource = PlaybackLadder.SelectMediaSource(
+                transcodeResponse != null ? transcodeResponse.MediaSources : null,
+                directSource.Id);
+            if (transcodeSource == null || string.IsNullOrWhiteSpace(transcodeSource.TranscodingUrl))
+            {
+                transcodeSource = !string.IsNullOrWhiteSpace(directSource.TranscodingUrl)
+                    ? directSource
+                    : transcodeSource;
+            }
+
+            List<PlaybackTier> tiers = PlaybackLadder.SelectTiers(
+                directSource,
+                transcodeSource,
+                capabilities,
+                audioStreamIndex,
+                subtitleStreamIndex);
+            if (tiers.Count == 0)
+            {
+                if (transcodeError != null)
+                {
+                    throw transcodeError;
+                }
+                string reason = transcodeResponse != null
+                    ? transcodeResponse.ErrorCode
+                    : directResponse.ErrorCode;
+                throw new JellyfinApiException(
+                    "当前设备与服务器没有可用的播放路径"
+                    + (string.IsNullOrWhiteSpace(reason) ? "。" : "：" + reason),
+                    0,
+                    endpoint);
+            }
+
+            int audioTrackCount = PlaybackCapabilities.StreamsOfType(directSource, "Audio").Count;
+            int audioTrackOrdinal = PlaybackLadder.AudioTrackOrdinal(
+                directSource,
+                audioStreamIndex);
+            string directUrl = BuildDirectStreamUrl(
+                item.Id,
+                directSource,
+                startTicks,
+                audioStreamIndex,
+                subtitleStreamIndex,
+                directResponse.PlaySessionId);
+            JellyfinMediaStream selectedSubtitle =
+                PlaybackCapabilities.ResolveSubtitleStream(
+                    directSource,
+                    subtitleStreamIndex);
+            string subtitleUrl = burnSubtitle || !subtitleStreamIndex.HasValue || subtitleStreamIndex.Value < 0
+                ? null
+                : BuildSubtitleUrl(item.Id, directSource, selectedSubtitle);
+            List<JellyfinPlaybackPlan> plans = new List<JellyfinPlaybackPlan>();
+            foreach (PlaybackTier tier in tiers)
+            {
+                bool transcoding = tier == PlaybackTier.ServerTranscode;
+                plans.Add(new JellyfinPlaybackPlan
+                {
+                    Item = item,
+                    MediaSource = directSource,
+                    Url = transcoding
+                        ? JellyfinUrl.AppendApiKey(
+                            JellyfinUrl.Combine(session.ServerUrl, transcodeSource.TranscodingUrl),
+                            session.AccessToken)
+                        : directUrl,
+                    PlaySessionId = transcoding && transcodeResponse != null
+                        ? transcodeResponse.PlaySessionId
+                        : directResponse.PlaySessionId,
+                    PlayMethod = transcoding ? "Transcode" : "DirectPlay",
+                    StartPositionTicks = startTicks,
+                    Tier = tier,
+                    AudioStreamIndex = audioStreamIndex,
+                    SubtitleStreamIndex = subtitleStreamIndex,
+                    LocalAudioTrackIndex = transcoding ? 0 : audioTrackOrdinal,
+                    LocalAudioTrackCount = transcoding ? 1 : Math.Max(1, audioTrackCount),
+                    SubtitleUrl = transcoding && burnSubtitle ? null : subtitleUrl,
+                    SubtitleCodec = "vtt",
+                    SubtitleBurnedIn = transcoding && burnSubtitle
+                });
+            }
+
+            return plans;
+        }
+
+        public Task<string> GetSubtitleTextAsync(
+            JellyfinPlaybackPlan plan,
+            CancellationToken cancellationToken)
+        {
+            if (plan == null || string.IsNullOrWhiteSpace(plan.SubtitleUrl))
+            {
+                return Task.FromResult<string>(null);
+            }
+            return SendStringAsync(
+                UnityWebRequest.kHttpVerbGET,
+                plan.SubtitleUrl,
+                null,
+                true,
+                cancellationToken,
+                SubtitleRequestTimeoutSeconds);
         }
 
         public Task ReportPlaybackStartAsync(JellyfinPlaybackPlan plan, bool paused, long positionTicks, CancellationToken cancellationToken)
@@ -384,7 +521,9 @@ namespace JellyfinForRayNeo
                 IsMuted = false,
                 PositionTicks = Math.Max(0L, positionTicks),
                 PlayMethod = plan.PlayMethod,
-                PlaySessionId = plan.PlaySessionId
+                PlaySessionId = plan.PlaySessionId,
+                AudioStreamIndex = plan.AudioStreamIndex,
+                SubtitleStreamIndex = plan.SubtitleStreamIndex
             };
             return SendEmptyAsync(UnityWebRequest.kHttpVerbPOST, BuildSessionUrl("/Sessions/Playing", null), body, cancellationToken);
         }
@@ -400,7 +539,9 @@ namespace JellyfinForRayNeo
                 IsMuted = false,
                 PositionTicks = Math.Max(0L, positionTicks),
                 PlayMethod = plan.PlayMethod,
-                PlaySessionId = plan.PlaySessionId
+                PlaySessionId = plan.PlaySessionId,
+                AudioStreamIndex = plan.AudioStreamIndex,
+                SubtitleStreamIndex = plan.SubtitleStreamIndex
             };
             return SendEmptyAsync(UnityWebRequest.kHttpVerbPOST, BuildSessionUrl("/Sessions/Playing/Progress", null), body, cancellationToken);
         }
@@ -469,7 +610,13 @@ namespace JellyfinForRayNeo
                 query);
         }
 
-        private string BuildDirectStreamUrl(string itemId, string mediaSourceId, long startPositionTicks)
+        private string BuildDirectStreamUrl(
+            string itemId,
+            JellyfinMediaSource mediaSource,
+            long startPositionTicks,
+            int? audioStreamIndex,
+            int? subtitleStreamIndex,
+            string playSessionId)
         {
             JellyfinSession session = RequireSession();
             Dictionary<string, string> query = new Dictionary<string, string>
@@ -478,18 +625,70 @@ namespace JellyfinForRayNeo
                 { "deviceId", session.DeviceId },
                 { "api_key", session.AccessToken }
             };
-            if (!string.IsNullOrWhiteSpace(mediaSourceId))
+            if (mediaSource != null && !string.IsNullOrWhiteSpace(mediaSource.Id))
             {
-                query["mediaSourceId"] = mediaSourceId;
+                query["mediaSourceId"] = mediaSource.Id;
             }
             if (startPositionTicks > 0)
             {
                 query["startTimeTicks"] = startPositionTicks.ToString();
             }
+            if (audioStreamIndex.HasValue)
+            {
+                query["audioStreamIndex"] = audioStreamIndex.Value.ToString();
+            }
+            if (subtitleStreamIndex.HasValue)
+            {
+                query["subtitleStreamIndex"] = subtitleStreamIndex.Value.ToString();
+            }
+            if (!string.IsNullOrWhiteSpace(playSessionId))
+            {
+                query["playSessionId"] = playSessionId;
+            }
 
+            string container = mediaSource != null && !string.IsNullOrWhiteSpace(mediaSource.Container)
+                ? "." + Uri.EscapeDataString(mediaSource.Container.Trim().ToLowerInvariant())
+                : string.Empty;
             return JellyfinUrl.WithQuery(
-                JellyfinUrl.Combine(session.ServerUrl, "/Videos/" + Uri.EscapeDataString(itemId) + "/stream"),
+                JellyfinUrl.Combine(
+                    session.ServerUrl,
+                    "/Videos/" + Uri.EscapeDataString(itemId) + "/stream" + container),
                 query);
+        }
+
+        private string BuildSubtitleUrl(
+            string itemId,
+            JellyfinMediaSource mediaSource,
+            JellyfinMediaStream stream)
+        {
+            JellyfinSession session = RequireSession();
+            if (stream == null)
+            {
+                return null;
+            }
+            if (!string.IsNullOrWhiteSpace(stream.DeliveryUrl))
+            {
+                return JellyfinUrl.AppendApiKey(
+                    JellyfinUrl.Combine(session.ServerUrl, stream.DeliveryUrl),
+                    session.AccessToken);
+            }
+            if (mediaSource == null || string.IsNullOrWhiteSpace(mediaSource.Id))
+            {
+                return null;
+            }
+            string path = "/Videos/" + Uri.EscapeDataString(itemId)
+                + "/" + Uri.EscapeDataString(mediaSource.Id)
+                + "/Subtitles/" + stream.Index
+                + "/Stream.vtt";
+            return JellyfinUrl.WithQuery(
+                JellyfinUrl.Combine(session.ServerUrl, path),
+                new Dictionary<string, string>
+                {
+                    { "api_key", session.AccessToken },
+                    { "copyTimestamps", "false" },
+                    { "addVttTimeMap", "false" },
+                    { "startPositionTicks", "0" }
+                });
         }
 
         private Dictionary<string, string> CommonItemQuery(int limit)
@@ -531,17 +730,6 @@ namespace JellyfinForRayNeo
             }
         }
 
-        private static bool IsUnityDirectPlayContainer(string container)
-        {
-            if (string.IsNullOrWhiteSpace(container))
-            {
-                return false;
-            }
-
-            string value = container.Trim().ToLowerInvariant();
-            return value == "mp4" || value == "m4v" || value == "mov";
-        }
-
         private Task SendEmptyAsync(string method, string url, object body, CancellationToken cancellationToken)
         {
             return SendStringAsync(method, url, body, true, cancellationToken);
@@ -575,12 +763,13 @@ namespace JellyfinForRayNeo
             string url,
             object body,
             bool requiresSession,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            int timeoutSeconds = 30)
         {
             JellyfinSession session = requiresSession ? RequireSession() : null;
             using (UnityWebRequest request = new UnityWebRequest(url, method))
             {
-                request.timeout = 30;
+                request.timeout = Math.Max(1, timeoutSeconds);
                 request.downloadHandler = new DownloadHandlerBuffer();
                 if (body != null)
                 {

@@ -185,6 +185,8 @@ namespace JellyfinForRayNeo
         public string TranscodingUrl;
         public string TranscodingContainer;
         public string TranscodingSubProtocol;
+        public int? DefaultAudioStreamIndex;
+        public int? DefaultSubtitleStreamIndex;
     }
 
     [Serializable]
@@ -224,6 +226,9 @@ namespace JellyfinForRayNeo
     {
         public string UserId;
         public long? StartTimeTicks;
+        public int? AudioStreamIndex;
+        public int? SubtitleStreamIndex;
+        public string MediaSourceId;
         public int? MaxStreamingBitrate;
         public int? MaxAudioChannels;
         public bool EnableDirectPlay = true;
@@ -231,6 +236,7 @@ namespace JellyfinForRayNeo
         public bool EnableTranscoding = true;
         public bool AllowVideoStreamCopy = true;
         public bool AllowAudioStreamCopy = true;
+        public bool AlwaysBurnInSubtitleWhenTranscoding;
         public JellyfinDeviceProfile DeviceProfile;
     }
 
@@ -250,25 +256,28 @@ namespace JellyfinForRayNeo
         public int MaxStaticBitrate;
         public List<JellyfinDirectPlayProfile> DirectPlayProfiles;
         public List<JellyfinTranscodingProfile> TranscodingProfiles;
+        public List<JellyfinContainerProfile> ContainerProfiles;
+        public List<JellyfinCodecProfile> CodecProfiles;
         public List<JellyfinSubtitleProfile> SubtitleProfiles;
 
         public static JellyfinDeviceProfile CreateRayNeoAirProfile(int maxBitrate)
         {
+            return CreateRayNeoAirProfile(maxBitrate, PlaybackCapabilities.Detect());
+        }
+
+        public static JellyfinDeviceProfile CreateRayNeoAirProfile(
+            int maxBitrate,
+            PlaybackCapabilities capabilities)
+        {
+            capabilities = capabilities ?? PlaybackCapabilities.CreateConservative();
+            List<JellyfinDirectPlayProfile> directPlayProfiles =
+                capabilities.CreateDirectPlayProfiles();
             return new JellyfinDeviceProfile
             {
                 Name = "RayNeo Air / Unity Android",
                 MaxStreamingBitrate = maxBitrate,
                 MaxStaticBitrate = maxBitrate,
-                DirectPlayProfiles = new List<JellyfinDirectPlayProfile>
-                {
-                    new JellyfinDirectPlayProfile
-                    {
-                        Container = "mp4,m4v,mov",
-                        Type = "Video",
-                        VideoCodec = "h264,hevc",
-                        AudioCodec = "aac,mp3,ac3,eac3"
-                    }
-                },
+                DirectPlayProfiles = directPlayProfiles,
                 TranscodingProfiles = new List<JellyfinTranscodingProfile>
                 {
                     new JellyfinTranscodingProfile
@@ -285,13 +294,18 @@ namespace JellyfinForRayNeo
                         EnableSubtitlesInManifest = true
                     }
                 },
+                ContainerProfiles = new List<JellyfinContainerProfile>(),
+                CodecProfiles = capabilities.CreateCodecProfiles(),
                 SubtitleProfiles = new List<JellyfinSubtitleProfile>
                 {
                     new JellyfinSubtitleProfile { Format = "vtt", Method = "External" },
                     new JellyfinSubtitleProfile { Format = "srt", Method = "External" },
-                    new JellyfinSubtitleProfile { Format = "ass", Method = "Encode" },
-                    new JellyfinSubtitleProfile { Format = "ssa", Method = "Encode" },
-                    new JellyfinSubtitleProfile { Format = "pgssub", Method = "Encode" }
+                    new JellyfinSubtitleProfile { Format = "subrip", Method = "External" },
+                    new JellyfinSubtitleProfile { Format = "ass", Method = "External" },
+                    new JellyfinSubtitleProfile { Format = "ssa", Method = "External" },
+                    new JellyfinSubtitleProfile { Format = "pgssub", Method = "Encode" },
+                    new JellyfinSubtitleProfile { Format = "dvdsub", Method = "Encode" },
+                    new JellyfinSubtitleProfile { Format = "dvbsub", Method = "Encode" }
                 }
             };
         }
@@ -328,6 +342,50 @@ namespace JellyfinForRayNeo
         public string Method;
     }
 
+    [Serializable]
+    public sealed class JellyfinContainerProfile
+    {
+        public string Type;
+        public string Container;
+        public string SubContainer;
+        public List<JellyfinProfileCondition> Conditions;
+    }
+
+    [Serializable]
+    public sealed class JellyfinCodecProfile
+    {
+        public string Type;
+        public string Codec;
+        public string Container;
+        public string SubContainer;
+        public List<JellyfinProfileCondition> Conditions;
+        public List<JellyfinProfileCondition> ApplyConditions;
+    }
+
+    [Serializable]
+    public sealed class JellyfinProfileCondition
+    {
+        public string Condition;
+        public string Property;
+        public string Value;
+        public bool IsRequired;
+    }
+
+    public enum PlaybackTier
+    {
+        HardwareDirect = 0,
+        HardwareLibVlcDirect = 1,
+        SoftwareDirect = 2,
+        ServerTranscode = 3
+    }
+
+    public sealed class JellyfinPlaybackSelection
+    {
+        public string MediaSourceId;
+        public int? AudioStreamIndex;
+        public int? SubtitleStreamIndex;
+    }
+
     public sealed class JellyfinPlaybackPlan
     {
         public JellyfinItem Item;
@@ -336,6 +394,32 @@ namespace JellyfinForRayNeo
         public string PlaySessionId;
         public string PlayMethod;
         public long StartPositionTicks;
+        public PlaybackTier Tier;
+        public int? AudioStreamIndex;
+        public int? SubtitleStreamIndex;
+        public int LocalAudioTrackIndex;
+        public int LocalAudioTrackCount;
+        public string SubtitleUrl;
+        public string SubtitleCodec;
+        public bool SubtitleBurnedIn;
+
+        public string TierLabel
+        {
+            get
+            {
+                switch (Tier)
+                {
+                    case PlaybackTier.HardwareDirect:
+                        return "硬件解码";
+                    case PlaybackTier.HardwareLibVlcDirect:
+                        return "兼容容器硬件优先";
+                    case PlaybackTier.SoftwareDirect:
+                        return "软件解码";
+                    default:
+                        return "服务器转码";
+                }
+            }
+        }
     }
 
     [Serializable]
@@ -349,6 +433,8 @@ namespace JellyfinForRayNeo
         public long? PositionTicks;
         public string PlayMethod;
         public string PlaySessionId;
+        public int? AudioStreamIndex;
+        public int? SubtitleStreamIndex;
         public string RepeatMode = "RepeatNone";
         public string PlaybackOrder = "Default";
     }
@@ -364,6 +450,8 @@ namespace JellyfinForRayNeo
         public long? PositionTicks;
         public string PlayMethod;
         public string PlaySessionId;
+        public int? AudioStreamIndex;
+        public int? SubtitleStreamIndex;
         public string RepeatMode = "RepeatNone";
         public string PlaybackOrder = "Default";
     }

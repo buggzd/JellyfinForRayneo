@@ -13,12 +13,12 @@
 - 按媒体库与流派生成横向海报架
 - 海报、背景图和用户观看进度展示，带内存图片缓存与并发限制
 - 电影/剧集详情；电视剧按季分组浏览并选择具体分集
-- Jellyfin PlaybackInfo 协商：优先 Android 友好的 MP4 直放，回退至 H.264/AAC HLS 转码
-- Unity `VideoPlayer` 播放、暂停、拖动进度与返回
+- 动态探测 Android `MediaCodecList`，按“系统硬解 → LibVLC MediaCodec 兼容容器硬件优先 → LibVLC 本地软解 → Jellyfin H.264/AAC HLS 转码”自动降级
+- 播放、暂停、拖动进度、音轨切换；VTT/SRT/ASS/SSA 文字字幕后台加载并本地渲染，PGS/DVD/DVB 字幕由服务器烧录
 - 向 Jellyfin 同步播放开始、进度和停止事件，用于继续观看与历史记录
 - RayNeo 官方 XR Rig、双眼世界空间 UI、凝视聚焦放大、横向/纵向滚动
 
-这是可运行的 MVP，而不是完整播放器。目前尚未实现搜索、字幕/音轨切换、多服务器管理、离线下载和安全凭据存储。
+这是可运行的 MVP，而不是完整播放器。目前尚未实现搜索、多服务器管理、离线下载和安全凭据存储。
 
 ## 技术基线
 
@@ -42,6 +42,7 @@
 git clone git@github.com:buggzd/JellyfinForRayneo.git
 cd JellyfinForRayneo
 ./scripts/install-rayneo-sdk.sh
+./scripts/install-libvlc-android.sh
 ```
 
 RayNeo 二进制 SDK 不进入本仓库。安装脚本从 RayNeo 官方地址下载并在解压前校验：
@@ -50,6 +51,8 @@ RayNeo 二进制 SDK 不进入本仓库。安装脚本从 RayNeo 官方地址下
 | --- | --- | --- |
 | RayNeo Air SDK | 1.0.3 | `0ae0fb9de5dffae6cb0344535e20c454` |
 | Cardboard XR Plugin | 1.0.3 | `fddf7e51544a4e43201f90c499fef428` |
+
+兼容容器硬件优先与软件解码使用 LGPL-2.1-or-later 的 `VideoLAN.LibVLC.Android 3.7.0-beta`（LibVLC 3.x ABI、Android 15 兼容的 16 KB ELF 对齐）。安装脚本会校验 NuGet 包 SHA-256 `7b36d95f3bfe928d89b1d1cffb6b029e45a3379c125db89cdf2c8d8a20a32a64`，只提取 ARM64 `libvlc.so` 与 `libc++_shared.so`；二进制由 Git 忽略。Unity 2022 仍可能误报这两个库未对齐；以 `llvm-objdump` 中各 `LOAD` 段的 `align 2**14` 为准。
 
 脚本依赖 `curl`、`unzip`、`zipinfo` 以及 `md5` 或 `md5sum`。若需要覆盖本地包，运行 `./scripts/install-rayneo-sdk.sh --force`。
 
@@ -84,7 +87,7 @@ Unity Editor 流程：
 ## Android 构建
 
 1. 在 Unity 中打开 `File > Build Settings`，选择 `Android` 并执行 `Switch Platform`。
-2. 确认已运行依赖安装脚本，且主场景已勾选。
+2. 确认已运行两个依赖安装脚本，且主场景已勾选。
 3. 项目已预设 ARM64、IL2CPP、最低 API 26、自定义 Manifest、Gradle 模板和 Android XR Loader。
 4. 点击 `Build` 生成 APK，或 `Build And Run` 安装到 RayNeo 配套设备。
 
@@ -154,7 +157,18 @@ EditMode 测试覆盖 URL、认证响应、媒体元数据、会话和播放设�
   -logFile /tmp/jellyfin-rayneo-playmode.log
 ```
 
-当前验证结果：EditMode `25/25`、PlayMode `9/9`；Android ARM64 IL2CPP APK 构建成功。产物为约 43 MB，包名 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29，并使用 APK Signature Scheme v2 调试签名。
+当前验证结果：EditMode `35/35`、PlayMode `10/10`；Android ARM64 IL2CPP APK 构建成功。含本地解码库的开发 APK 约 54 MiB，包名 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29。
+
+## 播放降级策略
+
+1. 首先根据手机的硬件解码器、容器、分辨率、位深和所选音轨判断能否直放；Unity Android `VideoPlayer` 使用系统 `MediaCodec`。
+2. 对 MKV 等 Unity 不直接接受、但视频编码受硬件支持的容器，LibVLC 以 `avcodec-hw=any` 再尝试 MediaCodec 硬件优先解码。
+3. 两条硬件路径失败后自动保留进度，切换 LibVLC `avcodec-hw=none` 强制软件解码；覆盖 VP9、DTS 等更多格式，但耗电和 CPU 占用更高。
+4. 本地路径均失败时重新请求 PlaybackInfo，禁用视频/音频流复制，强制服务器输出双声道 H.264/AAC HLS。服务端转码能力取决于 Jellyfin 的 FFmpeg 配置。
+
+直放协商允许最高 120 Mbps 和 8 声道，让本地播放器负责下混；服务器转码仍限制为 20 Mbps、双声道，避免回退路径生成过重的流。
+
+播放器顶部会显示当前路径，并提供音轨和字幕菜单。切轨会保留当前位置并重新协商；任何一级在运行中失败都会从下一层继续，不会重试已经失败的层级。
 
 ## 代码结构
 
@@ -187,6 +201,7 @@ Assets/Plugins/Android/
 
 - [Jellyfin](https://jellyfin.org/) 名称和商标归其各自权利人所有。本客户端仅使用 Jellyfin 公共 API。
 - [RayNeo 开发文档](https://rayneo.gitbook.io/rayneo-devdoc/air-xi-lie/unity-kai-fa/kuai-su-kai-shi) 与 RayNeo Air SDK 归其权利人所有。SDK 的 `package.json` 标注许可证为 `FFALCON`，请在分发应用前自行确认适用条款；本仓库不重新分发其二进制文件。
+- LibVLC 采用 LGPL-2.1-or-later，运行时以可替换动态库链接；版本、源码和再许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 - Google Cardboard XR Plugin 采用 Apache License 2.0；其名称和商标不包含在该许可证授权中。
 - Unity、Apple TV 与 Vision Pro 是其各自权利人的商标；Apple 产品仅作为交互设计参考。
 

@@ -39,3 +39,6 @@ sysinfo.txt
 Packages/com.ffalcon.plugin.xr/
 Packages/com.google.xr.cardboard/
 
+# Verified LGPL software-decoder binaries installed by script.
+Assets/Plugins/Android/libs/
+Assets/Plugins/Android/libs.meta

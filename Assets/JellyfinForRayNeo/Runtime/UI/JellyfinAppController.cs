@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -17,6 +18,7 @@ namespace JellyfinForRayNeo
         private JellyfinImageCache _imageCache;
         private HomeCatalogService _catalog;
         private PlaybackReporter _playbackReporter;
+        private PlaybackCapabilities _playbackCapabilities;
         private CompanionLoginBridge _companionBridge;
         private LoginView _loginView;
         private HomeView _homeView;
@@ -29,10 +31,13 @@ namespace JellyfinForRayNeo
         private float _toastHideAt;
         private float _nextProgressCheck;
         private bool _stoppingPlayback;
+        private bool _recoveringPlayback;
         private bool _loginInProgress;
         private string _pendingServerUrl = "http://";
         private string _pendingUserName = string.Empty;
         private JellyfinPlaybackPlan _currentPlan;
+        private JellyfinItem _playingItem;
+        private JellyfinPlaybackSelection _playbackSelection;
         private CancellationTokenSource _lifetime;
         private CancellationTokenSource _operation;
         private CancellationTokenSource _homeImages;
@@ -68,6 +73,7 @@ namespace JellyfinForRayNeo
             _imageCache = new JellyfinImageCache();
             _catalog = new HomeCatalogService(_api);
             _playbackReporter = new PlaybackReporter(_api);
+            _playbackCapabilities = PlaybackCapabilities.Detect();
 
             Camera camera = UiFactory.EnsureMainCamera();
             UiFactory.EnsureEventSystem();
@@ -145,8 +151,11 @@ namespace JellyfinForRayNeo
                 SetPlayedStateAsync(item, isPlayed).Forget(HandleFatalError);
             _playerView.BackRequested += () => StopPlaybackAsync(false, null).Forget(HandleFatalError);
             _playerView.PauseStateChanged += paused => ReportForcedProgressAsync(paused).Forget(HandleNonFatalError);
-            _playerView.PlaybackFailed += message => StopPlaybackAsync(true, message).Forget(HandleFatalError);
+            _playerView.PlaybackFailed += message =>
+                RecoverPlaybackAsync(message).Forget(HandleFatalError);
             _playerView.PlaybackCompleted += () => StopPlaybackAsync(false, null, true).Forget(HandleFatalError);
+            _playerView.TrackSelectionRequested += (audioIndex, subtitleIndex) =>
+                ChangeTracksAsync(audioIndex, subtitleIndex).Forget(HandleFatalError);
         }
 
         private void HandleCompanionLoginRequested(CompanionLoginRequest request)
@@ -623,22 +632,18 @@ namespace JellyfinForRayNeo
 
             CancellationToken token = BeginOperation();
             ShowLoading(true, "正在与 Jellyfin 协商播放格式…");
+            _playingItem = item;
+            _playbackSelection = new JellyfinPlaybackSelection();
             try
             {
-                JellyfinPlaybackPlan plan = await _api.GetPlaybackPlanAsync(item, startPositionTicks, token);
-                _currentPlan = plan;
-                _playbackReporter.Reset();
+                List<JellyfinPlaybackPlan> plans = await _api.GetPlaybackPlansAsync(
+                    item,
+                    startPositionTicks,
+                    _playbackSelection,
+                    _playbackCapabilities,
+                    token);
                 ShowLoading(false);
-                await _playerView.PrepareAndPlayAsync(plan, token);
-                try
-                {
-                    await _playbackReporter.StartAsync(plan, _playerView.CurrentPositionTicks, token);
-                }
-                catch (Exception reportException)
-                {
-                    HandleNonFatalError(reportException);
-                }
-                _nextProgressCheck = Time.unscaledTime + 2f;
+                await StartFirstWorkingPlanAsync(plans, null, token);
             }
             catch (OperationCanceledException)
             {
@@ -647,12 +652,252 @@ namespace JellyfinForRayNeo
             {
                 _playerView.Stop();
                 _currentPlan = null;
+                _playingItem = null;
+                _playbackSelection = null;
                 ShowToast("无法播放：" + UserMessage(exception), true);
             }
             finally
             {
                 ShowLoading(false);
             }
+        }
+
+        private async Task StartFirstWorkingPlanAsync(
+            IEnumerable<JellyfinPlaybackPlan> plans,
+            PlaybackTier? afterTier,
+            CancellationToken cancellationToken)
+        {
+            Exception lastError = null;
+            foreach (JellyfinPlaybackPlan plan in plans ?? Enumerable.Empty<JellyfinPlaybackPlan>())
+            {
+                if (plan == null || afterTier.HasValue && plan.Tier <= afterTier.Value)
+                {
+                    continue;
+                }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    _currentPlan = plan;
+                    _playbackReporter.Reset();
+                    _playerView.SetSubtitleTrack(null);
+                    await _playerView.PrepareAndPlayAsync(plan, cancellationToken);
+                    try
+                    {
+                        await _playbackReporter.StartAsync(
+                            plan,
+                            _playerView.CurrentPositionTicks,
+                            cancellationToken);
+                    }
+                    catch (Exception reportException)
+                    {
+                        HandleNonFatalError(reportException);
+                    }
+                    _nextProgressCheck = Time.unscaledTime + 2f;
+                    LoadSubtitleAsync(plan, cancellationToken).Forget(HandleNonFatalError);
+                    return;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    lastError = exception;
+                    Debug.LogWarning(
+                        plan.TierLabel + " playback path failed before start: "
+                        + exception.Message);
+                    _playerView.Stop();
+                    _currentPlan = null;
+                    _playbackReporter.Reset();
+                }
+            }
+
+            throw lastError ?? new InvalidOperationException("没有剩余的播放降级路径。");
+        }
+
+        private async Task LoadSubtitleAsync(
+            JellyfinPlaybackPlan plan,
+            CancellationToken cancellationToken)
+        {
+            if (plan == null
+                || plan.SubtitleBurnedIn
+                || string.IsNullOrWhiteSpace(plan.SubtitleUrl))
+            {
+                _playerView.SetSubtitleTrack(null);
+                return;
+            }
+
+            try
+            {
+                string content = await _api.GetSubtitleTextAsync(plan, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                _playerView.SetSubtitleTrack(
+                    SubtitleParser.Parse(content, plan.SubtitleCodec));
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _playerView.SetSubtitleTrack(null);
+                HandleNonFatalError(exception);
+                ShowToast("字幕加载失败，视频将继续播放。", true);
+            }
+        }
+
+        private async Task RecoverPlaybackAsync(string errorMessage)
+        {
+            if (_recoveringPlayback || _currentPlan == null || _playingItem == null)
+            {
+                return;
+            }
+
+            _recoveringPlayback = true;
+            long positionTicks = _playerView.CurrentPositionTicks;
+            PlaybackTier failedTier = _currentPlan.Tier;
+            CancellationToken token = BeginOperation();
+            ShowLoading(
+                true,
+                failedTier == PlaybackTier.HardwareDirect
+                    ? "系统硬件路径失败，正在切换兼容容器硬件解码…"
+                    : failedTier == PlaybackTier.HardwareLibVlcDirect
+                        ? "兼容硬件路径失败，正在切换本地软件解码…"
+                        : "本地解码失败，正在请求 Jellyfin 服务器转码…");
+            try
+            {
+                await StopCurrentReportForFallbackAsync(positionTicks, true, token);
+                _playerView.Stop();
+                _currentPlan = null;
+                List<JellyfinPlaybackPlan> plans = await _api.GetPlaybackPlansAsync(
+                    _playingItem,
+                    positionTicks,
+                    _playbackSelection,
+                    _playbackCapabilities,
+                    token);
+                await StartFirstWorkingPlanAsync(plans, failedTier, token);
+                ShowToast("已自动切换到" + _currentPlan.TierLabel + "。", false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception exception)
+            {
+                _playerView.Stop();
+                _currentPlan = null;
+                _playingItem = null;
+                _playbackSelection = null;
+                _playbackReporter.Reset();
+                string detail = string.IsNullOrWhiteSpace(errorMessage)
+                    ? UserMessage(exception)
+                    : errorMessage + "；" + UserMessage(exception);
+                ShowToast("所有播放路径均失败：" + detail, true);
+            }
+            finally
+            {
+                ShowLoading(false);
+                _recoveringPlayback = false;
+            }
+        }
+
+        private async Task ChangeTracksAsync(
+            int? audioStreamIndex,
+            int? subtitleStreamIndex)
+        {
+            if (_recoveringPlayback || _currentPlan == null || _playingItem == null)
+            {
+                return;
+            }
+
+            _recoveringPlayback = true;
+            long positionTicks = _playerView.CurrentPositionTicks;
+            JellyfinPlaybackSelection previous = _playbackSelection;
+            JellyfinPlaybackSelection requested = new JellyfinPlaybackSelection
+            {
+                MediaSourceId = _currentPlan.MediaSource != null
+                    ? _currentPlan.MediaSource.Id
+                    : null,
+                AudioStreamIndex = audioStreamIndex,
+                SubtitleStreamIndex = subtitleStreamIndex
+            };
+            CancellationToken token = BeginOperation();
+            ShowLoading(true, "正在切换音轨与字幕…");
+            try
+            {
+                await StopCurrentReportForFallbackAsync(positionTicks, false, token);
+                _playerView.Stop();
+                _currentPlan = null;
+                _playbackSelection = requested;
+                List<JellyfinPlaybackPlan> plans = await _api.GetPlaybackPlansAsync(
+                    _playingItem,
+                    positionTicks,
+                    requested,
+                    _playbackCapabilities,
+                    token);
+                await StartFirstWorkingPlanAsync(plans, null, token);
+                ShowToast("音轨与字幕已切换。", false);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception exception)
+            {
+                _playbackSelection = previous;
+                _playerView.Stop();
+                _currentPlan = null;
+                _playbackReporter.Reset();
+                try
+                {
+                    List<JellyfinPlaybackPlan> restorePlans = await _api.GetPlaybackPlansAsync(
+                        _playingItem,
+                        positionTicks,
+                        previous,
+                        _playbackCapabilities,
+                        token);
+                    await StartFirstWorkingPlanAsync(restorePlans, null, token);
+                    ShowToast(
+                        "切换失败，已恢复原轨道：" + UserMessage(exception),
+                        true);
+                }
+                catch (Exception restoreException)
+                {
+                    _playerView.Stop();
+                    _currentPlan = null;
+                    _playingItem = null;
+                    _playbackReporter.Reset();
+                    ShowToast(
+                        "切换失败且无法恢复：" + UserMessage(restoreException),
+                        true);
+                }
+            }
+            finally
+            {
+                ShowLoading(false);
+                _recoveringPlayback = false;
+            }
+        }
+
+        private async Task StopCurrentReportForFallbackAsync(
+            long positionTicks,
+            bool failed,
+            CancellationToken cancellationToken)
+        {
+            if (_currentPlan != null)
+            {
+                try
+                {
+                    await _playbackReporter.StopAsync(
+                        positionTicks,
+                        failed,
+                        cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    HandleNonFatalError(exception);
+                }
+            }
+            _playbackReporter.Reset();
         }
 
         private async Task StopPlaybackAsync(bool failed, string errorMessage, bool refreshAfter = false)
@@ -663,6 +908,8 @@ namespace JellyfinForRayNeo
             }
 
             _stoppingPlayback = true;
+            CancelAndDispose(ref _operation);
+            _recoveringPlayback = false;
             long position = _playerView.CurrentPositionTicks;
             try
             {
@@ -682,6 +929,8 @@ namespace JellyfinForRayNeo
             {
                 _playerView.Stop();
                 _currentPlan = null;
+                _playingItem = null;
+                _playbackSelection = null;
                 _playbackReporter.Reset();
                 _stoppingPlayback = false;
             }

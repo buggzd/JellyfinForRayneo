@@ -10,6 +10,7 @@ Install the untracked RayNeo SDK dependencies before opening the project:
 
 ```bash
 ./scripts/install-rayneo-sdk.sh
+./scripts/install-libvlc-android.sh
 ```
 
 Open the repository in Unity Hub with `2022.3.62f3c1`, then run `Jellyfin for RayNeo > Configure Project and Scene` if the XR scene needs regeneration. Build Android from `File > Build Settings`; the expected output is `Builds/Android/JellyfinForRayNeo.apk`.
@@ -36,4 +37,4 @@ Follow the existing Conventional Commit style: `feat: add ...` or `fix: prevent 
 
 ## Security & Local Configuration
 
-Do not commit RayNeo binaries, access tokens, passwords, `Library/`, `Builds/`, or machine-specific package paths. Preserve unrelated local changes in `Packages/manifest.json`, `packages-lock.json`, and `PackageManagerSettings.asset` unless the change explicitly requires them.
+Do not commit RayNeo or LibVLC binaries, access tokens, passwords, `Library/`, `Builds/`, or machine-specific package paths. Preserve unrelated local changes in `Packages/manifest.json`, `packages-lock.json`, and `PackageManagerSettings.asset` unless the change explicitly requires them.

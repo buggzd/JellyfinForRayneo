@@ -487,6 +487,25 @@ namespace JellyfinForRayNeo.Tests
             yield return null;
         }
 
+        [UnityTest]
+        public IEnumerator PlayerView_ProvidesDecodeTrackAndSubtitleControls()
+        {
+            GameObject host = new GameObject("Player UI Test Host", typeof(RectTransform));
+            host.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
+            PlayerView player = new PlayerView(host.transform);
+            yield return null;
+
+            Assert.NotNull(FindDescendant(host.transform, "Decode Mode"));
+            Assert.NotNull(FindDescendant(host.transform, "Audio Tracks"));
+            Assert.NotNull(FindDescendant(host.transform, "Subtitle Tracks"));
+            Assert.NotNull(FindDescendant(host.transform, "Subtitle Overlay"));
+            Assert.NotNull(FindDescendant(host.transform, "Track Menu"));
+
+            player.Dispose();
+            Object.Destroy(host);
+            yield return null;
+        }
+
         private static Transform FindDescendant(Transform root, string objectName)
         {
             return root.GetComponentsInChildren<Transform>(true)
