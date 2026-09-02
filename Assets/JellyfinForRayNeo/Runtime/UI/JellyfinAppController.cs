@@ -18,7 +18,6 @@ namespace JellyfinForRayNeo
         private LoginView _loginView;
         private HomeView _homeView;
         private DetailView _detailView;
-        private EpisodeBrowserView _episodeBrowser;
         private PlayerView _playerView;
         private GameObject _loadingOverlay;
         private Text _loadingLabel;
@@ -35,7 +34,6 @@ namespace JellyfinForRayNeo
         private CancellationTokenSource _operation;
         private CancellationTokenSource _homeImages;
         private CancellationTokenSource _detailImages;
-        private CancellationTokenSource _episodeImages;
 
         private void Start()
         {
@@ -76,7 +74,6 @@ namespace JellyfinForRayNeo
             _loginView = new LoginView(appBackground.transform);
             _homeView = new HomeView(appBackground.transform, _api, _imageCache);
             _detailView = new DetailView(appBackground.transform);
-            _episodeBrowser = new EpisodeBrowserView(appBackground.transform, _api, _imageCache);
             _playerView = new PlayerView(appBackground.transform);
             CreateOverlays(appBackground.transform);
             WireEvents();
@@ -137,13 +134,10 @@ namespace JellyfinForRayNeo
             _homeView.LogoutRequested += Logout;
             _detailView.CloseRequested += _detailView.Hide;
             _detailView.PlayRequested += (item, position) => PlayAsync(item, position).Forget(HandleFatalError);
-            _detailView.EpisodesRequested += series => ShowEpisodesAsync(series).Forget(HandleFatalError);
             _detailView.FavoriteStateChangeRequested += (item, isFavorite) =>
                 SetFavoriteStateAsync(item, isFavorite).Forget(HandleFatalError);
             _detailView.PlayedStateChangeRequested += (item, isPlayed) =>
                 SetPlayedStateAsync(item, isPlayed).Forget(HandleFatalError);
-            _episodeBrowser.CloseRequested += _episodeBrowser.Hide;
-            _episodeBrowser.EpisodeSelected += episode => ShowDetailsAsync(episode).Forget(HandleFatalError);
             _playerView.BackRequested += () => StopPlaybackAsync(false, null).Forget(HandleFatalError);
             _playerView.PauseStateChanged += paused => ReportForcedProgressAsync(paused).Forget(HandleNonFatalError);
             _playerView.PlaybackFailed += message => StopPlaybackAsync(true, message).Forget(HandleFatalError);
@@ -246,7 +240,6 @@ namespace JellyfinForRayNeo
             _homeView.SetSections(sections, _homeImages.Token);
             _loginView.Show(false);
             _detailView.Hide();
-            _episodeBrowser.Hide();
             _homeView.Show(true);
             _pendingServerUrl = session.ServerUrl;
             _pendingUserName = session.UserName;
@@ -290,13 +283,21 @@ namespace JellyfinForRayNeo
             }
 
             CancellationToken token = BeginOperation();
-            ShowLoading(true, "正在加载详情…");
+            ShowLoading(true, "正在加载详情与剧集…");
             try
             {
                 JellyfinItem details = await _api.GetItemAsync(item.Id, token);
                 token.ThrowIfCancellationRequested();
+                JellyfinItem resolvedItem = details ?? item;
+                List<JellyfinItem> episodes = await GetEpisodesForDetailAsync(resolvedItem, token);
+                token.ThrowIfCancellationRequested();
                 ReplaceDetailImageToken();
-                _detailView.Show(details ?? item, _api, _imageCache, _detailImages.Token);
+                _detailView.Show(
+                    resolvedItem,
+                    _api,
+                    _imageCache,
+                    _detailImages.Token,
+                    episodes);
             }
             catch (OperationCanceledException)
             {
@@ -309,6 +310,30 @@ namespace JellyfinForRayNeo
             {
                 ShowLoading(false);
             }
+        }
+
+        private async Task<List<JellyfinItem>> GetEpisodesForDetailAsync(
+            JellyfinItem item,
+            CancellationToken cancellationToken)
+        {
+            string seriesId = null;
+            if (item != null && string.Equals(item.Type, "Series", StringComparison.OrdinalIgnoreCase))
+            {
+                seriesId = item.Id;
+            }
+            else if (item != null && string.Equals(item.Type, "Episode", StringComparison.OrdinalIgnoreCase))
+            {
+                seriesId = item.SeriesId;
+            }
+            if (string.IsNullOrWhiteSpace(seriesId))
+            {
+                return new List<JellyfinItem>();
+            }
+
+            JellyfinQueryResult result = await _api.GetEpisodesAsync(seriesId, 500, cancellationToken);
+            return result != null && result.Items != null
+                ? result.Items
+                : new List<JellyfinItem>();
         }
 
         private async Task SetFavoriteStateAsync(JellyfinItem item, bool isFavorite)
@@ -405,41 +430,6 @@ namespace JellyfinForRayNeo
             return current != null
                 && item != null
                 && string.Equals(current.Id, item.Id, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private async Task ShowEpisodesAsync(JellyfinItem series)
-        {
-            if (series == null
-                || string.IsNullOrWhiteSpace(series.Id)
-                || !string.Equals(series.Type, "Series", StringComparison.OrdinalIgnoreCase))
-            {
-                ShowToast("请选择一部剧集。", true);
-                return;
-            }
-
-            CancellationToken token = BeginOperation();
-            ShowLoading(true, "正在加载分季与剧集…");
-            try
-            {
-                JellyfinQueryResult result = await _api.GetEpisodesAsync(series.Id, 500, token);
-                token.ThrowIfCancellationRequested();
-                ReplaceEpisodeImageToken();
-                _episodeBrowser.Show(
-                    series,
-                    result != null && result.Items != null ? result.Items : new List<JellyfinItem>(),
-                    _episodeImages.Token);
-            }
-            catch (OperationCanceledException)
-            {
-            }
-            catch (Exception exception)
-            {
-                ShowToast(UserMessage(exception), true);
-            }
-            finally
-            {
-                ShowLoading(false);
-            }
         }
 
         private async Task PlayAsync(JellyfinItem item, long startPositionTicks)
@@ -549,11 +539,9 @@ namespace JellyfinForRayNeo
             CancelAndDispose(ref _operation);
             CancelAndDispose(ref _homeImages);
             CancelAndDispose(ref _detailImages);
-            CancelAndDispose(ref _episodeImages);
             _sessionStore.ClearSession();
             _api.ClearSession();
             _detailView.Hide();
-            _episodeBrowser.Hide();
             _homeView.Show(false);
             ShowLogin(
                 "已退出当前 Jellyfin 用户，请在手机端重新连接。",
@@ -580,7 +568,6 @@ namespace JellyfinForRayNeo
             ShowLoading(false);
             _homeView.Show(false);
             _detailView.Hide();
-            _episodeBrowser.Hide();
             _loginView.Show(true);
             _loginView.SetMessage(message, isError);
             _companionBridge.PublishState(
@@ -643,7 +630,6 @@ namespace JellyfinForRayNeo
             CancelAndDispose(ref _operation);
             CancelAndDispose(ref _homeImages);
             CancelAndDispose(ref _detailImages);
-            CancelAndDispose(ref _episodeImages);
             if (_companionBridge != null)
             {
                 _companionBridge.LoginRequested -= HandleCompanionLoginRequested;
@@ -683,12 +669,6 @@ namespace JellyfinForRayNeo
         {
             CancelAndDispose(ref _detailImages);
             _detailImages = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
-        }
-
-        private void ReplaceEpisodeImageToken()
-        {
-            CancelAndDispose(ref _episodeImages);
-            _episodeImages = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         }
 
         private static void CancelAndDispose(ref CancellationTokenSource source)

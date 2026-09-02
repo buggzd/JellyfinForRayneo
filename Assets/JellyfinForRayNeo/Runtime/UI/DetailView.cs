@@ -22,6 +22,7 @@ namespace JellyfinForRayNeo
         private readonly Text _originalTitle;
         private readonly RectTransform _metadataChips;
         private readonly Text _tagline;
+        private readonly Text _nextEpisodeLabel;
         private readonly Text _overview;
         private readonly Image _factsCard;
         private readonly RectTransform _factsContainer;
@@ -33,17 +34,17 @@ namespace JellyfinForRayNeo
         private readonly Button _continueButton;
         private readonly Text _continueLabel;
         private readonly Button _fromStartButton;
-        private readonly Button _episodesButton;
         private readonly Button _favoriteButton;
         private readonly Text _favoriteLabel;
         private readonly Button _playedButton;
         private readonly Text _playedLabel;
+        private readonly EpisodeShelfView _episodeShelf;
         private JellyfinItem _item;
+        private JellyfinItem _playTarget;
         private bool _userActionBusy;
         private int _bindingVersion;
 
         public event Action<JellyfinItem, long> PlayRequested;
-        public event Action<JellyfinItem> EpisodesRequested;
         public event Action<JellyfinItem, bool> FavoriteStateChangeRequested;
         public event Action<JellyfinItem, bool> PlayedStateChangeRequested;
         public event Action CloseRequested;
@@ -230,6 +231,15 @@ namespace JellyfinForRayNeo
                 34f);
             _tagline.lineSpacing = 1.08f;
 
+            _nextEpisodeLabel = CreateFlowText(
+                "Next Episode",
+                heroInfo,
+                20,
+                UiTheme.AccentBright,
+                FontStyle.Bold,
+                30f);
+            _nextEpisodeLabel.gameObject.SetActive(false);
+
             RectTransform progress = UiFactory.CreateRect("Watch Progress", heroInfo);
             LayoutElement progressElement = progress.gameObject.AddComponent<LayoutElement>();
             progressElement.minHeight = 42f;
@@ -294,15 +304,9 @@ namespace JellyfinForRayNeo
                 UiTheme.Focus,
                 new Color(0.025f, 0.028f, 0.045f, 1f),
                 23);
-            ConfigureActionButton(_continueButton, 184f);
+            ConfigureActionButton(_continueButton, 236f);
             _continueLabel = _continueButton.GetComponentInChildren<Text>();
-            _continueButton.onClick.AddListener(() =>
-            {
-                long position = _item != null && _item.UserData != null
-                    ? _item.UserData.PlaybackPositionTicks
-                    : 0L;
-                PlayRequested?.Invoke(_item, Math.Max(0L, position));
-            });
+            _continueButton.onClick.AddListener(() => RequestPlayback(_playTarget, true));
 
             _fromStartButton = UiFactory.CreateButton(
                 "From Start",
@@ -312,17 +316,7 @@ namespace JellyfinForRayNeo
                 UiTheme.TextPrimary,
                 21);
             ConfigureActionButton(_fromStartButton, 174f);
-            _fromStartButton.onClick.AddListener(() => PlayRequested?.Invoke(_item, 0L));
-
-            _episodesButton = UiFactory.CreateButton(
-                "Episodes",
-                actions,
-                "浏览剧集",
-                UiTheme.Focus,
-                new Color(0.025f, 0.028f, 0.045f, 1f),
-                22);
-            ConfigureActionButton(_episodesButton, 184f);
-            _episodesButton.onClick.AddListener(() => EpisodesRequested?.Invoke(_item));
+            _fromStartButton.onClick.AddListener(() => RequestPlayback(_playTarget, false));
 
             _favoriteButton = UiFactory.CreateButton(
                 "Favorite",
@@ -361,6 +355,9 @@ namespace JellyfinForRayNeo
                 bool current = _item.UserData != null && _item.UserData.Played;
                 PlayedStateChangeRequested?.Invoke(_item, !current);
             });
+
+            _episodeShelf = new EpisodeShelfView(_content, _scroll);
+            _episodeShelf.EpisodeSelected += episode => RequestPlayback(episode, true);
 
             Image overviewCard = CreateCard("Overview Card", _content);
             CreateSectionHeading(overviewCard.transform, "内容简介", "STORY");
@@ -414,10 +411,16 @@ namespace JellyfinForRayNeo
             JellyfinItem item,
             JellyfinApiClient api,
             JellyfinImageCache imageCache,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            IList<JellyfinItem> episodes = null)
         {
             _bindingVersion++;
             _item = item;
+            bool isSeries = item != null
+                && string.Equals(item.Type, "Series", StringComparison.OrdinalIgnoreCase);
+            _playTarget = isSeries
+                ? EpisodePlaybackResolver.Select(episodes)
+                : item != null && item.IsPlayable ? item : null;
             _userActionBusy = false;
             _root.SetActive(true);
             _root.transform.SetAsLastSibling();
@@ -447,6 +450,12 @@ namespace JellyfinForRayNeo
             _overview.text = string.IsNullOrWhiteSpace(overview) ? "暂无简介。" : overview;
             PopulateFacts(item);
             PopulateMediaFacts(item);
+            _episodeShelf.Bind(
+                episodes,
+                isSeries ? _playTarget : item,
+                api,
+                imageCache,
+                cancellationToken);
             UpdatePlaybackState();
             UpdateUserActionState();
 
@@ -501,6 +510,7 @@ namespace JellyfinForRayNeo
         public void Hide()
         {
             _bindingVersion++;
+            _episodeShelf.Hide();
             _root.SetActive(false);
         }
 
@@ -736,20 +746,34 @@ namespace JellyfinForRayNeo
 
         private void UpdatePlaybackState()
         {
-            bool playable = _item != null && _item.IsPlayable;
+            bool playable = _playTarget != null && _playTarget.IsPlayable;
             bool isSeries = _item != null
                 && string.Equals(_item.Type, "Series", StringComparison.OrdinalIgnoreCase);
-            long resumePosition = _item != null && _item.UserData != null
-                ? _item.UserData.PlaybackPositionTicks
-                : 0L;
+            long resumePosition = EpisodePlaybackResolver.ResumePosition(_playTarget);
             bool hasResumePosition = resumePosition > AppConstants.TicksPerSecond * 10L;
 
             _continueButton.gameObject.SetActive(playable);
-            _continueLabel.text = hasResumePosition ? "继续播放" : "播放";
+            string episodeCode = EpisodePlaybackResolver.EpisodeCode(_playTarget);
+            _continueLabel.text = isSeries && !string.IsNullOrWhiteSpace(episodeCode)
+                ? string.Format("{0} {1}", hasResumePosition ? "继续" : "播放", episodeCode)
+                : hasResumePosition ? "继续播放" : "播放";
             _fromStartButton.gameObject.SetActive(playable && hasResumePosition);
-            _episodesButton.gameObject.SetActive(isSeries);
 
-            JellyfinUserData userData = _item != null ? _item.UserData : null;
+            _nextEpisodeLabel.gameObject.SetActive(isSeries);
+            if (isSeries)
+            {
+                _nextEpisodeLabel.text = playable
+                    ? string.Format(
+                        "{0} · {1} · {2}",
+                        hasResumePosition ? "继续观看" : "接下来",
+                        episodeCode,
+                        JellyfinText.ToPlainText(_playTarget.Name))
+                    : "暂未找到可播放剧集";
+            }
+
+            JellyfinUserData userData = isSeries && _playTarget != null
+                ? _playTarget.UserData
+                : _item != null ? _item.UserData : null;
             double percentage = userData != null && userData.PlayedPercentage.HasValue
                 ? userData.PlayedPercentage.Value
                 : 0d;
@@ -764,10 +788,23 @@ namespace JellyfinForRayNeo
                 float normalized = Mathf.Clamp01((float)(percentage / 100d));
                 _progressFill.rectTransform.anchorMax = new Vector2(normalized, 1f);
                 _progressFill.rectTransform.offsetMax = Vector2.zero;
-                _progressLabel.text = userData != null && userData.Played
+                string progressText = userData != null && userData.Played
                     ? "已看完"
                     : "已观看 " + Math.Max(1d, percentage).ToString("0") + "%";
+                _progressLabel.text = isSeries && !string.IsNullOrWhiteSpace(episodeCode)
+                    ? episodeCode + " · " + progressText
+                    : progressText;
             }
+        }
+
+        private void RequestPlayback(JellyfinItem item, bool resume)
+        {
+            if (item == null || !item.IsPlayable)
+            {
+                return;
+            }
+            long position = resume ? EpisodePlaybackResolver.ResumePosition(item) : 0L;
+            PlayRequested?.Invoke(item, position);
         }
 
         private void UpdateUserActionState()

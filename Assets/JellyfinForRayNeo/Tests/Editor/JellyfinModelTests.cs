@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using NUnit.Framework;
 
@@ -82,6 +83,56 @@ namespace JellyfinForRayNeo.Tests
             Assert.IsTrue(session.IsValid);
             session.AccessToken = string.Empty;
             Assert.IsFalse(session.IsValid);
+        }
+
+        [Test]
+        public void EpisodePlaybackResolver_PrefersMostRecentResume()
+        {
+            JellyfinItem episodeOne = CreateEpisode(1, played: false);
+            JellyfinItem episodeTwo = CreateEpisode(2, played: false, positionTicks: 300_000_000L);
+            episodeTwo.UserData.LastPlayedDate = "2026-09-01T12:00:00Z";
+            JellyfinItem episodeThree = CreateEpisode(3, played: false, positionTicks: 180_000_000L);
+            episodeThree.UserData.LastPlayedDate = "2026-09-02T12:00:00Z";
+
+            JellyfinItem selected = EpisodePlaybackResolver.Select(
+                new List<JellyfinItem> { episodeOne, episodeTwo, episodeThree });
+
+            Assert.AreSame(episodeThree, selected);
+        }
+
+        [Test]
+        public void EpisodePlaybackResolver_SelectsFirstUnplayedEpisode()
+        {
+            JellyfinItem episodeOne = CreateEpisode(1, played: true);
+            JellyfinItem episodeTwo = CreateEpisode(2, played: false);
+            JellyfinItem episodeThree = CreateEpisode(3, played: false);
+
+            JellyfinItem selected = EpisodePlaybackResolver.Select(
+                new List<JellyfinItem> { episodeThree, episodeOne, episodeTwo });
+
+            Assert.AreSame(episodeTwo, selected);
+            Assert.AreEqual("S01E02", EpisodePlaybackResolver.EpisodeCode(selected));
+        }
+
+        private static JellyfinItem CreateEpisode(
+            int index,
+            bool played,
+            long positionTicks = 0L)
+        {
+            return new JellyfinItem
+            {
+                Id = "episode-" + index,
+                Name = "第 " + index + " 集",
+                Type = "Episode",
+                MediaType = "Video",
+                ParentIndexNumber = 1,
+                IndexNumber = index,
+                UserData = new JellyfinUserData
+                {
+                    Played = played,
+                    PlaybackPositionTicks = positionTicks
+                }
+            };
         }
     }
 }

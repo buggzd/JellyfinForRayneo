@@ -283,6 +283,88 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [UnityTest]
+        public IEnumerator DetailView_EmbedsEpisodesAndPlaysNextEpisodeDirectly()
+        {
+            GameObject host = new GameObject("Integrated Detail Test Host", typeof(RectTransform));
+            host.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
+            JellyfinApiClient api = new JellyfinApiClient("integrated-detail-device");
+            api.SetSession(new JellyfinSession
+            {
+                ServerUrl = "http://127.0.0.1:8096",
+                AccessToken = "integrated-detail-token",
+                UserId = "integrated-detail-user",
+                DeviceId = "integrated-detail-device"
+            });
+            JellyfinImageCache imageCache = new JellyfinImageCache();
+            DetailView detail = new DetailView(host.transform);
+            JellyfinItem episodeOne = CreateEpisode(1, "第一集");
+            episodeOne.UserData.Played = true;
+            JellyfinItem episodeTwo = CreateEpisode(2, "第二集");
+            episodeTwo.UserData.PlaybackPositionTicks = AppConstants.TicksPerSecond * 45L;
+            episodeTwo.UserData.PlayedPercentage = 35d;
+            episodeTwo.UserData.LastPlayedDate = "2026-09-02T10:00:00Z";
+            JellyfinItem episodeThree = CreateEpisode(3, "第三集");
+            JellyfinItem playedItem = null;
+            long playedPosition = -1L;
+            detail.PlayRequested += (item, position) =>
+            {
+                playedItem = item;
+                playedPosition = position;
+            };
+
+            detail.Show(
+                new JellyfinItem
+                {
+                    Id = "series",
+                    Name = "测试剧集",
+                    Type = "Series",
+                    UserData = new JellyfinUserData()
+                },
+                api,
+                imageCache,
+                CancellationToken.None,
+                new List<JellyfinItem> { episodeThree, episodeOne, episodeTwo });
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+
+            Transform shelf = FindDescendant(host.transform, "Episode Shelf");
+            Assert.NotNull(shelf);
+            Transform viewport = FindDescendant(shelf, "Episode Viewport");
+            Transform artwork = FindDescendant(shelf, "Artwork Frame");
+            Button continueButton = FindDescendant(host.transform, "Continue").GetComponent<Button>();
+            Text nextEpisode = FindDescendant(host.transform, "Next Episode").GetComponent<Text>();
+            Assert.IsTrue(shelf.gameObject.activeInHierarchy);
+            Assert.NotNull(viewport);
+            AssertTransparentDragSurface(viewport);
+            Assert.NotNull(artwork);
+            Assert.That(
+                ((RectTransform)artwork).rect.width / ((RectTransform)artwork).rect.height,
+                Is.EqualTo(16f / 9f).Within(0.01f));
+            Assert.AreEqual("继续 S01E02", continueButton.GetComponentInChildren<Text>().text);
+            StringAssert.Contains("S01E02", nextEpisode.text);
+            Assert.IsNull(FindDescendant(host.transform, "Episodes"));
+
+            AxisRoutingScrollRect episodeScroll = viewport.GetComponent<AxisRoutingScrollRect>();
+            ScrollRect detailScroll = FindDescendant(host.transform, "Detail Scroll").GetComponent<ScrollRect>();
+            Assert.AreSame(detailScroll, episodeScroll.ParentScrollRect);
+            continueButton.onClick.Invoke();
+            Assert.AreSame(episodeTwo, playedItem);
+            Assert.AreEqual(episodeTwo.UserData.PlaybackPositionTicks, playedPosition);
+
+            PosterCardView thirdCard = shelf
+                .GetComponentsInChildren<PosterCardView>(true)
+                .First(card => FindDescendant(card.transform, "Title").GetComponent<Text>().text == "第三集");
+            thirdCard.GetComponent<Button>().onClick.Invoke();
+            Assert.AreSame(episodeThree, playedItem);
+            Assert.AreEqual(0L, playedPosition);
+
+            detail.Hide();
+            imageCache.Dispose();
+            Object.Destroy(host);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator DetailView_UsesScrollableContentDrivenLayout()
         {
             GameObject host = new GameObject("Detail Layout Test Host", typeof(RectTransform));
@@ -323,7 +405,7 @@ namespace JellyfinForRayNeo.Tests
                 actions.GetComponent<HorizontalLayoutGroup>().childControlWidth,
                 "Action buttons must use their LayoutElement widths instead of Unity's 100 px default.");
             Assert.AreEqual(0f, actions.GetComponent<LayoutElement>().flexibleHeight);
-            Assert.AreEqual(184f, continueButton.GetComponent<LayoutElement>().preferredWidth);
+            Assert.AreEqual(236f, continueButton.GetComponent<LayoutElement>().preferredWidth);
             Assert.IsTrue(metadataChips.GetComponent<HorizontalLayoutGroup>().childControlWidth);
             Assert.AreEqual(0f, metadataChips.GetComponent<LayoutElement>().flexibleHeight);
             Assert.NotNull(FindDescendant(host.transform, "Favorite"));
@@ -405,12 +487,14 @@ namespace JellyfinForRayNeo.Tests
         {
             return new JellyfinItem
             {
+                Id = "episode-" + index,
                 Name = name,
                 Type = "Episode",
                 MediaType = "Video",
                 SeasonName = "测试第一季",
                 ParentIndexNumber = 1,
-                IndexNumber = index
+                IndexNumber = index,
+                UserData = new JellyfinUserData()
             };
         }
 
