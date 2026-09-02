@@ -17,6 +17,7 @@ namespace JellyfinForRayNeo
         private readonly GameObject _root;
         private readonly UiViewMotion _motion;
         private readonly RawImage _videoSurface;
+        private readonly AspectRatioFitter _videoAspect;
         private readonly IPlaybackEngine _unityEngine;
         private readonly IPlaybackEngine _libVlcHardwareEngine;
         private readonly IPlaybackEngine _softwareEngine;
@@ -72,13 +73,10 @@ namespace JellyfinForRayNeo
                 .gameObject.AddComponent<RawImage>();
             _videoSurface.color = Color.white;
             _videoSurface.raycastTarget = false;
-            UiFactory.SetRect(
-                _videoSurface.rectTransform,
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0f, 18f),
-                new Vector2(1660f, 934f));
+            UiFactory.Stretch(_videoSurface.rectTransform);
+            _videoAspect = _videoSurface.gameObject.AddComponent<AspectRatioFitter>();
+            _videoAspect.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            _videoAspect.aspectRatio = 16f / 9f;
 
             _unityEngine = new UnityVideoPlaybackEngine(rootImage.gameObject);
             _libVlcHardwareEngine = new LibVlcPlaybackEngine(false);
@@ -351,6 +349,13 @@ namespace JellyfinForRayNeo
             _trackPanel = trackPanel.gameObject;
             _trackMotion = UiFactory.AddViewMotion(_trackPanel, 18f, 0.98f);
             _trackMotion.SetVisibleImmediately(false);
+            _controlsVisible = false;
+            _topControlsGroup.alpha = 0f;
+            _bottomControlsGroup.alpha = 0f;
+            _topControlsGroup.interactable = false;
+            _bottomControlsGroup.interactable = false;
+            _topControlsGroup.blocksRaycasts = false;
+            _bottomControlsGroup.blocksRaycasts = false;
             _motion.SetVisibleImmediately(false);
         }
 
@@ -362,6 +367,11 @@ namespace JellyfinForRayNeo
         public bool IsPaused
         {
             get { return _activeEngine != null && _activeEngine.IsPaused; }
+        }
+
+        public bool ControlsVisible
+        {
+            get { return _controlsVisible; }
         }
 
         public long CurrentPositionTicks
@@ -408,10 +418,7 @@ namespace JellyfinForRayNeo
             _modeLabel.text = plan.TierLabel;
             _status.text = PreparationMessage(plan.Tier);
             _playPauseLabel.text = "暂停";
-            _videoSurface.texture = _activeEngine.OutputTexture;
-            _videoSurface.uvRect = _activeEngine.FlipOutputVertically
-                ? new Rect(0f, 1f, 1f, -1f)
-                : new Rect(0f, 0f, 1f, 1f);
+            UpdateVideoSurface();
             UpdateTrackLabels();
             _seekFeedbackRoot.SetActive(false);
             ShowControls();
@@ -457,11 +464,11 @@ namespace JellyfinForRayNeo
             {
                 case CompanionRemoteCommand.Left:
                     SeekRelative(-RemoteSeekSeconds);
-                    ShowControls();
+                    RefreshControlsDeadline();
                     return true;
                 case CompanionRemoteCommand.Right:
                     SeekRelative(RemoteSeekSeconds);
-                    ShowControls();
+                    RefreshControlsDeadline();
                     return true;
                 case CompanionRemoteCommand.Up:
                 case CompanionRemoteCommand.Down:
@@ -549,11 +556,7 @@ namespace JellyfinForRayNeo
             }
 
             _activeEngine.Update();
-            if (_activeEngine.OutputTexture != null
-                && _videoSurface.texture != _activeEngine.OutputTexture)
-            {
-                _videoSurface.texture = _activeEngine.OutputTexture;
-            }
+            UpdateVideoSurface();
             if (!_activeEngine.IsPrepared)
             {
                 UpdateTransientUi();
@@ -660,6 +663,18 @@ namespace JellyfinForRayNeo
                 : Time.unscaledTime + ControlsAutoHideSeconds;
         }
 
+        private void RefreshControlsDeadline()
+        {
+            if (!_controlsVisible)
+            {
+                return;
+            }
+
+            _hideControlsAt = IsPaused
+                ? float.PositiveInfinity
+                : Time.unscaledTime + ControlsAutoHideSeconds;
+        }
+
         private void HideControls()
         {
             if (!_controlsVisible)
@@ -748,6 +763,27 @@ namespace JellyfinForRayNeo
             _activeEngine.Seek(target);
             _lastPositionTicks = (long)(target * AppConstants.TicksPerSecond);
             ShowSeekFeedback(deltaSeconds < 0d ? "‹‹  10 秒" : "10 秒  ››");
+        }
+
+        private void UpdateVideoSurface()
+        {
+            if (_activeEngine == null)
+            {
+                return;
+            }
+
+            Texture output = _activeEngine.OutputTexture;
+            if (_videoSurface.texture != output)
+            {
+                _videoSurface.texture = output;
+            }
+            _videoSurface.uvRect = _activeEngine.FlipOutputVertically
+                ? new Rect(0f, 1f, 1f, -1f)
+                : new Rect(0f, 0f, 1f, 1f);
+            if (output != null && output.width > 0 && output.height > 0)
+            {
+                _videoAspect.aspectRatio = output.width / (float)output.height;
+            }
         }
 
         private void ShowSeekFeedback(string message)
@@ -950,6 +986,7 @@ namespace JellyfinForRayNeo
             _libVlcHardwareEngine.Stop();
             _softwareEngine.Stop();
             _subtitleTrack = null;
+            _videoSurface.texture = null;
             if (_subtitleText != null)
             {
                 _subtitleText.text = string.Empty;

@@ -249,6 +249,7 @@ namespace JellyfinForRayNeo
     public sealed class DirectionalFocusNavigator
     {
         private const float DirectionEpsilon = 0.5f;
+        private const float SameRowOverlapRatio = 0.35f;
         private Transform _scope;
 
         public Transform Scope => _scope;
@@ -304,8 +305,8 @@ namespace JellyfinForRayNeo
 
             foreach (string objectName in objectNames ?? new string[0])
             {
-                Selectable match = candidates.FirstOrDefault(candidate =>
-                    candidate != null && candidate.gameObject.name == objectName);
+                Selectable match = TopLeft(candidates.Where(candidate =>
+                    candidate != null && candidate.gameObject.name == objectName));
                 if (match != null)
                 {
                     Select(match);
@@ -345,34 +346,9 @@ namespace JellyfinForRayNeo
                 }
             }
 
-            Vector2 origin = ScreenCenter(current);
-            Vector2 perpendicular = new Vector2(-direction.y, direction.x);
-            Selectable best = null;
-            float bestScore = float.PositiveInfinity;
-            foreach (Selectable candidate in candidates)
-            {
-                if (candidate == current)
-                {
-                    continue;
-                }
-
-                Vector2 delta = ScreenCenter(candidate) - origin;
-                float forward = Vector2.Dot(delta, direction);
-                if (forward <= DirectionEpsilon)
-                {
-                    continue;
-                }
-
-                float lateral = Mathf.Abs(Vector2.Dot(delta, perpendicular));
-                float score = forward
-                    + lateral * 2.8f
-                    + lateral * lateral / Mathf.Max(forward, 1f);
-                if (score < bestScore)
-                {
-                    best = candidate;
-                    bestScore = score;
-                }
-            }
+            Selectable best = Mathf.Abs(direction.y) > Mathf.Abs(direction.x)
+                ? FindAdjacentVerticalRow(current, candidates, direction.y)
+                : FindAdjacentInRow(current, candidates, direction.x);
 
             if (best == null)
             {
@@ -481,23 +457,188 @@ namespace JellyfinForRayNeo
 
         private static Selectable TopLeft(IEnumerable<Selectable> candidates)
         {
-            return candidates
-                .OrderByDescending(candidate => ScreenCenter(candidate).y)
-                .ThenBy(candidate => ScreenCenter(candidate).x)
+            List<Selectable> populated = candidates
+                .Where(candidate => candidate != null)
+                .ToList();
+            List<Selectable> visible = populated
+                .Where(IsCurrentlyVisible)
+                .ToList();
+            IEnumerable<Selectable> pool = visible.Count > 0 ? visible : populated;
+            return pool
+                .OrderByDescending(candidate => ScreenRect(candidate).center.y)
+                .ThenBy(candidate => ScreenRect(candidate).center.x)
                 .FirstOrDefault();
+        }
+
+        private static Selectable FindAdjacentVerticalRow(
+            Selectable current,
+            IEnumerable<Selectable> candidates,
+            float direction)
+        {
+            Rect currentRect = ScreenRect(current);
+            float verticalDirection = Mathf.Sign(direction);
+            List<DirectionalCandidate> rows = candidates
+                .Where(candidate => candidate != null && candidate != current)
+                .Select(candidate => new DirectionalCandidate(
+                    candidate,
+                    ScreenRect(candidate),
+                    (ScreenRect(candidate).center.y - currentRect.center.y)
+                        * verticalDirection))
+                .Where(candidate =>
+                    candidate.Forward > DirectionEpsilon
+                    && !SharesVisualRow(currentRect, candidate.Rect))
+                .ToList();
+            if (rows.Count == 0)
+            {
+                return null;
+            }
+
+            float nearestForward = rows.Min(candidate => candidate.Forward);
+            float rowBand = Mathf.Max(
+                10f,
+                Mathf.Min(currentRect.height, rows
+                    .OrderBy(candidate => candidate.Forward)
+                    .First().Rect.height) * 0.35f);
+            return rows
+                .Where(candidate => candidate.Forward <= nearestForward + rowBand)
+                .OrderBy(candidate => HorizontalGap(currentRect, candidate.Rect))
+                .ThenBy(candidate =>
+                    Mathf.Abs(candidate.Rect.center.x - currentRect.center.x))
+                .ThenBy(candidate => candidate.Forward)
+                .Select(candidate => candidate.Selectable)
+                .FirstOrDefault();
+        }
+
+        private static Selectable FindAdjacentInRow(
+            Selectable current,
+            IEnumerable<Selectable> candidates,
+            float direction)
+        {
+            Rect currentRect = ScreenRect(current);
+            float horizontalDirection = Mathf.Sign(direction);
+            return candidates
+                .Where(candidate => candidate != null && candidate != current)
+                .Select(candidate => new DirectionalCandidate(
+                    candidate,
+                    ScreenRect(candidate),
+                    (ScreenRect(candidate).center.x - currentRect.center.x)
+                        * horizontalDirection))
+                .Where(candidate =>
+                    candidate.Forward > DirectionEpsilon
+                    && SharesVisualRow(currentRect, candidate.Rect))
+                .OrderBy(candidate => HorizontalGap(currentRect, candidate.Rect))
+                .ThenBy(candidate => candidate.Forward)
+                .ThenBy(candidate =>
+                    Mathf.Abs(candidate.Rect.center.y - currentRect.center.y))
+                .Select(candidate => candidate.Selectable)
+                .FirstOrDefault();
+        }
+
+        private static bool SharesVisualRow(Rect first, Rect second)
+        {
+            float overlap = Mathf.Min(first.yMax, second.yMax)
+                - Mathf.Max(first.yMin, second.yMin);
+            float minimumHeight = Mathf.Max(1f, Mathf.Min(first.height, second.height));
+            return overlap >= minimumHeight * SameRowOverlapRatio;
+        }
+
+        private static float HorizontalGap(Rect first, Rect second)
+        {
+            if (first.xMax < second.xMin)
+            {
+                return second.xMin - first.xMax;
+            }
+            if (second.xMax < first.xMin)
+            {
+                return first.xMin - second.xMax;
+            }
+            return 0f;
+        }
+
+        private static bool IsCurrentlyVisible(Selectable selectable)
+        {
+            Rect screenRect = ScreenRect(selectable);
+            Canvas canvas = selectable.GetComponentInParent<Canvas>();
+            Canvas rootCanvas = canvas != null ? canvas.rootCanvas : null;
+            Rect displayRect = rootCanvas != null && rootCanvas.pixelRect.width > 1f
+                && rootCanvas.pixelRect.height > 1f
+                    ? rootCanvas.pixelRect
+                    : new Rect(
+                        0f,
+                        0f,
+                        Mathf.Max(1f, Screen.width),
+                        Mathf.Max(1f, Screen.height));
+            if (!screenRect.Overlaps(displayRect, true))
+            {
+                return false;
+            }
+
+            RectMask2D[] masks = selectable.GetComponentsInParent<RectMask2D>(true);
+            foreach (RectMask2D mask in masks)
+            {
+                if (mask != null
+                    && mask.isActiveAndEnabled
+                    && !screenRect.Overlaps(ScreenRect(mask.rectTransform), true))
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static Vector2 ScreenCenter(Selectable selectable)
         {
-            RectTransform rect = selectable.transform as RectTransform;
-            Vector3 world = rect != null
-                ? rect.TransformPoint(rect.rect.center)
-                : selectable.transform.position;
-            Canvas canvas = selectable.GetComponentInParent<Canvas>();
+            return ScreenRect(selectable).center;
+        }
+
+        private static Rect ScreenRect(Selectable selectable)
+        {
+            return selectable != null
+                ? ScreenRect(selectable.transform as RectTransform)
+                : default(Rect);
+        }
+
+        private static Rect ScreenRect(RectTransform rect)
+        {
+            if (rect == null)
+            {
+                return default(Rect);
+            }
+
+            Canvas canvas = rect.GetComponentInParent<Canvas>();
             Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
                 ? canvas.worldCamera
                 : null;
-            return RectTransformUtility.WorldToScreenPoint(camera, world);
+            Vector3[] corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            Vector2 first = RectTransformUtility.WorldToScreenPoint(camera, corners[0]);
+            float xMin = first.x;
+            float xMax = first.x;
+            float yMin = first.y;
+            float yMax = first.y;
+            for (int index = 1; index < corners.Length; index++)
+            {
+                Vector2 point = RectTransformUtility.WorldToScreenPoint(camera, corners[index]);
+                xMin = Mathf.Min(xMin, point.x);
+                xMax = Mathf.Max(xMax, point.x);
+                yMin = Mathf.Min(yMin, point.y);
+                yMax = Mathf.Max(yMax, point.y);
+            }
+            return Rect.MinMaxRect(xMin, yMin, xMax, yMax);
+        }
+
+        private readonly struct DirectionalCandidate
+        {
+            public readonly Selectable Selectable;
+            public readonly Rect Rect;
+            public readonly float Forward;
+
+            public DirectionalCandidate(Selectable selectable, Rect rect, float forward)
+            {
+                Selectable = selectable;
+                Rect = rect;
+                Forward = forward;
+            }
         }
 
         private static Selectable ExplicitTarget(Navigation navigation, Vector2 direction)

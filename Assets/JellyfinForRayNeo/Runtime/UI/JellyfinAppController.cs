@@ -1253,6 +1253,7 @@ namespace JellyfinForRayNeo
                 _currentPlan = null;
                 _playingItem = null;
                 _playbackSelection = null;
+                SelectInScope(_detailView.FocusRoot, "Continue", "From Start", "Close");
                 ShowToast("无法播放：" + UserMessage(exception), true);
             }
             finally
@@ -1280,6 +1281,8 @@ namespace JellyfinForRayNeo
                     _currentPlan = plan;
                     _playbackReporter.Reset();
                     _playerView.SetSubtitleTrack(null);
+                    _focusNavigator.SetScope(_playerView.FocusRoot);
+                    _focusNavigator.ClearSelection();
                     await _playerView.PrepareAndPlayAsync(plan, cancellationToken);
                     SelectInScope(
                         _playerView.FocusRoot,
@@ -1393,6 +1396,7 @@ namespace JellyfinForRayNeo
                 _playingItem = null;
                 _playbackSelection = null;
                 _playbackReporter.Reset();
+                SelectInScope(_detailView.FocusRoot, "Continue", "From Start", "Close");
                 string detail = string.IsNullOrWhiteSpace(errorMessage)
                     ? UserMessage(exception)
                     : errorMessage + "；" + UserMessage(exception);
@@ -1470,6 +1474,7 @@ namespace JellyfinForRayNeo
                     _currentPlan = null;
                     _playingItem = null;
                     _playbackReporter.Reset();
+                    SelectInScope(_detailView.FocusRoot, "Continue", "From Start", "Close");
                     ShowToast(
                         "切换失败且无法恢复：" + UserMessage(restoreException),
                         true);

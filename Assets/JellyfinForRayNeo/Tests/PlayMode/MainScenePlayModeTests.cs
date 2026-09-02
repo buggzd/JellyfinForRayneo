@@ -707,6 +707,75 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [UnityTest]
+        public IEnumerator RemoteNavigation_UsesTheAdjacentVisualRowAndVisibleFallback()
+        {
+            GameObject canvasObject = new GameObject(
+                "Navigation Test Canvas",
+                typeof(RectTransform),
+                typeof(Canvas));
+            Canvas canvas = canvasObject.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            RectTransform scope = CreateTestRect(
+                "Navigation Scope",
+                canvasObject.transform,
+                new Vector2(1920f, 1080f));
+            scope.gameObject.AddComponent<RectMask2D>();
+
+            Button current = CreateNavigationButton(
+                "Current",
+                scope,
+                new Vector2(700f, 250f));
+            Button sameRowPrevious = CreateNavigationButton(
+                "Same Row Previous",
+                scope,
+                new Vector2(490f, 250f));
+            Button adjacentRow = CreateNavigationButton(
+                "Adjacent Row",
+                scope,
+                new Vector2(-700f, 40f));
+            CreateNavigationButton(
+                "Far Aligned Row",
+                scope,
+                new Vector2(700f, -300f));
+            Button visibleDuplicate = CreateNavigationButton(
+                "Preferred Duplicate",
+                scope,
+                new Vector2(-300f, 0f));
+            CreateNavigationButton(
+                "Preferred Duplicate",
+                scope,
+                new Vector2(-300f, 4000f));
+            Canvas.ForceUpdateCanvases();
+            yield return null;
+
+            DirectionalFocusNavigator navigator = new DirectionalFocusNavigator();
+            navigator.SetScope(scope);
+            EventSystem.current.SetSelectedGameObject(current.gameObject);
+
+            Assert.IsTrue(navigator.Handle(CompanionRemoteCommand.Left));
+            Assert.AreSame(
+                sameRowPrevious.gameObject,
+                EventSystem.current.currentSelectedGameObject,
+                "Horizontal movement must stay on the current visual row.");
+
+            EventSystem.current.SetSelectedGameObject(current.gameObject);
+            Assert.IsTrue(navigator.Handle(CompanionRemoteCommand.Down));
+            Assert.AreSame(
+                adjacentRow.gameObject,
+                EventSystem.current.currentSelectedGameObject,
+                "Vertical movement must enter the immediately adjacent row before a farther aligned row.");
+
+            Assert.IsTrue(navigator.SelectPreferred("Preferred Duplicate"));
+            Assert.AreSame(
+                visibleDuplicate.gameObject,
+                EventSystem.current.currentSelectedGameObject,
+                "Selection recovery must prefer an on-screen control over a clipped duplicate.");
+
+            Object.Destroy(canvasObject);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator PlayerRemoteNavigation_IsScopedAndConsumesHorizontalSeek()
         {
             GameObject host = new GameObject("Player Navigation Test Host", typeof(RectTransform));
@@ -722,11 +791,30 @@ namespace JellyfinForRayNeo.Tests
             Transform playerRoot = FindDescendant(host.transform, "Player Screen");
             Assert.NotNull(playerRoot);
             playerRoot.GetComponent<UiViewMotion>().SetVisibleImmediately(true);
+            Canvas.ForceUpdateCanvases();
             yield return null;
 
             DirectionalFocusNavigator navigator = new DirectionalFocusNavigator();
-            navigator.SetScope(player.FocusRoot);
-            Assert.IsTrue(navigator.SelectPreferred("Play Pause"));
+            EventSystem.current.SetSelectedGameObject(underlying);
+            Assert.IsFalse(player.ControlsVisible);
+            Assert.IsTrue(player.HandleRemoteCommand(
+                CompanionRemoteCommand.Left,
+                navigator));
+            Assert.IsFalse(
+                player.ControlsVisible,
+                "Seeking while controls are hidden must keep the full-screen bars hidden.");
+            Assert.AreNotSame(
+                underlying,
+                EventSystem.current.currentSelectedGameObject,
+                "Opening playback input scope must immediately clear underlying page focus.");
+            Assert.IsTrue(
+                FindDescendant(playerRoot, "Seek Feedback").gameObject.activeInHierarchy,
+                "Horizontal remote input must be consumed by player seek feedback.");
+
+            Assert.IsTrue(player.HandleRemoteCommand(
+                CompanionRemoteCommand.Down,
+                navigator));
+            Assert.IsTrue(player.ControlsVisible);
             Assert.AreEqual(
                 "Play Pause",
                 EventSystem.current.currentSelectedGameObject.name);
@@ -736,18 +824,64 @@ namespace JellyfinForRayNeo.Tests
             Assert.IsTrue(navigator.Handle(CompanionRemoteCommand.Down));
             Assert.AreEqual("Play Pause", EventSystem.current.currentSelectedGameObject.name);
 
-            Assert.IsTrue(player.HandleRemoteCommand(
-                CompanionRemoteCommand.Left,
-                navigator));
-            Assert.IsTrue(
-                FindDescendant(playerRoot, "Seek Feedback").gameObject.activeInHierarchy,
-                "Horizontal remote input must be consumed by player seek feedback instead of moving focus.");
             Assert.AreNotSame(
                 underlying,
                 EventSystem.current.currentSelectedGameObject,
                 "Playback focus must never escape into the page behind the video.");
 
+            RectTransform videoSurface = FindDescendant(playerRoot, "Video Surface")
+                as RectTransform;
+            Assert.NotNull(videoSurface);
+            Assert.AreEqual(
+                AspectRatioFitter.AspectMode.FitInParent,
+                videoSurface.GetComponent<AspectRatioFitter>().aspectMode);
+            Assert.AreEqual(1920f, videoSurface.rect.width, 1f);
+            Assert.AreEqual(1080f, videoSurface.rect.height, 1f);
+
             player.Dispose();
+            Object.Destroy(host);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator DetailView_UsesReadableGlassHeroAndLayeredMotion()
+        {
+            GameObject host = new GameObject("Detail Motion Test Host", typeof(RectTransform));
+            host.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
+            DetailView detail = new DetailView(host.transform);
+            detail.Show(
+                new JellyfinItem
+                {
+                    Id = "detail-motion-item",
+                    Name = "动效详情",
+                    OriginalTitle = "Motion Detail",
+                    Type = "Movie",
+                    MediaType = "Video",
+                    Overview = "用于验证亮色背景下的玻璃信息层和分层入场动效。",
+                    Genres = new List<string> { "剧情" },
+                    UserData = new JellyfinUserData()
+                },
+                null,
+                null,
+                CancellationToken.None);
+            yield return null;
+
+            Transform detailRoot = FindDescendant(host.transform, "Detail Screen");
+            Transform backdrop = FindDescendant(detailRoot, "Backdrop");
+            Transform glass = FindDescendant(detailRoot, "Hero Information Glass");
+            Transform poster = FindDescendant(detailRoot, "Poster Frame");
+            Transform information = FindDescendant(detailRoot, "Hero Information");
+            Transform facts = FindDescendant(detailRoot, "Details Card");
+            Assert.NotNull(backdrop);
+            Assert.NotNull(backdrop.GetComponent<UiHeroBreath>());
+            Assert.NotNull(glass);
+            Assert.IsFalse(glass.GetComponent<Image>().raycastTarget);
+            Assert.IsTrue(glass.GetComponent<LayoutElement>().ignoreLayout);
+            Assert.NotNull(poster.GetComponent<UiItemReveal>());
+            Assert.NotNull(information.GetComponent<UiItemReveal>());
+            Assert.NotNull(facts.GetComponent<UiScrollReveal>());
+
+            detail.Hide();
             Object.Destroy(host);
             yield return null;
         }
@@ -823,6 +957,30 @@ namespace JellyfinForRayNeo.Tests
             rect.SetParent(parent, false);
             rect.sizeDelta = size;
             return rect;
+        }
+
+        private static Button CreateNavigationButton(
+            string name,
+            Transform parent,
+            Vector2 position)
+        {
+            GameObject gameObject = new GameObject(
+                name,
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Button));
+            RectTransform rect = gameObject.GetComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = new Vector2(180f, 64f);
+            Button button = gameObject.GetComponent<Button>();
+            Navigation navigation = button.navigation;
+            navigation.mode = Navigation.Mode.Automatic;
+            button.navigation = navigation;
+            return button;
         }
 
         private static void PerformDrag(

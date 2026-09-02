@@ -13,6 +13,7 @@ import android.graphics.Paint;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
@@ -759,8 +760,12 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         View decorView = getWindow().getDecorView();
         if (active) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            getWindow().setBackgroundDrawable(new ColorDrawable(Color.BLACK));
             companionOverlay.setBackgroundColor(Color.BLACK);
             decorView.setBackgroundColor(Color.BLACK);
+            if (touchpadView != null) {
+                touchpadView.setBackgroundColor(Color.BLACK);
+            }
             if (ambientBackdropView != null) {
                 ambientBackdropView.setVisibility(View.GONE);
             }
@@ -792,6 +797,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             }
         } else {
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            getWindow().setBackgroundDrawable(new ColorDrawable(COLOR_BACKGROUND_TOP));
             companionOverlay.setBackground(backgroundGradient());
             if (ambientBackdropView != null) {
                 ambientBackdropView.setVisibility(View.VISIBLE);
@@ -2733,6 +2739,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         TouchpadView(Context context) {
             super(context);
             setBackgroundColor(Color.BLACK);
+            setWillNotDraw(false);
             setClickable(true);
             setFocusable(true);
             setFocusableInTouchMode(true);
