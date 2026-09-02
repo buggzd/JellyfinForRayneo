@@ -31,7 +31,4 @@
     </activity>
   </application>
 
-  <queries>
-    <package android:name="com.tcl.xrmanager.main" />
-  </queries>
 </manifest>

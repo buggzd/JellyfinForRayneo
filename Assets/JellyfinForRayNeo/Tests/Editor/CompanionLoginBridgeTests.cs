@@ -124,6 +124,26 @@ namespace JellyfinForRayNeo.Tests
             Assert.IsNotEmpty(validationMessage);
         }
 
+        [TestCase("1", true)]
+        [TestCase("2", false)]
+        public void RayNeoGlassEvent_ParsesOfficialSdkValues(
+            string value,
+            bool expectedConnected)
+        {
+            Assert.IsTrue(CompanionLoginBridge.TryParseGlassesEvent(
+                new[] { value },
+                out bool connected));
+            Assert.AreEqual(expectedConnected, connected);
+        }
+
+        [Test]
+        public void RayNeoGlassEvent_RejectsUnknownValue()
+        {
+            Assert.IsFalse(CompanionLoginBridge.TryParseGlassesEvent(
+                new[] { "ready" },
+                out _));
+        }
+
         [Test]
         public void EditorSubmission_IsDeliveredOnlyWhenBridgePumps()
         {

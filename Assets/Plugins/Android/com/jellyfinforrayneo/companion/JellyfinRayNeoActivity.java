@@ -1,13 +1,19 @@
 package com.jellyfinforrayneo.companion;
 
+import android.app.Presentation;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.hardware.display.DisplayManager;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
@@ -16,9 +22,11 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.InputType;
 import android.text.TextUtils;
+import android.view.Display;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
@@ -67,6 +75,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private static final int HTTP_TIMEOUT_MS = 15000;
     private static final int QUICK_CONNECT_TIMEOUT_MS = 300000;
     private static final int QUICK_CONNECT_POLL_MS = 1500;
+    private static final long PRESENTATION_FALLBACK_DELAY_MS = 2600L;
     private static final byte[] DISCOVERY_MESSAGE =
             "who is JellyfinServer?".getBytes(StandardCharsets.UTF_8);
 
@@ -76,20 +85,20 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private static final String PREF_USERNAME = "username";
     private static final String PREF_SESSION_JSON = "session_json";
 
-    private static final int COLOR_BACKGROUND_TOP = Color.rgb(5, 9, 20);
-    private static final int COLOR_BACKGROUND_BOTTOM = Color.rgb(12, 16, 32);
-    private static final int COLOR_SURFACE = Color.rgb(22, 27, 45);
-    private static final int COLOR_SURFACE_SOFT = Color.rgb(28, 34, 55);
-    private static final int COLOR_FIELD = Color.rgb(31, 38, 61);
-    private static final int COLOR_BORDER = Color.rgb(55, 66, 97);
-    private static final int COLOR_PRIMARY = Color.rgb(248, 249, 255);
-    private static final int COLOR_SECONDARY = Color.rgb(174, 183, 207);
-    private static final int COLOR_TERTIARY = Color.rgb(119, 130, 159);
-    private static final int COLOR_ACCENT = Color.rgb(69, 202, 195);
-    private static final int COLOR_ACCENT_END = Color.rgb(106, 222, 207);
-    private static final int COLOR_ACCENT_BRIGHT = Color.rgb(125, 225, 218);
-    private static final int COLOR_SUCCESS = Color.rgb(93, 226, 172);
-    private static final int COLOR_ERROR = Color.rgb(255, 128, 151);
+    private static final int COLOR_BACKGROUND_TOP = Color.rgb(17, 17, 20);
+    private static final int COLOR_BACKGROUND_BOTTOM = Color.rgb(9, 10, 12);
+    private static final int COLOR_SURFACE = Color.rgb(28, 29, 33);
+    private static final int COLOR_SURFACE_SOFT = Color.rgb(35, 36, 41);
+    private static final int COLOR_FIELD = Color.rgb(20, 21, 24);
+    private static final int COLOR_BORDER = Color.rgb(55, 57, 64);
+    private static final int COLOR_PRIMARY = Color.rgb(248, 248, 250);
+    private static final int COLOR_SECONDARY = Color.rgb(183, 184, 191);
+    private static final int COLOR_TERTIARY = Color.rgb(128, 130, 139);
+    private static final int COLOR_ACCENT = Color.rgb(93, 224, 210);
+    private static final int COLOR_ACCENT_END = Color.rgb(171, 143, 255);
+    private static final int COLOR_ACCENT_BRIGHT = Color.rgb(115, 232, 220);
+    private static final int COLOR_SUCCESS = Color.rgb(105, 226, 174);
+    private static final int COLOR_ERROR = Color.rgb(255, 126, 151);
 
     private FrameLayout companionOverlay;
     private EditText serverInput;
@@ -103,13 +112,15 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private LinearLayout loginForm;
     private LinearLayout sessionPanel;
     private LinearLayout manualLoginContainer;
+    private LinearLayout glassesConnectionCard;
     private TextView discoveryStatusText;
     private TextView quickConnectCodeText;
     private TextView statusText;
     private TextView connectionBadge;
     private TextView glassesStatusText;
     private TextView glassesDescriptionText;
-    private Button connectGlassesButton;
+    private TextView glassesActionHint;
+    private GlassesIconView glassesIconView;
     private TextView sessionTitleText;
     private TextView sessionDetailText;
 
@@ -126,6 +137,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private volatile DatagramSocket discoverySocket;
     private DisplayManager companionDisplayManager;
     private boolean glassesConnected;
+    private boolean glassesPresentationReady;
+    private long glassesDetectedAtMs;
+    private long fallbackPresentationStartedAtMs;
+    private CompanionUnityPresentation fallbackPresentation;
     private final DisplayManager.DisplayListener companionDisplayListener =
             new DisplayManager.DisplayListener() {
                 @Override
@@ -143,6 +158,12 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                     refreshGlassesConnectionState();
                 }
             };
+    private final Runnable presentationProbe = new Runnable() {
+        @Override
+        public void run() {
+            refreshGlassesConnectionState();
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -157,8 +178,11 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             companionDisplayManager.registerDisplayListener(companionDisplayListener, null);
         }
         glassesConnected = hasConnectedRayNeoDisplay();
+        glassesDetectedAtMs = glassesConnected ? SystemClock.uptimeMillis() : 0L;
+        glassesPresentationReady = isUnityPresentationActive();
         restoreNativeState();
         installCompanionUi();
+        schedulePresentationProbe();
     }
 
     @Override
@@ -174,11 +198,42 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         authenticationGeneration++;
         nativeOperationRunning = false;
         cancelDiscovery();
+        if (companionOverlay != null) {
+            companionOverlay.removeCallbacks(presentationProbe);
+        }
         if (companionDisplayManager != null) {
             companionDisplayManager.unregisterDisplayListener(companionDisplayListener);
             companionDisplayManager = null;
         }
+        dismissFallbackPresentation();
         super.onDestroy();
+    }
+
+    public void setGlassesPresentationState(final boolean ready) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                glassesPresentationReady = ready;
+                if (ready) {
+                    glassesConnected = true;
+                    if (glassesDetectedAtMs == 0L) {
+                        glassesDetectedAtMs = SystemClock.uptimeMillis();
+                    }
+                } else {
+                    glassesConnected = hasConnectedRayNeoDisplay();
+                    if (glassesConnected) {
+                        glassesDetectedAtMs = SystemClock.uptimeMillis();
+                    } else {
+                        glassesDetectedAtMs = 0L;
+                        dismissFallbackPresentation();
+                    }
+                }
+                if (companionOverlay != null && !isFinishing()) {
+                    applyCompanionState();
+                    schedulePresentationProbe();
+                }
+            }
+        });
     }
 
     public void setCompanionState(
@@ -250,23 +305,46 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setGravity(Gravity.START);
-        page.setPadding(0, dp(24), 0, dp(36));
+        page.setPadding(dp(22), dp(24), dp(22), dp(40));
 
         LinearLayout brandRow = new LinearLayout(this);
         brandRow.setOrientation(LinearLayout.HORIZONTAL);
         brandRow.setGravity(Gravity.CENTER_VERTICAL);
-        page.addView(brandRow, matchWrap(dp(26)));
+        page.addView(brandRow, matchWrap(dp(28)));
 
         TextView brand = createText(
-                "RAYNEO AIR",
-                12,
-                COLOR_ACCENT_BRIGHT,
+                "J",
+                18,
+                Color.rgb(12, 20, 22),
                 Typeface.BOLD,
                 Gravity.CENTER);
-        brand.setLetterSpacing(0.09f);
-        brand.setPadding(dp(12), dp(7), dp(12), dp(7));
-        brand.setBackground(roundedWithStroke(COLOR_SURFACE_SOFT, COLOR_BORDER, 20));
-        brandRow.addView(brand, wrapWrap());
+        brand.setIncludeFontPadding(false);
+        brand.setBackground(accentGradient(13));
+        brandRow.addView(brand, new LinearLayout.LayoutParams(dp(42), dp(42)));
+
+        LinearLayout brandIdentity = new LinearLayout(this);
+        brandIdentity.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams brandIdentityParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        brandIdentityParams.leftMargin = dp(12);
+        brandRow.addView(brandIdentity, brandIdentityParams);
+
+        TextView appName = createText(
+                "Jellyfin for RayNeo",
+                14,
+                COLOR_PRIMARY,
+                Typeface.BOLD,
+                Gravity.START);
+        brandIdentity.addView(appName, matchWrap(dp(2)));
+
+        TextView companionLabel = createText(
+                "手机伴侣",
+                11,
+                COLOR_TERTIARY,
+                Typeface.NORMAL,
+                Gravity.START);
+        brandIdentity.addView(companionLabel, matchWrap(0));
 
         View brandSpacer = new View(this);
         brandRow.addView(brandSpacer, new LinearLayout.LayoutParams(
@@ -275,63 +353,74 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 1f));
 
         connectionBadge = createText(
-                "JELLYFIN COMPANION",
-                11,
+                "等待眼镜",
+                12,
                 COLOR_SECONDARY,
                 Typeface.BOLD,
                 Gravity.CENTER);
-        connectionBadge.setPadding(dp(11), dp(7), dp(11), dp(7));
-        connectionBadge.setBackground(roundedWithStroke(COLOR_SURFACE, COLOR_BORDER, 20));
+        connectionBadge.setIncludeFontPadding(false);
+        connectionBadge.setPadding(dp(11), dp(8), dp(11), dp(8));
+        connectionBadge.setBackground(statusChipBackground(COLOR_SURFACE_SOFT, COLOR_BORDER));
         brandRow.addView(connectionBadge, wrapWrap());
 
         TextView title = createText(
-                "Jellyfin for\nRayNeo Air",
-                32,
+                "连接与配置",
+                30,
                 COLOR_PRIMARY,
                 Typeface.BOLD,
                 Gravity.START);
-        title.setLineSpacing(0f, 0.98f);
-        page.addView(title, matchWrap(dp(12)));
+        title.setLetterSpacing(-0.015f);
+        page.addView(title, matchWrap(dp(8)));
 
         TextView subtitle = createText(
-                "在手机上配置 Jellyfin，连接眼镜后浏览媒体库并开始播放。",
+                "在手机上发现并登录 Jellyfin。海报墙和视频播放会在眼镜中自动打开。",
                 14,
                 COLOR_SECONDARY,
                 Typeface.NORMAL,
                 Gravity.START);
-        subtitle.setLineSpacing(0f, 1.2f);
-        page.addView(subtitle, matchWrap(dp(18)));
+        subtitle.setLineSpacing(dp(2), 1f);
+        page.addView(subtitle, matchWrap(dp(22)));
 
-        LinearLayout glassesConnectionCard = createGlassesConnectionCard();
+        glassesConnectionCard = createGlassesConnectionCard();
         page.addView(glassesConnectionCard, matchWrap(dp(16)));
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(18), dp(18), dp(18), dp(18));
-        card.setBackground(roundedWithStroke(COLOR_SURFACE, COLOR_BORDER, 24));
-        page.addView(card, matchWrap(dp(18)));
+        card.setPadding(dp(18), dp(20), dp(18), dp(18));
+        card.setBackground(roundedWithStroke(COLOR_SURFACE, COLOR_BORDER, 22));
+        page.addView(card, matchWrap(dp(16)));
+
+        TextView configurationEyebrow = createText(
+                "JELLYFIN",
+                11,
+                COLOR_ACCENT_BRIGHT,
+                Typeface.BOLD,
+                Gravity.START);
+        configurationEyebrow.setLetterSpacing(0.12f);
+        card.addView(configurationEyebrow, matchWrap(dp(7)));
 
         TextView configurationTitle = createText(
-                "Jellyfin 连接",
-                17,
+                "连接媒体服务器",
+                21,
                 COLOR_PRIMARY,
                 Typeface.BOLD,
                 Gravity.START);
-        card.addView(configurationTitle, matchWrap(dp(4)));
+        card.addView(configurationTitle, matchWrap(dp(6)));
 
         TextView configurationHint = createText(
-                "仅服务器发现与登录配置可在手机上完成",
-                12,
-                COLOR_TERTIARY,
+                "仅服务器发现、登录和账户切换会留在手机端。",
+                13,
+                COLOR_SECONDARY,
                 Typeface.NORMAL,
                 Gravity.START);
-        card.addView(configurationHint, matchWrap(dp(16)));
+        configurationHint.setLineSpacing(dp(1), 1f);
+        card.addView(configurationHint, matchWrap(dp(18)));
 
         loginForm = new LinearLayout(this);
         loginForm.setOrientation(LinearLayout.VERTICAL);
         card.addView(loginForm, matchWrap(0));
 
-        loginForm.addView(createLabel("Jellyfin 服务器"), matchWrap(dp(8)));
+        loginForm.addView(createLabel("服务器地址"), matchWrap(dp(8)));
 
         LinearLayout serverRow = new LinearLayout(this);
         serverRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -348,10 +437,11 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         serverInputParams.rightMargin = dp(8);
         serverRow.addView(serverInput, serverInputParams);
 
-        discoverButton = createButton("自动发现", COLOR_SURFACE_SOFT);
-        discoverButton.setBackground(roundedWithStroke(COLOR_SURFACE_SOFT, COLOR_BORDER, 15));
+        discoverButton = createButton("发现", COLOR_SURFACE_SOFT);
+        discoverButton.setTextColor(COLOR_PRIMARY);
+        discoverButton.setBackground(outlineButtonBackground(15));
         serverRow.addView(discoverButton, new LinearLayout.LayoutParams(
-                dp(96),
+                dp(82),
                 ViewGroup.LayoutParams.MATCH_PARENT));
         discoverButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -374,8 +464,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         discoveredServersContainer.setVisibility(View.GONE);
         loginForm.addView(discoveredServersContainer, matchWrap(dp(10)));
 
-        quickConnectButton = createButton("使用 Jellyfin 快速登录", COLOR_ACCENT);
-        quickConnectButton.setBackground(accentGradient(16));
+        quickConnectButton = createButton("使用快速登录", COLOR_ACCENT);
+        quickConnectButton.setTextColor(Color.rgb(11, 22, 23));
+        quickConnectButton.setBackground(accentButtonBackground(16));
         quickConnectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -385,7 +476,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         loginForm.addView(quickConnectButton, matchHeight(54, 7));
 
         TextView quickHint = createText(
-                "推荐 · 无需输入密码，在 Jellyfin App 或网页中确认一次即可",
+                "推荐 · 无需在此输入密码",
                 12,
                 COLOR_TERTIARY,
                 Typeface.NORMAL,
@@ -402,12 +493,12 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         loginForm.addView(manualLoginContainer, matchWrap(dp(2)));
 
         TextView alternative = createText(
-                "或使用账户密码",
-                12,
-                COLOR_TERTIARY,
+                "账户密码",
+                13,
+                COLOR_SECONDARY,
                 Typeface.BOLD,
-                Gravity.CENTER);
-        manualLoginContainer.addView(alternative, matchWrap(dp(14)));
+                Gravity.START);
+        manualLoginContainer.addView(alternative, matchWrap(dp(10)));
 
         usernameInput = createInput("用户名");
         usernameInput.setInputType(
@@ -425,7 +516,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         manualLoginContainer.addView(passwordInput, matchHeight(54, 12));
 
         connectButton = createButton("登录 Jellyfin", COLOR_ACCENT);
-        connectButton.setBackground(accentGradient(16));
+        connectButton.setTextColor(COLOR_PRIMARY);
+        connectButton.setBackground(outlineButtonBackground(16));
         connectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -446,11 +538,11 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 Gravity.START | Gravity.CENTER_VERTICAL);
         statusText.setLineSpacing(0f, 1.15f);
         statusText.setPadding(dp(14), dp(12), dp(14), dp(12));
-        statusText.setBackground(roundedWithStroke(COLOR_SURFACE_SOFT, COLOR_BORDER, 14));
+        statusText.setBackground(rounded(COLOR_SURFACE_SOFT, 14));
         card.addView(statusText, matchWrap(0));
 
         TextView privacy = createText(
-                "密码不会保存；手机仅保留 Jellyfin 会话令牌，用于眼镜连接后自动同步。",
+                "隐私提示  ·  密码不会保存，手机仅保留 Jellyfin 会话令牌。",
                 12,
                 COLOR_TERTIARY,
                 Typeface.NORMAL,
@@ -458,8 +550,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         privacy.setLineSpacing(0f, 1.18f);
         page.addView(privacy, matchWrap(0));
 
-        int availableWidth = getResources().getDisplayMetrics().widthPixels - dp(32);
-        int pageWidth = Math.min(availableWidth, dp(520));
+        int availableWidth = getResources().getDisplayMetrics().widthPixels;
+        int pageWidth = Math.min(availableWidth, dp(560));
         ScrollView.LayoutParams pageParams = new ScrollView.LayoutParams(
                 pageWidth,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -482,44 +574,60 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private LinearLayout createGlassesConnectionCard() {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(18), dp(18), dp(18), dp(18));
-        panel.setBackground(connectionCardGradient());
+        panel.setPadding(dp(18), dp(17), dp(18), dp(16));
+        panel.setBackground(connectionCardBackground(false, false));
 
-        glassesStatusText = createText(
-                "●  未连接眼镜",
-                14,
-                COLOR_ERROR,
-                Typeface.BOLD,
-                Gravity.START);
-        panel.addView(glassesStatusText, matchWrap(dp(8)));
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        panel.addView(header, matchWrap(dp(12)));
+
+        glassesIconView = new GlassesIconView(this);
+        glassesIconView.setBackground(rounded(Color.argb(24, 255, 255, 255), 16));
+        header.addView(glassesIconView, new LinearLayout.LayoutParams(dp(54), dp(54)));
+
+        LinearLayout identity = new LinearLayout(this);
+        identity.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams identityParams = new LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                1f);
+        identityParams.leftMargin = dp(14);
+        header.addView(identity, identityParams);
 
         TextView heading = createText(
-                "连接 RayNeo Air",
-                22,
+                "RayNeo Air",
+                19,
                 COLOR_PRIMARY,
                 Typeface.BOLD,
                 Gravity.START);
-        panel.addView(heading, matchWrap(dp(7)));
+        identity.addView(heading, matchWrap(dp(5)));
+
+        glassesStatusText = createText(
+                "未检测到眼镜",
+                12,
+                COLOR_ERROR,
+                Typeface.BOLD,
+                Gravity.START);
+        identity.addView(glassesStatusText, matchWrap(0));
 
         glassesDescriptionText = createText(
-                "请连接眼镜以浏览海报墙和播放视频。",
+                "连接眼镜后，应用会自动建立外接显示并把 Unity 画面送到眼镜。",
                 13,
                 COLOR_SECONDARY,
                 Typeface.NORMAL,
                 Gravity.START);
-        glassesDescriptionText.setLineSpacing(0f, 1.18f);
-        panel.addView(glassesDescriptionText, matchWrap(dp(15)));
+        glassesDescriptionText.setLineSpacing(dp(2), 1f);
+        panel.addView(glassesDescriptionText, matchWrap(dp(12)));
 
-        connectGlassesButton = createButton("请连接眼镜", COLOR_ACCENT);
-        connectGlassesButton.setTextColor(Color.rgb(6, 20, 24));
-        connectGlassesButton.setBackground(accentGradient(16));
-        connectGlassesButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                openRayNeoManager();
-            }
-        });
-        panel.addView(connectGlassesButton, matchHeight(54, 0));
+        glassesActionHint = createText(
+                "插入手机接口即可  ·  无需点击任何按钮",
+                12,
+                COLOR_TERTIARY,
+                Typeface.NORMAL,
+                Gravity.START | Gravity.CENTER_VERTICAL);
+        glassesActionHint.setCompoundDrawablePadding(dp(7));
+        panel.addView(glassesActionHint, matchWrap(0));
         return panel;
     }
 
@@ -527,20 +635,20 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setGravity(Gravity.START);
-        panel.setPadding(dp(18), dp(18), dp(18), dp(18));
-        panel.setBackground(roundedWithStroke(COLOR_SURFACE_SOFT, COLOR_BORDER, 18));
+        panel.setPadding(0, dp(2), 0, 0);
 
         TextView badge = createText(
-                "✓  Jellyfin 连接已保存",
-                12,
+                "JELLYFIN  ·  已连接",
+                11,
                 COLOR_SUCCESS,
                 Typeface.BOLD,
                 Gravity.START);
+        badge.setLetterSpacing(0.08f);
         panel.addView(badge, matchWrap(dp(10)));
 
         sessionTitleText = createText(
                 "Jellyfin 已配置",
-                22,
+                20,
                 COLOR_PRIMARY,
                 Typeface.BOLD,
                 Gravity.START);
@@ -555,9 +663,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         sessionDetailText.setLineSpacing(0f, 1.18f);
         panel.addView(sessionDetailText, matchWrap(dp(16)));
 
-        Button switchAccountButton = createButton("使用其他账户", COLOR_SURFACE);
+        Button switchAccountButton = createButton("更换账户", COLOR_SURFACE_SOFT);
         switchAccountButton.setTextColor(COLOR_SECONDARY);
-        switchAccountButton.setBackground(roundedWithStroke(COLOR_SURFACE, COLOR_BORDER, 14));
+        switchAccountButton.setBackground(outlineButtonBackground(14));
         switchAccountButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -609,6 +717,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         panel.addView(actions, matchHeight(46, 8));
 
         Button copyButton = createButton("复制代码", COLOR_SURFACE);
+        copyButton.setTextColor(COLOR_PRIMARY);
+        copyButton.setBackground(outlineButtonBackground(14));
         copyButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -623,7 +733,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         actions.addView(copyButton, copyParams);
 
         Button openButton = createButton("打开授权页", COLOR_ACCENT);
-        openButton.setBackground(accentGradient(14));
+        openButton.setTextColor(Color.rgb(11, 22, 23));
+        openButton.setBackground(accentButtonBackground(14));
         openButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -636,6 +747,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 1f));
 
         Button cancelButton = createButton("取消快速登录", COLOR_SURFACE);
+        cancelButton.setTextColor(COLOR_TERTIARY);
+        cancelButton.setBackground(transparentButtonBackground(14));
         cancelButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -1163,22 +1276,6 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 && !"https://".equalsIgnoreCase(value.trim());
     }
 
-    private void openRayNeoManager() {
-        Intent launchIntent = getPackageManager().getLaunchIntentForPackage(
-                "com.tcl.xrmanager.main");
-        if (launchIntent != null) {
-            try {
-                startActivity(launchIntent);
-                return;
-            } catch (Exception ignored) {
-            }
-        }
-        Toast.makeText(
-                this,
-                "请连接 RayNeo Air，并在系统提示中允许眼镜访问。",
-                Toast.LENGTH_LONG).show();
-    }
-
     private void discoverServers() {
         if (nativeOperationRunning || hasNativeSession()) {
             return;
@@ -1459,29 +1556,64 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         loginForm.setVisibility(sessionAvailable ? View.GONE : View.VISIBLE);
         sessionPanel.setVisibility(sessionAvailable ? View.VISIBLE : View.GONE);
 
-        connectionBadge.setText(glassesConnected ? "眼镜已连接" : "手机配置");
-        glassesStatusText.setText(glassesConnected ? "●  已连接眼镜" : "●  未连接眼镜");
-        glassesStatusText.setTextColor(glassesConnected ? COLOR_SUCCESS : COLOR_ERROR);
-        glassesDescriptionText.setText(glassesConnected
-                ? "RayNeo Air 已连接，媒体库操作将在眼镜中显示。"
-                : "请连接眼镜以浏览海报墙和播放视频。Jellyfin 配置仍可在下方完成。");
-        connectGlassesButton.setText(glassesConnected ? "眼镜已连接" : "请连接眼镜");
-        connectGlassesButton.setEnabled(!glassesConnected);
-        connectGlassesButton.setAlpha(glassesConnected ? 0.68f : 1f);
+        if (glassesPresentationReady) {
+            connectionBadge.setText("眼镜显示中");
+            connectionBadge.setTextColor(COLOR_SUCCESS);
+            connectionBadge.setBackground(statusChipBackground(
+                    Color.rgb(27, 55, 45),
+                    Color.rgb(54, 105, 83)));
+            glassesStatusText.setText("画面已在眼镜中显示");
+            glassesStatusText.setTextColor(COLOR_SUCCESS);
+            glassesDescriptionText.setText(
+                    "RayNeo Air 已接管媒体界面，浏览与播放都在眼镜端完成。");
+            glassesActionHint.setText("手机仅保留服务器与账户配置");
+            glassesActionHint.setTextColor(COLOR_SUCCESS);
+            glassesConnectionCard.setBackground(connectionCardBackground(true, true));
+            glassesIconView.setConnectionState(true, true);
+        } else if (glassesConnected) {
+            connectionBadge.setText("眼镜已连接");
+            connectionBadge.setTextColor(COLOR_ACCENT_BRIGHT);
+            connectionBadge.setBackground(statusChipBackground(
+                    Color.rgb(31, 54, 54),
+                    Color.rgb(55, 101, 98)));
+            glassesStatusText.setText("已连接 · 正在准备显示");
+            glassesStatusText.setTextColor(COLOR_ACCENT_BRIGHT);
+            glassesDescriptionText.setText(
+                    "已检测到外接眼镜，正在协商 3D 模式并创建眼镜画面。");
+            glassesActionHint.setText("连接已识别，画面会自动出现");
+            glassesActionHint.setTextColor(COLOR_ACCENT_BRIGHT);
+            glassesConnectionCard.setBackground(connectionCardBackground(true, false));
+            glassesIconView.setConnectionState(true, false);
+        } else {
+            connectionBadge.setText("眼镜未连接");
+            connectionBadge.setTextColor(COLOR_SECONDARY);
+            connectionBadge.setBackground(statusChipBackground(COLOR_SURFACE_SOFT, COLOR_BORDER));
+            glassesStatusText.setText("未检测到眼镜");
+            glassesStatusText.setTextColor(COLOR_ERROR);
+            glassesDescriptionText.setText(
+                    "将 RayNeo Air 插入手机。检测到外接显示后，应用会自动把画面送到眼镜。");
+            glassesActionHint.setText("插入手机接口即可  ·  无需点击任何按钮");
+            glassesActionHint.setTextColor(COLOR_TERTIARY);
+            glassesConnectionCard.setBackground(connectionCardBackground(false, false));
+            glassesIconView.setConnectionState(false, false);
+        }
 
         if (sessionAvailable) {
             cancelDiscovery();
             passwordInput.getText().clear();
             hideKeyboard();
-            boolean mediaVisible = glassesConnected && libraryReady;
+            boolean mediaVisible = glassesPresentationReady && libraryReady;
             sessionTitleText.setText(mediaVisible ? "媒体库已在眼镜中打开" : "Jellyfin 已配置");
             String user = TextUtils.isEmpty(latestUsername) ? "Jellyfin 用户" : latestUsername;
             String server = TextUtils.isEmpty(latestServerUrl) ? "Jellyfin 服务器" : latestServerUrl;
             if (mediaVisible) {
                 sessionDetailText.setText(user + " · " + server);
-            } else if (glassesConnected) {
+            } else if (glassesPresentationReady) {
                 sessionDetailText.setText(
                         user + " · " + server + "\n眼镜已连接，媒体库正在同步。");
+            } else if (glassesConnected) {
+                sessionDetailText.setText(
+                        user + " · " + server + "\n眼镜画面正在启动，媒体库随后自动同步。");
             } else {
                 sessionDetailText.setText(
                         user + " · " + server + "\n连接 RayNeo Air 后会自动同步媒体库。");
@@ -1511,7 +1643,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 quickConnectButton.setText("正在申请登录码…");
             } else {
                 connectButton.setText("登录 Jellyfin");
-                quickConnectButton.setText("使用 Jellyfin 快速登录");
+                quickConnectButton.setText("使用快速登录");
             }
         }
 
@@ -1519,12 +1651,20 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 ? defaultMessageForState(latestState)
                 : latestMessage;
         if (libraryReady) {
-            visibleMessage = glassesConnected
-                    ? "Jellyfin 已连接，媒体库正在眼镜中显示。"
-                    : "Jellyfin 已配置。请连接 RayNeo Air 以浏览和播放。";
+            if (glassesPresentationReady) {
+                visibleMessage = "Jellyfin 已连接，媒体库正在眼镜中显示。";
+            } else if (glassesConnected) {
+                visibleMessage = "Jellyfin 已连接，眼镜画面正在启动。";
+            } else {
+                visibleMessage = "Jellyfin 已配置。连接 RayNeo Air 后即可浏览和播放。";
+            }
         }
         statusText.setText(visibleMessage);
         statusText.setTextColor(latestIsError ? COLOR_ERROR : COLOR_SECONDARY);
+        statusText.setVisibility(
+                latestIsError || busy || waitingForQuickConnect
+                        ? View.VISIBLE
+                        : View.GONE);
 
         if (!sessionAvailable && !busy && !automaticDiscoveryStarted) {
             automaticDiscoveryStarted = true;
@@ -1556,20 +1696,137 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     }
 
     private boolean hasConnectedRayNeoDisplay() {
-        return DisplayUtil.checkTCLGlasses(this) != null;
+        return findExternalDisplay() != null || DisplayUtil.hasExtDisplay(this);
+    }
+
+    private Display findExternalDisplay() {
+        DisplayManager manager = companionDisplayManager;
+        if (manager == null) {
+            manager = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+        }
+        if (manager == null) {
+            return null;
+        }
+
+        Display display = firstUsableExternalDisplay(
+                manager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION));
+        if (display != null) {
+            return display;
+        }
+        return firstUsableExternalDisplay(manager.getDisplays());
+    }
+
+    private Display firstUsableExternalDisplay(Display[] displays) {
+        if (displays == null) {
+            return null;
+        }
+        for (Display display : displays) {
+            if (display != null
+                    && display.isValid()
+                    && display.getDisplayId() != Display.DEFAULT_DISPLAY) {
+                return display;
+            }
+        }
+        return null;
+    }
+
+    private boolean isUnityPresentationActive() {
+        try {
+            View unityView = mUnityPlayer == null ? null : mUnityPlayer.getView();
+            Display display = unityView == null ? null : unityView.getDisplay();
+            return display != null && display.getDisplayId() != Display.DEFAULT_DISPLAY;
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private void refreshGlassesConnectionState() {
         final boolean connected = hasConnectedRayNeoDisplay();
+        final boolean presentationActive = connected && isUnityPresentationActive();
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
+                boolean wasConnected = glassesConnected;
                 glassesConnected = connected;
+                if (!connected) {
+                    glassesPresentationReady = false;
+                    glassesDetectedAtMs = 0L;
+                    dismissFallbackPresentation();
+                } else if (presentationActive) {
+                    glassesPresentationReady = true;
+                    if (fallbackPresentation != null
+                            && !fallbackPresentation.ownsUnityPlayer()) {
+                        dismissFallbackPresentation();
+                    }
+                } else if (!wasConnected || glassesDetectedAtMs == 0L) {
+                    glassesDetectedAtMs = SystemClock.uptimeMillis();
+                }
+
+                if (connected
+                        && !glassesPresentationReady
+                        && SystemClock.uptimeMillis() - glassesDetectedAtMs
+                                >= PRESENTATION_FALLBACK_DELAY_MS) {
+                    startFallbackPresentation();
+                }
                 if (companionOverlay != null && !isFinishing()) {
                     applyCompanionState();
+                    schedulePresentationProbe();
                 }
             }
         });
+    }
+
+    private void schedulePresentationProbe() {
+        if (companionOverlay == null) {
+            return;
+        }
+        companionOverlay.removeCallbacks(presentationProbe);
+        boolean verifyingFallback = fallbackPresentation != null
+                && SystemClock.uptimeMillis() - fallbackPresentationStartedAtMs < 5000L;
+        if (glassesConnected
+                && (!glassesPresentationReady || verifyingFallback)
+                && !isFinishing()) {
+            companionOverlay.postDelayed(presentationProbe, 500L);
+        }
+    }
+
+    private void startFallbackPresentation() {
+        if (isFinishing()
+                || isUnityPresentationActive()
+                || (fallbackPresentation != null && fallbackPresentation.isShowing())) {
+            return;
+        }
+
+        Display display = findExternalDisplay();
+        if (display == null || mUnityPlayer == null) {
+            return;
+        }
+
+        try {
+            fallbackPresentation = new CompanionUnityPresentation(display);
+            fallbackPresentationStartedAtMs = SystemClock.uptimeMillis();
+            fallbackPresentation.show();
+        } catch (Exception ignored) {
+            fallbackPresentation = null;
+            fallbackPresentationStartedAtMs = 0L;
+        }
+    }
+
+    private void onFallbackPresentationShown() {
+        glassesConnected = true;
+        glassesPresentationReady = true;
+        if (companionOverlay != null && !isFinishing()) {
+            applyCompanionState();
+        }
+    }
+
+    private void dismissFallbackPresentation() {
+        CompanionUnityPresentation presentation = fallbackPresentation;
+        fallbackPresentation = null;
+        fallbackPresentationStartedAtMs = 0L;
+        if (presentation != null) {
+            presentation.releaseSafely();
+        }
     }
 
     private void copyQuickConnectCode() {
@@ -1607,6 +1864,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         latestMessage = message;
         statusText.setText(message);
         statusText.setTextColor(COLOR_ERROR);
+        statusText.setVisibility(View.VISIBLE);
     }
 
     private String defaultMessageForState(String state) {
@@ -1656,10 +1914,13 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         input.setFocusable(true);
         input.setFocusableInTouchMode(true);
         input.setCursorVisible(true);
+        input.setIncludeFontPadding(false);
+        input.setMinHeight(0);
+        input.setMinWidth(0);
         input.setHint(hint);
-        input.setHintTextColor(Color.rgb(115, 123, 150));
+        input.setHintTextColor(COLOR_TERTIARY);
         input.setTextColor(COLOR_PRIMARY);
-        input.setTextSize(16);
+        input.setTextSize(15);
         input.setPadding(dp(16), 0, dp(16), 0);
         input.setBackground(roundedWithStroke(COLOR_FIELD, COLOR_BORDER, 14));
         return input;
@@ -1670,11 +1931,16 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         button.setAllCaps(false);
         button.setText(text);
         button.setTextColor(Color.WHITE);
-        button.setTextSize(15);
+        button.setTextSize(14);
         button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
+        button.setIncludeFontPadding(false);
+        button.setMinHeight(0);
+        button.setMinWidth(0);
+        button.setStateListAnimator(null);
+        button.setBackgroundTintList(null);
         button.setPadding(dp(10), 0, dp(10), 0);
-        button.setBackground(rounded(color, 14));
+        button.setBackground(rippleBackground(rounded(color, 14), Color.WHITE));
         return button;
     }
 
@@ -1689,6 +1955,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         view.setTextColor(color);
         view.setTypeface(Typeface.DEFAULT, style);
         view.setGravity(gravity);
+        view.setIncludeFontPadding(false);
         return view;
     }
 
@@ -1724,12 +1991,54 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         return drawable;
     }
 
-    private GradientDrawable connectionCardGradient() {
+    private Drawable accentButtonBackground(int radiusDp) {
+        return rippleBackground(accentGradient(radiusDp), Color.BLACK);
+    }
+
+    private Drawable outlineButtonBackground(int radiusDp) {
+        return rippleBackground(
+                roundedWithStroke(COLOR_SURFACE_SOFT, COLOR_BORDER, radiusDp),
+                Color.WHITE);
+    }
+
+    private Drawable transparentButtonBackground(int radiusDp) {
+        return rippleBackground(rounded(Color.TRANSPARENT, radiusDp), Color.WHITE);
+    }
+
+    private Drawable rippleBackground(Drawable content, int rippleColor) {
+        return new RippleDrawable(
+                ColorStateList.valueOf(Color.argb(
+                        42,
+                        Color.red(rippleColor),
+                        Color.green(rippleColor),
+                        Color.blue(rippleColor))),
+                content,
+                null);
+    }
+
+    private GradientDrawable statusChipBackground(int color, int strokeColor) {
+        return roundedWithStroke(color, strokeColor, 20);
+    }
+
+    private GradientDrawable connectionCardBackground(boolean connected, boolean ready) {
+        int[] colors;
+        int stroke;
+        if (ready) {
+            colors = new int[] { Color.rgb(27, 61, 51), Color.rgb(28, 30, 34) };
+            stroke = Color.rgb(57, 112, 89);
+        } else if (connected) {
+            colors = new int[] { Color.rgb(29, 57, 57), Color.rgb(28, 30, 35) };
+            stroke = Color.rgb(57, 104, 101);
+        } else {
+            colors = new int[] { COLOR_SURFACE_SOFT, Color.rgb(27, 28, 32) };
+            stroke = COLOR_BORDER;
+        }
+
         GradientDrawable drawable = new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                new int[] { Color.rgb(24, 66, 70), COLOR_SURFACE });
-        drawable.setCornerRadius(dp(24));
-        drawable.setStroke(dp(1), Color.rgb(54, 104, 105));
+                colors);
+        drawable.setCornerRadius(dp(22));
+        drawable.setStroke(dp(1), stroke);
         return drawable;
     }
 
@@ -1770,6 +2079,128 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             manager.hideSoftInputFromWindow(focused.getWindowToken(), 0);
         }
         focused.clearFocus();
+    }
+
+    private final class GlassesIconView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private boolean connected;
+        private boolean ready;
+
+        GlassesIconView(Context context) {
+            super(context);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeJoin(Paint.Join.ROUND);
+            setConnectionState(false, false);
+        }
+
+        void setConnectionState(boolean isConnected, boolean isReady) {
+            connected = isConnected;
+            ready = isReady;
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float width = getWidth();
+            float height = getHeight();
+            float stroke = Math.max(dp(2), width * 0.045f);
+            float lensWidth = width * 0.27f;
+            float lensHeight = height * 0.22f;
+            float top = height * 0.38f;
+            float left = width * 0.15f;
+            float right = width - left - lensWidth;
+            float radius = lensHeight * 0.45f;
+            int color = ready
+                    ? COLOR_SUCCESS
+                    : (connected ? COLOR_ACCENT_BRIGHT : COLOR_SECONDARY);
+
+            paint.setColor(color);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(stroke);
+            canvas.drawRoundRect(
+                    left,
+                    top,
+                    left + lensWidth,
+                    top + lensHeight,
+                    radius,
+                    radius,
+                    paint);
+            canvas.drawRoundRect(
+                    right,
+                    top,
+                    right + lensWidth,
+                    top + lensHeight,
+                    radius,
+                    radius,
+                    paint);
+            canvas.drawLine(
+                    left + lensWidth,
+                    top + lensHeight * 0.46f,
+                    right,
+                    top + lensHeight * 0.46f,
+                    paint);
+            canvas.drawLine(
+                    left,
+                    top + lensHeight * 0.32f,
+                    width * 0.07f,
+                    top + lensHeight * 0.16f,
+                    paint);
+            canvas.drawLine(
+                    right + lensWidth,
+                    top + lensHeight * 0.32f,
+                    width * 0.93f,
+                    top + lensHeight * 0.16f,
+                    paint);
+        }
+    }
+
+    private final class CompanionUnityPresentation extends Presentation {
+        private FrameLayout unityContainer;
+
+        CompanionUnityPresentation(Display display) {
+            super(JellyfinRayNeoActivity.this, display);
+            setCancelable(false);
+        }
+
+        @Override
+        protected void onCreate(Bundle savedInstanceState) {
+            super.onCreate(savedInstanceState);
+            unityContainer = new FrameLayout(getContext());
+            unityContainer.setBackgroundColor(Color.BLACK);
+            setContentView(unityContainer);
+
+            if (mUnityPlayer == null) {
+                return;
+            }
+
+            ViewParent parent = mUnityPlayer.getParent();
+            if (parent instanceof ViewGroup) {
+                ((ViewGroup) parent).removeView(mUnityPlayer);
+            }
+            unityContainer.addView(mUnityPlayer, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
+            onFallbackPresentationShown();
+        }
+
+        boolean ownsUnityPlayer() {
+            return unityContainer != null
+                    && mUnityPlayer != null
+                    && mUnityPlayer.getParent() == unityContainer;
+        }
+
+        void releaseSafely() {
+            try {
+                if (ownsUnityPlayer()) {
+                    unityContainer.removeView(mUnityPlayer);
+                }
+                if (isShowing()) {
+                    super.dismiss();
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 
     private static final class DiscoveredServer {

@@ -303,6 +303,7 @@ namespace JellyfinForRayNeo
         public const int LoginMessageType = 1000;
         public const int QuickConnectMessageType = 1001;
         public const int CancelQuickConnectMessageType = 1002;
+        public const int GlassesMessageType = 103;
 
         private readonly ConcurrentQueue<CompanionLoginRequest> _pendingRequests =
             new ConcurrentQueue<CompanionLoginRequest>();
@@ -322,6 +323,7 @@ namespace JellyfinForRayNeo
         private bool _nativeLoginListenerRegistered;
         private bool _nativeQuickConnectListenerRegistered;
         private bool _nativeCancelListenerRegistered;
+        private bool _nativeGlassesListenerRegistered;
 #endif
 
         public CompanionLoginBridge()
@@ -343,6 +345,10 @@ namespace JellyfinForRayNeo
                     CancelQuickConnectMessageType,
                     OnNativeQuickConnectCancellation);
                 _nativeCancelListenerRegistered = true;
+                NativeModule.Instance.RegesitNativeMsgDispatchListener(
+                    GlassesMessageType,
+                    OnNativeGlassesMessage);
+                _nativeGlassesListenerRegistered = true;
             }
             catch (Exception exception)
             {
@@ -462,6 +468,24 @@ namespace JellyfinForRayNeo
                 validationMessage = "手机端保存的 Jellyfin 会话格式无效，请重新登录。";
                 return false;
             }
+        }
+
+        public static bool TryParseGlassesEvent(string[] values, out bool connected)
+        {
+            connected = false;
+            if (values == null || values.Length == 0 || string.IsNullOrWhiteSpace(values[0]))
+            {
+                return false;
+            }
+
+            string value = values[0].Trim();
+            if (string.Equals(value, "1", StringComparison.Ordinal))
+            {
+                connected = true;
+                return true;
+            }
+
+            return string.Equals(value, "2", StringComparison.Ordinal);
         }
 
         public void Pump()
@@ -601,7 +625,7 @@ namespace JellyfinForRayNeo
             {
                 try
                 {
-                    NativeModule.Instance.UnRegistNativeMsgDispatchListener(LoginMessageType);
+                    NativeModule.Instance.RmNativeMsgDispatchListener(LoginMessageType);
                 }
                 catch (Exception exception)
                 {
@@ -613,7 +637,7 @@ namespace JellyfinForRayNeo
             {
                 try
                 {
-                    NativeModule.Instance.UnRegistNativeMsgDispatchListener(QuickConnectMessageType);
+                    NativeModule.Instance.RmNativeMsgDispatchListener(QuickConnectMessageType);
                 }
                 catch (Exception exception)
                 {
@@ -625,13 +649,25 @@ namespace JellyfinForRayNeo
             {
                 try
                 {
-                    NativeModule.Instance.UnRegistNativeMsgDispatchListener(CancelQuickConnectMessageType);
+                    NativeModule.Instance.RmNativeMsgDispatchListener(CancelQuickConnectMessageType);
                 }
                 catch (Exception exception)
                 {
                     Debug.LogWarning("RayNeo quick connect cancel listener could not be removed: " + exception.Message);
                 }
                 _nativeCancelListenerRegistered = false;
+            }
+            if (_nativeGlassesListenerRegistered)
+            {
+                try
+                {
+                    NativeModule.Instance.RmNativeMsgDispatchListener(GlassesMessageType);
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning("RayNeo glasses listener could not be removed: " + exception.Message);
+                }
+                _nativeGlassesListenerRegistered = false;
             }
 #endif
 
@@ -754,6 +790,29 @@ namespace JellyfinForRayNeo
         private void OnNativeQuickConnectCancellation(string[] values)
         {
             _pendingQuickConnectCancellations.Enqueue(true);
+        }
+
+        private void OnNativeGlassesMessage(string[] values)
+        {
+            if (!TryParseGlassesEvent(values, out bool connected))
+            {
+                return;
+            }
+
+            try
+            {
+                using (AndroidJavaClass unityPlayer =
+                       new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (AndroidJavaObject activity =
+                       unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                {
+                    activity?.Call("setGlassesPresentationState", connected);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("RayNeo glasses state could not be published: " + exception.Message);
+            }
         }
 #endif
 
