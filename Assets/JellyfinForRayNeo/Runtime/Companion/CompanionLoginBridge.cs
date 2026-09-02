@@ -121,6 +121,67 @@ namespace JellyfinForRayNeo
         }
     }
 
+    [Serializable]
+    public sealed class CompanionSessionRequest
+    {
+        [SerializeField] private string serverUrl;
+        [SerializeField] private string serverName;
+        [SerializeField] private string serverVersion;
+        [SerializeField] private string serverId;
+        [SerializeField] private string accessToken;
+        [SerializeField] private string userId;
+        [SerializeField] private string userName;
+        [SerializeField] private string deviceId;
+
+        public string ServerUrl => serverUrl;
+        public string ServerName => serverName;
+        public string ServerVersion => serverVersion;
+        public string ServerId => serverId;
+        public string AccessToken => accessToken;
+        public string UserId => userId;
+        public string UserName => userName;
+        public string DeviceId => deviceId;
+
+        internal bool TryNormalize(out string validationMessage)
+        {
+            serverUrl = serverUrl != null ? serverUrl.Trim() : string.Empty;
+            serverName = serverName != null ? serverName.Trim() : string.Empty;
+            serverVersion = serverVersion != null ? serverVersion.Trim() : string.Empty;
+            serverId = serverId != null ? serverId.Trim() : string.Empty;
+            accessToken = accessToken != null ? accessToken.Trim() : string.Empty;
+            userId = userId != null ? userId.Trim() : string.Empty;
+            userName = userName != null ? userName.Trim() : string.Empty;
+            deviceId = deviceId != null ? deviceId.Trim() : string.Empty;
+
+            if (string.IsNullOrWhiteSpace(serverUrl)
+                || string.IsNullOrWhiteSpace(accessToken)
+                || string.IsNullOrWhiteSpace(userId)
+                || string.IsNullOrWhiteSpace(deviceId))
+            {
+                validationMessage = "手机端保存的 Jellyfin 会话不完整，请重新登录。";
+                return false;
+            }
+
+            validationMessage = null;
+            return true;
+        }
+
+        public JellyfinSession ToSession()
+        {
+            return new JellyfinSession
+            {
+                ServerUrl = serverUrl,
+                ServerName = serverName,
+                ServerVersion = serverVersion,
+                ServerId = serverId,
+                AccessToken = accessToken,
+                UserId = userId,
+                UserName = userName,
+                DeviceId = deviceId
+            };
+        }
+    }
+
     public sealed class CompanionLoginSnapshot
     {
         public CompanionLoginSnapshot(
@@ -247,6 +308,8 @@ namespace JellyfinForRayNeo
             new ConcurrentQueue<CompanionLoginRequest>();
         private readonly ConcurrentQueue<CompanionQuickConnectRequest> _pendingQuickConnectRequests =
             new ConcurrentQueue<CompanionQuickConnectRequest>();
+        private readonly ConcurrentQueue<CompanionSessionRequest> _pendingSessions =
+            new ConcurrentQueue<CompanionSessionRequest>();
         private readonly ConcurrentQueue<bool> _pendingQuickConnectCancellations =
             new ConcurrentQueue<bool>();
         private readonly ConcurrentQueue<string> _pendingValidationErrors =
@@ -254,6 +317,8 @@ namespace JellyfinForRayNeo
         private bool _disposed;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
+        private string _lastNativeSessionPayload;
+        private bool _nativeSessionReadErrorReported;
         private bool _nativeLoginListenerRegistered;
         private bool _nativeQuickConnectListenerRegistered;
         private bool _nativeCancelListenerRegistered;
@@ -289,6 +354,7 @@ namespace JellyfinForRayNeo
         public event Action<CompanionLoginRequest> LoginRequested;
         public event Action<CompanionQuickConnectRequest> QuickConnectRequested;
         public event Action QuickConnectCancelRequested;
+        public event Action<CompanionSessionRequest> SessionAvailable;
 
         public static bool TryParsePayload(
             string payload,
@@ -362,12 +428,52 @@ namespace JellyfinForRayNeo
             }
         }
 
+        public static bool TryParseSessionPayload(
+            string payload,
+            out CompanionSessionRequest request,
+            out string validationMessage)
+        {
+            request = null;
+            if (string.IsNullOrWhiteSpace(payload))
+            {
+                validationMessage = "手机端没有可用的 Jellyfin 会话。";
+                return false;
+            }
+
+            try
+            {
+                CompanionSessionRequest parsed =
+                    JsonUtility.FromJson<CompanionSessionRequest>(payload);
+                if (parsed == null)
+                {
+                    validationMessage = "手机端保存的 Jellyfin 会话为空，请重新登录。";
+                    return false;
+                }
+                if (!parsed.TryNormalize(out validationMessage))
+                {
+                    return false;
+                }
+
+                request = parsed;
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                validationMessage = "手机端保存的 Jellyfin 会话格式无效，请重新登录。";
+                return false;
+            }
+        }
+
         public void Pump()
         {
             if (_disposed)
             {
                 return;
             }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            PollNativeSession();
+#endif
 
             while (_pendingValidationErrors.TryDequeue(out string validationMessage))
             {
@@ -405,6 +511,32 @@ namespace JellyfinForRayNeo
             {
                 QuickConnectRequested?.Invoke(quickConnectRequest);
             }
+
+            while (_pendingSessions.TryDequeue(out CompanionSessionRequest session))
+            {
+                SessionAvailable?.Invoke(session);
+            }
+        }
+
+        public void ClearNativeSession()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _lastNativeSessionPayload = null;
+            try
+            {
+                using (AndroidJavaClass unityPlayer =
+                       new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (AndroidJavaObject activity =
+                       unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                {
+                    activity?.Call("clearNativeSession");
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning("Android companion session could not be cleared: " + exception.Message);
+            }
+#endif
         }
 
         public void PublishState(
@@ -510,6 +642,9 @@ namespace JellyfinForRayNeo
             while (_pendingQuickConnectRequests.TryDequeue(out _))
             {
             }
+            while (_pendingSessions.TryDequeue(out _))
+            {
+            }
             while (_pendingQuickConnectCancellations.TryDequeue(out _))
             {
             }
@@ -546,6 +681,47 @@ namespace JellyfinForRayNeo
         }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
+        private void PollNativeSession()
+        {
+            try
+            {
+                using (AndroidJavaClass unityPlayer =
+                       new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (AndroidJavaObject activity =
+                       unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                {
+                    string payload = activity?.Call<string>("getPendingSessionJson");
+                    if (string.IsNullOrWhiteSpace(payload)
+                        || string.Equals(payload, _lastNativeSessionPayload, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    _nativeSessionReadErrorReported = false;
+                    _lastNativeSessionPayload = payload;
+                    if (TryParseSessionPayload(
+                            payload,
+                            out CompanionSessionRequest session,
+                            out string validationMessage))
+                    {
+                        _pendingSessions.Enqueue(session);
+                    }
+                    else
+                    {
+                        _pendingValidationErrors.Enqueue(validationMessage);
+                    }
+                }
+            }
+            catch (Exception exception)
+            {
+                if (!_nativeSessionReadErrorReported)
+                {
+                    _nativeSessionReadErrorReported = true;
+                    Debug.LogWarning("Android companion session could not be read: " + exception.Message);
+                }
+            }
+        }
+
         private void OnNativeMessage(string[] values)
         {
             string payload = values != null && values.Length > 0 ? values[0] : null;

@@ -4,11 +4,14 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.hardware.display.DisplayManager;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.InputType;
@@ -17,6 +20,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
@@ -26,41 +30,66 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.tcl.xr.api.AirApi;
+import com.tcl.unity.unityadapter.DisplayUtil;
 import com.tcl.unity.unityadapter.UnityXRSupportActivity;
 
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.ConnectException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.SocketTimeoutException;
+import java.net.URI;
+import java.net.URL;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
+
+import javax.net.ssl.SSLException;
 
 public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
-    private static final int LOGIN_MESSAGE_TYPE = 1000;
-    private static final int QUICK_CONNECT_MESSAGE_TYPE = 1001;
-    private static final int CANCEL_QUICK_CONNECT_MESSAGE_TYPE = 1002;
     private static final int DISCOVERY_PORT = 7359;
     private static final int DISCOVERY_DURATION_MS = 3000;
+    private static final int HTTP_TIMEOUT_MS = 15000;
+    private static final int QUICK_CONNECT_TIMEOUT_MS = 300000;
+    private static final int QUICK_CONNECT_POLL_MS = 1500;
     private static final byte[] DISCOVERY_MESSAGE =
             "who is JellyfinServer?".getBytes(StandardCharsets.UTF_8);
 
-    private static final int COLOR_BACKGROUND = Color.rgb(8, 10, 18);
-    private static final int COLOR_SURFACE = Color.rgb(20, 23, 36);
-    private static final int COLOR_FIELD = Color.rgb(34, 38, 55);
-    private static final int COLOR_PRIMARY = Color.rgb(244, 246, 255);
-    private static final int COLOR_SECONDARY = Color.rgb(166, 174, 199);
-    private static final int COLOR_ACCENT = Color.rgb(91, 104, 255);
-    private static final int COLOR_ACCENT_BRIGHT = Color.rgb(130, 174, 255);
-    private static final int COLOR_ERROR = Color.rgb(255, 126, 145);
+    private static final String PREFS_NAME = "jellyfin_companion";
+    private static final String PREF_DEVICE_ID = "device_id";
+    private static final String PREF_SERVER_URL = "server_url";
+    private static final String PREF_USERNAME = "username";
+    private static final String PREF_SESSION_JSON = "session_json";
+
+    private static final int COLOR_BACKGROUND_TOP = Color.rgb(5, 9, 20);
+    private static final int COLOR_BACKGROUND_BOTTOM = Color.rgb(12, 16, 32);
+    private static final int COLOR_SURFACE = Color.rgb(22, 27, 45);
+    private static final int COLOR_SURFACE_SOFT = Color.rgb(28, 34, 55);
+    private static final int COLOR_FIELD = Color.rgb(31, 38, 61);
+    private static final int COLOR_BORDER = Color.rgb(55, 66, 97);
+    private static final int COLOR_PRIMARY = Color.rgb(248, 249, 255);
+    private static final int COLOR_SECONDARY = Color.rgb(174, 183, 207);
+    private static final int COLOR_TERTIARY = Color.rgb(119, 130, 159);
+    private static final int COLOR_ACCENT = Color.rgb(69, 202, 195);
+    private static final int COLOR_ACCENT_END = Color.rgb(106, 222, 207);
+    private static final int COLOR_ACCENT_BRIGHT = Color.rgb(125, 225, 218);
+    private static final int COLOR_SUCCESS = Color.rgb(93, 226, 172);
+    private static final int COLOR_ERROR = Color.rgb(255, 128, 151);
 
     private FrameLayout companionOverlay;
     private EditText serverInput;
@@ -71,31 +100,84 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private Button connectButton;
     private LinearLayout discoveredServersContainer;
     private LinearLayout quickConnectPanel;
+    private LinearLayout loginForm;
+    private LinearLayout sessionPanel;
     private LinearLayout manualLoginContainer;
     private TextView discoveryStatusText;
     private TextView quickConnectCodeText;
     private TextView statusText;
+    private TextView connectionBadge;
+    private TextView glassesStatusText;
+    private TextView glassesDescriptionText;
+    private Button connectGlassesButton;
+    private TextView sessionTitleText;
+    private TextView sessionDetailText;
 
-    private String latestState = "initializing";
-    private String latestMessage = "正在启动 Jellyfin 客户端…";
+    private String latestState = "login_required";
+    private String latestMessage = "Jellyfin 配置可先完成；浏览和播放需要连接 RayNeo Air。";
     private boolean latestIsError;
-    private String latestServerUrl = "http://";
+    private String latestServerUrl = "";
     private String latestUsername = "";
     private String latestQuickConnectCode = "";
     private boolean automaticDiscoveryStarted;
+    private volatile boolean nativeOperationRunning;
+    private volatile int authenticationGeneration;
     private volatile int discoveryGeneration;
     private volatile DatagramSocket discoverySocket;
+    private DisplayManager companionDisplayManager;
+    private boolean glassesConnected;
+    private final DisplayManager.DisplayListener companionDisplayListener =
+            new DisplayManager.DisplayListener() {
+                @Override
+                public void onDisplayAdded(int displayId) {
+                    refreshGlassesConnectionState();
+                }
+
+                @Override
+                public void onDisplayRemoved(int displayId) {
+                    refreshGlassesConnectionState();
+                }
+
+                @Override
+                public void onDisplayChanged(int displayId) {
+                    refreshGlassesConnectionState();
+                }
+            };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        getWindow().setStatusBarColor(COLOR_BACKGROUND_TOP);
+        getWindow().setNavigationBarColor(COLOR_BACKGROUND_BOTTOM);
+        companionDisplayManager =
+                (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+        if (companionDisplayManager != null) {
+            companionDisplayManager.registerDisplayListener(companionDisplayListener, null);
+        }
+        glassesConnected = hasConnectedRayNeoDisplay();
+        restoreNativeState();
         installCompanionUi();
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        refreshGlassesConnectionState();
+    }
+
+    @Override
     public void onDestroy() {
+        authenticationGeneration++;
+        nativeOperationRunning = false;
         cancelDiscovery();
+        if (companionDisplayManager != null) {
+            companionDisplayManager.unregisterDisplayListener(companionDisplayListener);
+            companionDisplayManager = null;
+        }
         super.onDestroy();
     }
 
@@ -109,8 +191,30 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                latestState = TextUtils.isEmpty(state) ? "offline" : state;
-                latestMessage = message == null ? "" : message;
+                String incomingState = TextUtils.isEmpty(state) ? "offline" : state;
+                if (nativeOperationRunning && !"ready".equals(incomingState)) {
+                    return;
+                }
+
+                boolean hasNativeSession = hasNativeSession();
+                if (("initializing".equals(incomingState)
+                        || "offline".equals(incomingState))
+                        && !hasNativeSession) {
+                    incomingState = "login_required";
+                    latestMessage = "尚未检测到 RayNeo Air，请连接眼镜；你可以先填写 Jellyfin 信息。";
+                } else if (("initializing".equals(incomingState)
+                        || "offline".equals(incomingState)
+                        || "login_required".equals(incomingState))
+                        && hasNativeSession) {
+                    incomingState = "session_ready";
+                    latestMessage = isError && !TextUtils.isEmpty(message)
+                            ? message
+                            : "Jellyfin 配置已保存。连接 RayNeo Air 后会自动同步媒体库。";
+                } else {
+                    latestMessage = message == null ? "" : message;
+                }
+
+                latestState = incomingState;
                 latestIsError = isError;
                 if (!TextUtils.isEmpty(serverUrl)) {
                     latestServerUrl = serverUrl;
@@ -133,7 +237,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         }
 
         companionOverlay = new FrameLayout(this);
-        companionOverlay.setBackgroundColor(COLOR_BACKGROUND);
+        companionOverlay.setBackground(backgroundGradient());
         companionOverlay.setClickable(true);
         companionOverlay.setFocusable(true);
         companionOverlay.setElevation(dp(24));
@@ -141,62 +245,113 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         ScrollView scrollView = new ScrollView(this);
         scrollView.setFillViewport(true);
         scrollView.setClipToPadding(false);
+        scrollView.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setGravity(Gravity.CENTER_HORIZONTAL);
-        page.setPadding(dp(24), dp(28), dp(24), dp(40));
+        page.setGravity(Gravity.START);
+        page.setPadding(0, dp(24), 0, dp(36));
 
-        TextView eyebrow = createText(
-                "RAYNEO AIR  ·  JELLYFIN COMPANION",
-                13,
+        LinearLayout brandRow = new LinearLayout(this);
+        brandRow.setOrientation(LinearLayout.HORIZONTAL);
+        brandRow.setGravity(Gravity.CENTER_VERTICAL);
+        page.addView(brandRow, matchWrap(dp(26)));
+
+        TextView brand = createText(
+                "RAYNEO AIR",
+                12,
                 COLOR_ACCENT_BRIGHT,
                 Typeface.BOLD,
                 Gravity.CENTER);
-        page.addView(eyebrow, matchWrap(dp(8)));
+        brand.setLetterSpacing(0.09f);
+        brand.setPadding(dp(12), dp(7), dp(12), dp(7));
+        brand.setBackground(roundedWithStroke(COLOR_SURFACE_SOFT, COLOR_BORDER, 20));
+        brandRow.addView(brand, wrapWrap());
 
-        TextView title = createText(
-                "连接 Jellyfin",
-                30,
-                COLOR_PRIMARY,
+        View brandSpacer = new View(this);
+        brandRow.addView(brandSpacer, new LinearLayout.LayoutParams(
+                0,
+                1,
+                1f));
+
+        connectionBadge = createText(
+                "JELLYFIN COMPANION",
+                11,
+                COLOR_SECONDARY,
                 Typeface.BOLD,
                 Gravity.CENTER);
-        page.addView(title, matchWrap(dp(8)));
+        connectionBadge.setPadding(dp(11), dp(7), dp(11), dp(7));
+        connectionBadge.setBackground(roundedWithStroke(COLOR_SURFACE, COLOR_BORDER, 20));
+        brandRow.addView(connectionBadge, wrapWrap());
+
+        TextView title = createText(
+                "Jellyfin for\nRayNeo Air",
+                32,
+                COLOR_PRIMARY,
+                Typeface.BOLD,
+                Gravity.START);
+        title.setLineSpacing(0f, 0.98f);
+        page.addView(title, matchWrap(dp(12)));
 
         TextView subtitle = createText(
-                "自动发现同一局域网内的服务器，并在手机上完成安全登录。",
-                15,
+                "在手机上配置 Jellyfin，连接眼镜后浏览媒体库并开始播放。",
+                14,
                 COLOR_SECONDARY,
                 Typeface.NORMAL,
-                Gravity.CENTER);
-        subtitle.setLineSpacing(0f, 1.15f);
-        page.addView(subtitle, matchWrap(dp(22)));
+                Gravity.START);
+        subtitle.setLineSpacing(0f, 1.2f);
+        page.addView(subtitle, matchWrap(dp(18)));
+
+        LinearLayout glassesConnectionCard = createGlassesConnectionCard();
+        page.addView(glassesConnectionCard, matchWrap(dp(16)));
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(20), dp(22), dp(20), dp(22));
-        card.setBackground(rounded(COLOR_SURFACE, 22));
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
+        card.setBackground(roundedWithStroke(COLOR_SURFACE, COLOR_BORDER, 24));
         page.addView(card, matchWrap(dp(18)));
 
-        card.addView(createLabel("Jellyfin 服务器"), matchWrap(dp(7)));
+        TextView configurationTitle = createText(
+                "Jellyfin 连接",
+                17,
+                COLOR_PRIMARY,
+                Typeface.BOLD,
+                Gravity.START);
+        card.addView(configurationTitle, matchWrap(dp(4)));
+
+        TextView configurationHint = createText(
+                "仅服务器发现与登录配置可在手机上完成",
+                12,
+                COLOR_TERTIARY,
+                Typeface.NORMAL,
+                Gravity.START);
+        card.addView(configurationHint, matchWrap(dp(16)));
+
+        loginForm = new LinearLayout(this);
+        loginForm.setOrientation(LinearLayout.VERTICAL);
+        card.addView(loginForm, matchWrap(0));
+
+        loginForm.addView(createLabel("Jellyfin 服务器"), matchWrap(dp(8)));
 
         LinearLayout serverRow = new LinearLayout(this);
         serverRow.setOrientation(LinearLayout.HORIZONTAL);
         serverRow.setGravity(Gravity.CENTER_VERTICAL);
-        card.addView(serverRow, matchHeight(52, 8));
+        loginForm.addView(serverRow, matchHeight(54, 8));
 
-        serverInput = createInput("http://192.168.1.20:8096");
+        serverInput = createInput("例如 192.168.1.20:8096");
         serverInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        serverInput.setImeOptions(EditorInfo.IME_ACTION_NEXT);
         LinearLayout.LayoutParams serverInputParams = new LinearLayout.LayoutParams(
                 0,
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 1f);
-        serverInputParams.rightMargin = dp(10);
+        serverInputParams.rightMargin = dp(8);
         serverRow.addView(serverInput, serverInputParams);
 
-        discoverButton = createButton("发现", COLOR_FIELD);
+        discoverButton = createButton("自动发现", COLOR_SURFACE_SOFT);
+        discoverButton.setBackground(roundedWithStroke(COLOR_SURFACE_SOFT, COLOR_BORDER, 15));
         serverRow.addView(discoverButton, new LinearLayout.LayoutParams(
-                dp(88),
+                dp(96),
                 ViewGroup.LayoutParams.MATCH_PARENT));
         discoverButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -212,91 +367,104 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 Typeface.NORMAL,
                 Gravity.START);
         discoveryStatusText.setVisibility(View.GONE);
-        card.addView(discoveryStatusText, matchWrap(dp(6)));
+        loginForm.addView(discoveryStatusText, matchWrap(dp(6)));
 
         discoveredServersContainer = new LinearLayout(this);
         discoveredServersContainer.setOrientation(LinearLayout.VERTICAL);
         discoveredServersContainer.setVisibility(View.GONE);
-        card.addView(discoveredServersContainer, matchWrap(dp(10)));
+        loginForm.addView(discoveredServersContainer, matchWrap(dp(10)));
 
         quickConnectButton = createButton("使用 Jellyfin 快速登录", COLOR_ACCENT);
+        quickConnectButton.setBackground(accentGradient(16));
         quickConnectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 submitQuickConnect();
             }
         });
-        card.addView(quickConnectButton, matchHeight(54, 8));
+        loginForm.addView(quickConnectButton, matchHeight(54, 7));
 
         TextView quickHint = createText(
-                "无需在此输入密码，使用已登录的 Jellyfin App 或网页授权一次即可。",
+                "推荐 · 无需输入密码，在 Jellyfin App 或网页中确认一次即可",
                 12,
-                COLOR_SECONDARY,
+                COLOR_TERTIARY,
                 Typeface.NORMAL,
                 Gravity.CENTER);
         quickHint.setLineSpacing(0f, 1.12f);
-        card.addView(quickHint, matchWrap(dp(14)));
+        loginForm.addView(quickHint, matchWrap(dp(14)));
 
         quickConnectPanel = createQuickConnectPanel();
         quickConnectPanel.setVisibility(View.GONE);
-        card.addView(quickConnectPanel, matchWrap(dp(14)));
+        loginForm.addView(quickConnectPanel, matchWrap(dp(14)));
 
         manualLoginContainer = new LinearLayout(this);
         manualLoginContainer.setOrientation(LinearLayout.VERTICAL);
-        card.addView(manualLoginContainer, matchWrap(dp(4)));
+        loginForm.addView(manualLoginContainer, matchWrap(dp(2)));
 
         TextView alternative = createText(
-                "或使用帐号密码",
-                13,
-                COLOR_SECONDARY,
+                "或使用账户密码",
+                12,
+                COLOR_TERTIARY,
                 Typeface.BOLD,
                 Gravity.CENTER);
         manualLoginContainer.addView(alternative, matchWrap(dp(14)));
 
-        manualLoginContainer.addView(createLabel("用户名"), matchWrap(dp(7)));
-        usernameInput = createInput("Jellyfin 用户名");
+        usernameInput = createInput("用户名");
         usernameInput.setInputType(
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_NORMAL);
-        manualLoginContainer.addView(usernameInput, matchHeight(52, 14));
+        usernameInput.setImeOptions(EditorInfo.IME_ACTION_NEXT);
+        manualLoginContainer.addView(usernameInput, matchHeight(54, 10));
 
-        manualLoginContainer.addView(createLabel("密码"), matchWrap(dp(7)));
-        passwordInput = createInput("密码仅用于本次登录");
+        passwordInput = createInput("密码（仅用于本次登录）");
         passwordInput.setInputType(
                 InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        passwordInput.setImeOptions(EditorInfo.IME_ACTION_DONE);
         passwordInput.setSaveEnabled(false);
         passwordInput.setImportantForAutofill(
                 View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
-        manualLoginContainer.addView(passwordInput, matchHeight(52, 18));
+        manualLoginContainer.addView(passwordInput, matchHeight(54, 12));
 
-        connectButton = createButton("连接并在眼镜中打开", COLOR_ACCENT);
+        connectButton = createButton("登录 Jellyfin", COLOR_ACCENT);
+        connectButton.setBackground(accentGradient(16));
         connectButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 submitLogin();
             }
         });
-        manualLoginContainer.addView(connectButton, matchHeight(54, 10));
+        manualLoginContainer.addView(connectButton, matchHeight(54, 0));
+
+        sessionPanel = createSessionPanel();
+        sessionPanel.setVisibility(View.GONE);
+        card.addView(sessionPanel, matchWrap(dp(12)));
 
         statusText = createText(
                 latestMessage,
-                14,
+                13,
                 COLOR_SECONDARY,
                 Typeface.NORMAL,
-                Gravity.CENTER);
-        statusText.setLineSpacing(0f, 1.12f);
+                Gravity.START | Gravity.CENTER_VERTICAL);
+        statusText.setLineSpacing(0f, 1.15f);
+        statusText.setPadding(dp(14), dp(12), dp(14), dp(12));
+        statusText.setBackground(roundedWithStroke(COLOR_SURFACE_SOFT, COLOR_BORDER, 14));
         card.addView(statusText, matchWrap(0));
 
         TextView privacy = createText(
-                "密码与快速登录 secret 不会保存或显示；登录后仅保留 Jellyfin 会话令牌。",
+                "密码不会保存；手机仅保留 Jellyfin 会话令牌，用于眼镜连接后自动同步。",
                 12,
-                COLOR_SECONDARY,
+                COLOR_TERTIARY,
                 Typeface.NORMAL,
-                Gravity.CENTER);
+                Gravity.START);
+        privacy.setLineSpacing(0f, 1.18f);
         page.addView(privacy, matchWrap(0));
 
-        scrollView.addView(page, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
+        int availableWidth = getResources().getDisplayMetrics().widthPixels - dp(32);
+        int pageWidth = Math.min(availableWidth, dp(520));
+        ScrollView.LayoutParams pageParams = new ScrollView.LayoutParams(
+                pageWidth,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        pageParams.gravity = Gravity.CENTER_HORIZONTAL;
+        scrollView.addView(page, pageParams);
         companionOverlay.addView(scrollView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
@@ -304,9 +472,100 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
-        serverInput.setText(latestServerUrl);
+        if (isUsableServerValue(latestServerUrl)) {
+            serverInput.setText(latestServerUrl);
+        }
         usernameInput.setText(latestUsername);
         applyCompanionState();
+    }
+
+    private LinearLayout createGlassesConnectionCard() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(18), dp(18), dp(18), dp(18));
+        panel.setBackground(connectionCardGradient());
+
+        glassesStatusText = createText(
+                "●  未连接眼镜",
+                14,
+                COLOR_ERROR,
+                Typeface.BOLD,
+                Gravity.START);
+        panel.addView(glassesStatusText, matchWrap(dp(8)));
+
+        TextView heading = createText(
+                "连接 RayNeo Air",
+                22,
+                COLOR_PRIMARY,
+                Typeface.BOLD,
+                Gravity.START);
+        panel.addView(heading, matchWrap(dp(7)));
+
+        glassesDescriptionText = createText(
+                "请连接眼镜以浏览海报墙和播放视频。",
+                13,
+                COLOR_SECONDARY,
+                Typeface.NORMAL,
+                Gravity.START);
+        glassesDescriptionText.setLineSpacing(0f, 1.18f);
+        panel.addView(glassesDescriptionText, matchWrap(dp(15)));
+
+        connectGlassesButton = createButton("请连接眼镜", COLOR_ACCENT);
+        connectGlassesButton.setTextColor(Color.rgb(6, 20, 24));
+        connectGlassesButton.setBackground(accentGradient(16));
+        connectGlassesButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                openRayNeoManager();
+            }
+        });
+        panel.addView(connectGlassesButton, matchHeight(54, 0));
+        return panel;
+    }
+
+    private LinearLayout createSessionPanel() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setGravity(Gravity.START);
+        panel.setPadding(dp(18), dp(18), dp(18), dp(18));
+        panel.setBackground(roundedWithStroke(COLOR_SURFACE_SOFT, COLOR_BORDER, 18));
+
+        TextView badge = createText(
+                "✓  Jellyfin 连接已保存",
+                12,
+                COLOR_SUCCESS,
+                Typeface.BOLD,
+                Gravity.START);
+        panel.addView(badge, matchWrap(dp(10)));
+
+        sessionTitleText = createText(
+                "Jellyfin 已配置",
+                22,
+                COLOR_PRIMARY,
+                Typeface.BOLD,
+                Gravity.START);
+        panel.addView(sessionTitleText, matchWrap(dp(8)));
+
+        sessionDetailText = createText(
+                "连接 RayNeo Air 后，媒体库会自动同步到眼镜。",
+                13,
+                COLOR_SECONDARY,
+                Typeface.NORMAL,
+                Gravity.START);
+        sessionDetailText.setLineSpacing(0f, 1.18f);
+        panel.addView(sessionDetailText, matchWrap(dp(16)));
+
+        Button switchAccountButton = createButton("使用其他账户", COLOR_SURFACE);
+        switchAccountButton.setTextColor(COLOR_SECONDARY);
+        switchAccountButton.setBackground(roundedWithStroke(COLOR_SURFACE, COLOR_BORDER, 14));
+        switchAccountButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                clearNativeSession();
+            }
+        });
+        panel.addView(switchAccountButton, matchHeight(48, 0));
+        return panel;
     }
 
     private LinearLayout createQuickConnectPanel() {
@@ -314,7 +573,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setGravity(Gravity.CENTER_HORIZONTAL);
         panel.setPadding(dp(16), dp(16), dp(16), dp(16));
-        panel.setBackground(rounded(COLOR_FIELD, 16));
+        panel.setBackground(roundedWithStroke(COLOR_FIELD, COLOR_BORDER, 16));
 
         TextView label = createText(
                 "JELLYFIN 快速登录码",
@@ -364,6 +623,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         actions.addView(copyButton, copyParams);
 
         Button openButton = createButton("打开授权页", COLOR_ACCENT);
+        openButton.setBackground(accentGradient(14));
         openButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -387,76 +647,78 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     }
 
     private void submitLogin() {
-        String serverUrl = validatedServerUrl();
+        final String serverUrl = validatedServerUrl();
         if (serverUrl == null) {
             return;
         }
 
-        String username = usernameInput.getText().toString().trim();
-        String password = passwordInput.getText().toString();
+        final String username = usernameInput.getText().toString().trim();
+        final String password = passwordInput.getText().toString();
         if (TextUtils.isEmpty(username)) {
             showLocalError("请输入 Jellyfin 用户名。");
             usernameInput.requestFocus();
             return;
         }
 
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("serverUrl", serverUrl);
-            payload.put("username", username);
-            payload.put("password", password);
-            AirApi.ins().onCommandRespToUnity(LOGIN_MESSAGE_TYPE, payload.toString());
+        final int generation = beginNativeOperation(
+                "native_connecting",
+                "正在验证服务器与账户…",
+                serverUrl,
+                username);
+        passwordInput.getText().clear();
+        hideKeyboard();
 
-            latestServerUrl = serverUrl;
-            latestUsername = username;
-            latestState = "connecting";
-            latestMessage = "正在验证服务器与用户…";
-            latestIsError = false;
-            latestQuickConnectCode = "";
-            applyCompanionState();
-        } catch (Exception ignored) {
-            showLocalError("登录信息发送失败，请确认 Unity 与眼镜连接后重试。");
-        } finally {
-            passwordInput.getText().clear();
-        }
+        Thread worker = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    JSONObject session = authenticateByPassword(
+                            serverUrl,
+                            username,
+                            password);
+                    finishNativeAuthentication(generation, session);
+                } catch (Exception exception) {
+                    finishNativeAuthenticationError(generation, exception);
+                }
+            }
+        }, "Jellyfin-Native-Login");
+        worker.start();
     }
 
     private void submitQuickConnect() {
-        String serverUrl = validatedServerUrl();
+        final String serverUrl = validatedServerUrl();
         if (serverUrl == null) {
             return;
         }
 
-        try {
-            JSONObject payload = new JSONObject();
-            payload.put("serverUrl", serverUrl);
-            AirApi.ins().onCommandRespToUnity(
-                    QUICK_CONNECT_MESSAGE_TYPE,
-                    payload.toString());
+        final int generation = beginNativeOperation(
+                "native_connecting",
+                "正在向 Jellyfin 申请快速登录码…",
+                serverUrl,
+                "");
+        hideKeyboard();
 
-            latestServerUrl = serverUrl;
-            latestState = "connecting";
-            latestMessage = "正在向 Jellyfin 申请快速登录码…";
-            latestIsError = false;
-            latestQuickConnectCode = "";
-            applyCompanionState();
-        } catch (Exception ignored) {
-            showLocalError("快速登录请求发送失败，请确认 Unity 与眼镜连接后重试。");
-        }
+        Thread worker = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    runNativeQuickConnect(generation, serverUrl);
+                } catch (Exception exception) {
+                    finishNativeAuthenticationError(generation, exception);
+                }
+            }
+        }, "Jellyfin-Native-QuickConnect");
+        worker.start();
     }
 
     private void cancelQuickConnect() {
-        try {
-            AirApi.ins().onCommandRespToUnity(
-                    CANCEL_QUICK_CONNECT_MESSAGE_TYPE,
-                    "{}");
-            latestState = "connecting";
-            latestMessage = "正在取消快速登录…";
-            latestIsError = false;
-            applyCompanionState();
-        } catch (Exception ignored) {
-            showLocalError("无法取消快速登录，请重新启动应用。");
-        }
+        authenticationGeneration++;
+        nativeOperationRunning = false;
+        latestState = "login_required";
+        latestMessage = "已取消快速登录，你可以重新申请或使用账户密码。";
+        latestIsError = false;
+        latestQuickConnectCode = "";
+        applyCompanionState();
     }
 
     private String validatedServerUrl() {
@@ -466,16 +728,459 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             serverInput.requestFocus();
             return null;
         }
-        if (!serverUrl.startsWith("http://") && !serverUrl.startsWith("https://")) {
-            showLocalError("服务器地址需要以 http:// 或 https:// 开头。");
+        try {
+            serverUrl = normalizeServerUrl(serverUrl);
+        } catch (Exception exception) {
+            showLocalError("请输入有效的 Jellyfin 地址，例如 192.168.1.20:8096。");
             serverInput.requestFocus();
             return null;
         }
+        serverInput.setText(serverUrl);
+        serverInput.setSelection(serverInput.length());
         return serverUrl;
     }
 
+    private int beginNativeOperation(
+            String state,
+            String message,
+            String serverUrl,
+            String username) {
+        int generation = ++authenticationGeneration;
+        nativeOperationRunning = true;
+        latestState = state;
+        latestMessage = message;
+        latestIsError = false;
+        latestServerUrl = serverUrl;
+        latestUsername = username == null ? "" : username;
+        latestQuickConnectCode = "";
+        getCompanionPreferences().edit()
+                .putString(PREF_SERVER_URL, latestServerUrl)
+                .putString(PREF_USERNAME, latestUsername)
+                .apply();
+        applyCompanionState();
+        return generation;
+    }
+
+    private JSONObject authenticateByPassword(
+            String serverUrl,
+            String username,
+            String password) throws Exception {
+        JSONObject publicInfo = requestJson(
+                "GET",
+                serverUrl + "/System/Info/Public",
+                null);
+        JSONObject request = new JSONObject();
+        request.put("Username", username);
+        request.put("Pw", password == null ? "" : password);
+        JSONObject authentication = requestJson(
+                "POST",
+                serverUrl + "/Users/AuthenticateByName",
+                request);
+        return createSessionJson(serverUrl, publicInfo, authentication);
+    }
+
+    private void runNativeQuickConnect(int generation, String serverUrl) throws Exception {
+        String enabled = requestText(
+                "GET",
+                serverUrl + "/QuickConnect/Enabled",
+                null);
+        if (!"true".equalsIgnoreCase(enabled.trim())) {
+            throw new CompanionHttpException(
+                    400,
+                    "此 Jellyfin 服务器未启用快速连接，请使用账户密码登录。");
+        }
+
+        JSONObject publicInfo = requestJson(
+                "GET",
+                serverUrl + "/System/Info/Public",
+                null);
+        JSONObject quickConnect = requestJson(
+                "POST",
+                serverUrl + "/QuickConnect/Initiate",
+                null);
+        final String secret = quickConnect.optString("Secret", "").trim();
+        final String code = quickConnect.optString("Code", "").trim();
+        if (TextUtils.isEmpty(secret) || TextUtils.isEmpty(code)) {
+            throw new CompanionHttpException(0, "服务器没有返回有效的快速登录码。");
+        }
+
+        postQuickConnectCode(generation, code);
+        long deadline = SystemClock.elapsedRealtime() + QUICK_CONNECT_TIMEOUT_MS;
+        boolean authenticated = quickConnect.optBoolean("Authenticated", false);
+        while (generation == authenticationGeneration
+                && !authenticated
+                && SystemClock.elapsedRealtime() < deadline) {
+            SystemClock.sleep(QUICK_CONNECT_POLL_MS);
+            if (generation != authenticationGeneration) {
+                return;
+            }
+            JSONObject state = requestJson(
+                    "GET",
+                    serverUrl + "/QuickConnect/Connect?secret=" + Uri.encode(secret),
+                    null);
+            authenticated = state.optBoolean("Authenticated", false);
+        }
+
+        if (generation != authenticationGeneration) {
+            return;
+        }
+        if (!authenticated) {
+            throw new CompanionHttpException(408, "快速登录码已过期，请重新申请。");
+        }
+
+        JSONObject request = new JSONObject();
+        request.put("Secret", secret);
+        JSONObject authentication = requestJson(
+                "POST",
+                serverUrl + "/Users/AuthenticateWithQuickConnect",
+                request);
+        JSONObject session = createSessionJson(serverUrl, publicInfo, authentication);
+        finishNativeAuthentication(generation, session);
+    }
+
+    private void postQuickConnectCode(final int generation, final String code) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (generation != authenticationGeneration || isFinishing()) {
+                    return;
+                }
+                latestState = "quick_connect_waiting";
+                latestMessage = "请在 Jellyfin App 或网页中确认此登录码。";
+                latestQuickConnectCode = code;
+                latestIsError = false;
+                applyCompanionState();
+            }
+        });
+    }
+
+    private JSONObject createSessionJson(
+            String serverUrl,
+            JSONObject publicInfo,
+            JSONObject authentication) throws Exception {
+        JSONObject user = authentication.optJSONObject("User");
+        String accessToken = authentication.optString("AccessToken", "").trim();
+        String userId = user == null ? "" : user.optString("Id", "").trim();
+        if (TextUtils.isEmpty(accessToken) || TextUtils.isEmpty(userId)) {
+            throw new CompanionHttpException(0, "服务器没有返回有效的 Jellyfin 会话。");
+        }
+
+        JSONObject session = new JSONObject();
+        session.put("serverUrl", serverUrl);
+        session.put("serverName", publicInfo.optString("ServerName", ""));
+        session.put("serverVersion", publicInfo.optString("Version", ""));
+        session.put(
+                "serverId",
+                firstNonEmpty(
+                        authentication.optString("ServerId", ""),
+                        publicInfo.optString("Id", "")));
+        session.put("accessToken", accessToken);
+        session.put("userId", userId);
+        session.put("userName", user == null ? "" : user.optString("Name", ""));
+        session.put("deviceId", getOrCreateDeviceId());
+        session.put("createdAt", System.currentTimeMillis());
+        return session;
+    }
+
+    private void finishNativeAuthentication(
+            final int generation,
+            final JSONObject session) {
+        if (generation != authenticationGeneration || session == null) {
+            return;
+        }
+
+        getCompanionPreferences().edit()
+                .putString(PREF_SESSION_JSON, session.toString())
+                .putString(PREF_SERVER_URL, session.optString("serverUrl", ""))
+                .putString(PREF_USERNAME, session.optString("userName", ""))
+                .apply();
+
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (generation != authenticationGeneration || isFinishing()) {
+                    return;
+                }
+                nativeOperationRunning = false;
+                latestState = "session_ready";
+                latestServerUrl = session.optString("serverUrl", "");
+                latestUsername = session.optString("userName", "");
+                latestQuickConnectCode = "";
+                latestIsError = false;
+                latestMessage = "Jellyfin 配置已保存。请连接 RayNeo Air 以浏览和播放。";
+                applyCompanionState();
+            }
+        });
+    }
+
+    private void finishNativeAuthenticationError(
+            final int generation,
+            final Exception exception) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (generation != authenticationGeneration || isFinishing()) {
+                    return;
+                }
+                nativeOperationRunning = false;
+                latestState = "login_required";
+                latestQuickConnectCode = "";
+                latestIsError = true;
+                latestMessage = friendlyAuthenticationError(exception);
+                applyCompanionState();
+            }
+        });
+    }
+
+    private String requestText(
+            String method,
+            String endpoint,
+            JSONObject body) throws Exception {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(endpoint).openConnection();
+            connection.setRequestMethod(method);
+            connection.setConnectTimeout(HTTP_TIMEOUT_MS);
+            connection.setReadTimeout(HTTP_TIMEOUT_MS);
+            connection.setUseCaches(false);
+            connection.setRequestProperty("Accept", "application/json");
+            String authorization = buildAuthorizationHeader();
+            connection.setRequestProperty("Authorization", authorization);
+            connection.setRequestProperty("X-Emby-Authorization", authorization);
+
+            if (body != null) {
+                byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
+                connection.setDoOutput(true);
+                connection.setFixedLengthStreamingMode(payload.length);
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                OutputStream output = connection.getOutputStream();
+                try {
+                    output.write(payload);
+                    output.flush();
+                } finally {
+                    output.close();
+                }
+            }
+
+            int statusCode = connection.getResponseCode();
+            InputStream stream = statusCode >= 200 && statusCode < 300
+                    ? connection.getInputStream()
+                    : connection.getErrorStream();
+            String response = readStream(stream);
+            if (statusCode < 200 || statusCode >= 300) {
+                throw new CompanionHttpException(statusCode, response);
+            }
+            return response;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    private JSONObject requestJson(
+            String method,
+            String endpoint,
+            JSONObject body) throws Exception {
+        String response = requestText(method, endpoint, body);
+        if (TextUtils.isEmpty(response)) {
+            return new JSONObject();
+        }
+        return new JSONObject(response);
+    }
+
+    private String readStream(InputStream stream) throws Exception {
+        if (stream == null) {
+            return "";
+        }
+        BufferedReader reader = new BufferedReader(
+                new InputStreamReader(stream, StandardCharsets.UTF_8));
+        try {
+            StringBuilder builder = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                builder.append(line);
+            }
+            return builder.toString();
+        } finally {
+            reader.close();
+        }
+    }
+
+    private String buildAuthorizationHeader() {
+        return "MediaBrowser Client=\"Jellyfin for RayNeo\", Device=\""
+                + headerSafe(Build.MODEL)
+                + "\", DeviceId=\""
+                + headerSafe(getOrCreateDeviceId())
+                + "\", Version=\"0.1.0\"";
+    }
+
+    private String headerSafe(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "").replace("\"", "").replace("\n", "").replace("\r", "");
+    }
+
+    private String normalizeServerUrl(String value) throws Exception {
+        String candidate = value.trim();
+        if (!candidate.regionMatches(true, 0, "http://", 0, 7)
+                && !candidate.regionMatches(true, 0, "https://", 0, 8)) {
+            candidate = "http://" + candidate;
+        }
+
+        URI uri = new URI(candidate);
+        String scheme = uri.getScheme();
+        if (TextUtils.isEmpty(scheme)
+                || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))
+                || TextUtils.isEmpty(uri.getHost())
+                || !TextUtils.isEmpty(uri.getUserInfo())
+                || !TextUtils.isEmpty(uri.getRawQuery())
+                || !TextUtils.isEmpty(uri.getRawFragment())) {
+            throw new IllegalArgumentException("Invalid Jellyfin server URL");
+        }
+
+        String path = uri.getRawPath();
+        path = path == null ? "" : path;
+        while (path.endsWith("/") && path.length() > 0) {
+            path = path.substring(0, path.length() - 1);
+        }
+        return scheme.toLowerCase(Locale.US) + "://" + uri.getRawAuthority() + path;
+    }
+
+    private String friendlyAuthenticationError(Exception exception) {
+        if (exception instanceof CompanionHttpException) {
+            int statusCode = ((CompanionHttpException) exception).statusCode;
+            String detail = ((CompanionHttpException) exception).response;
+            if (statusCode == 401 || statusCode == 403) {
+                return "用户名或密码不正确，请检查后重试。";
+            }
+            if (statusCode == 404) {
+                return "服务器不支持此登录方式，请检查地址或改用账户密码。";
+            }
+            if (statusCode == 408) {
+                return TextUtils.isEmpty(detail) ? "请求已超时，请重试。" : detail;
+            }
+            if (!TextUtils.isEmpty(detail) && detail.length() < 120) {
+                return detail;
+            }
+            return "Jellyfin 请求失败（HTTP " + statusCode + "），请检查服务器。";
+        }
+        if (exception instanceof SocketTimeoutException) {
+            return "连接 Jellyfin 超时，请确认手机与服务器在同一网络。";
+        }
+        if (exception instanceof UnknownHostException) {
+            return "找不到 Jellyfin 服务器，请检查地址。";
+        }
+        if (exception instanceof ConnectException) {
+            return "无法连接 Jellyfin，请检查地址、端口和局域网。";
+        }
+        if (exception instanceof SSLException) {
+            return "HTTPS 证书验证失败，请检查服务器证书。";
+        }
+        return "Jellyfin 登录失败，请检查服务器地址后重试。";
+    }
+
+    private String getOrCreateDeviceId() {
+        SharedPreferences preferences = getCompanionPreferences();
+        String existing = preferences.getString(PREF_DEVICE_ID, "");
+        if (!TextUtils.isEmpty(existing)) {
+            return existing;
+        }
+        String created = UUID.randomUUID().toString().replace("-", "");
+        preferences.edit().putString(PREF_DEVICE_ID, created).apply();
+        return created;
+    }
+
+    private SharedPreferences getCompanionPreferences() {
+        return getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    public String getPendingSessionJson() {
+        return getCompanionPreferences().getString(PREF_SESSION_JSON, "");
+    }
+
+    public void clearNativeSession() {
+        authenticationGeneration++;
+        nativeOperationRunning = false;
+        getCompanionPreferences().edit().remove(PREF_SESSION_JSON).apply();
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                latestState = "login_required";
+                latestMessage = "Jellyfin 配置已清除，请重新选择服务器并登录。";
+                latestIsError = false;
+                latestQuickConnectCode = "";
+                automaticDiscoveryStarted = false;
+                if (companionOverlay != null) {
+                    applyCompanionState();
+                }
+            }
+        });
+    }
+
+    private void restoreNativeState() {
+        SharedPreferences preferences = getCompanionPreferences();
+        latestServerUrl = preferences.getString(PREF_SERVER_URL, "");
+        latestUsername = preferences.getString(PREF_USERNAME, "");
+        String sessionText = preferences.getString(PREF_SESSION_JSON, "");
+        if (isValidNativeSession(sessionText)) {
+            try {
+                JSONObject session = new JSONObject(sessionText);
+                latestServerUrl = session.optString("serverUrl", latestServerUrl);
+                latestUsername = session.optString("userName", latestUsername);
+            } catch (Exception ignored) {
+            }
+            latestState = "session_ready";
+            latestMessage = "Jellyfin 配置已保存。请连接 RayNeo Air 以浏览和播放。";
+        } else if (!TextUtils.isEmpty(sessionText)) {
+            preferences.edit().remove(PREF_SESSION_JSON).apply();
+        }
+    }
+
+    private boolean hasNativeSession() {
+        return isValidNativeSession(getPendingSessionJson());
+    }
+
+    private boolean isValidNativeSession(String value) {
+        if (TextUtils.isEmpty(value)) {
+            return false;
+        }
+        try {
+            JSONObject session = new JSONObject(value);
+            return isUsableServerValue(session.optString("serverUrl", ""))
+                    && !TextUtils.isEmpty(session.optString("accessToken", ""))
+                    && !TextUtils.isEmpty(session.optString("userId", ""))
+                    && !TextUtils.isEmpty(session.optString("deviceId", ""));
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private boolean isUsableServerValue(String value) {
+        return !TextUtils.isEmpty(value)
+                && !"http://".equalsIgnoreCase(value.trim())
+                && !"https://".equalsIgnoreCase(value.trim());
+    }
+
+    private void openRayNeoManager() {
+        Intent launchIntent = getPackageManager().getLaunchIntentForPackage(
+                "com.tcl.xrmanager.main");
+        if (launchIntent != null) {
+            try {
+                startActivity(launchIntent);
+                return;
+            } catch (Exception ignored) {
+            }
+        }
+        Toast.makeText(
+                this,
+                "请连接 RayNeo Air，并在系统提示中允许眼镜访问。",
+                Toast.LENGTH_LONG).show();
+    }
+
     private void discoverServers() {
-        if (!"login_required".equals(latestState)) {
+        if (nativeOperationRunning || hasNativeSession()) {
             return;
         }
 
@@ -577,7 +1282,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 if (generation != discoveryGeneration || isFinishing()) {
                     return;
                 }
-                discoverButton.setEnabled("login_required".equals(latestState));
+                discoverButton.setEnabled(!nativeOperationRunning && !hasNativeSession());
                 discoverButton.setText("重新发现");
                 renderDiscoveredServers(results, scanFailure);
             }
@@ -740,66 +1445,93 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             return;
         }
 
-        boolean ready = "ready".equals(latestState);
-        boolean canEdit = "login_required".equals(latestState);
+        boolean libraryReady = "ready".equals(latestState);
+        boolean sessionAvailable = libraryReady
+                || "session_ready".equals(latestState)
+                || hasNativeSession();
         boolean waitingForQuickConnect = "quick_connect_waiting".equals(latestState)
                 && !TextUtils.isEmpty(latestQuickConnectCode);
+        boolean busy = nativeOperationRunning
+                || "native_connecting".equals(latestState)
+                || "connecting".equals(latestState);
 
-        companionOverlay.setVisibility(ready ? View.GONE : View.VISIBLE);
-        if (ready) {
+        companionOverlay.setVisibility(View.VISIBLE);
+        loginForm.setVisibility(sessionAvailable ? View.GONE : View.VISIBLE);
+        sessionPanel.setVisibility(sessionAvailable ? View.VISIBLE : View.GONE);
+
+        connectionBadge.setText(glassesConnected ? "眼镜已连接" : "手机配置");
+        glassesStatusText.setText(glassesConnected ? "●  已连接眼镜" : "●  未连接眼镜");
+        glassesStatusText.setTextColor(glassesConnected ? COLOR_SUCCESS : COLOR_ERROR);
+        glassesDescriptionText.setText(glassesConnected
+                ? "RayNeo Air 已连接，媒体库操作将在眼镜中显示。"
+                : "请连接眼镜以浏览海报墙和播放视频。Jellyfin 配置仍可在下方完成。");
+        connectGlassesButton.setText(glassesConnected ? "眼镜已连接" : "请连接眼镜");
+        connectGlassesButton.setEnabled(!glassesConnected);
+        connectGlassesButton.setAlpha(glassesConnected ? 0.68f : 1f);
+
+        if (sessionAvailable) {
             cancelDiscovery();
             passwordInput.getText().clear();
             hideKeyboard();
-            return;
-        }
-
-        setControlsEnabled(canEdit);
-        quickConnectPanel.setVisibility(waitingForQuickConnect ? View.VISIBLE : View.GONE);
-        quickConnectButton.setVisibility(waitingForQuickConnect ? View.GONE : View.VISIBLE);
-        manualLoginContainer.setVisibility(waitingForQuickConnect ? View.GONE : View.VISIBLE);
-        if (waitingForQuickConnect) {
-            quickConnectCodeText.setText(formatQuickConnectCode(latestQuickConnectCode));
-        }
-
-        if (!canEdit) {
-            discoveredServersContainer.setVisibility(View.GONE);
-            discoveryStatusText.setVisibility(View.GONE);
-        }
-
-        if (canEdit && !TextUtils.isEmpty(latestServerUrl)) {
-            serverInput.setText(latestServerUrl);
-            serverInput.setSelection(serverInput.length());
-        }
-        if (canEdit && latestUsername != null) {
-            usernameInput.setText(latestUsername);
-            usernameInput.setSelection(usernameInput.length());
-        }
-
-        if ("connecting".equals(latestState)) {
-            connectButton.setText("正在连接…");
-            quickConnectButton.setText("正在申请登录码…");
-        } else if ("initializing".equals(latestState)) {
-            connectButton.setText("正在启动…");
-            quickConnectButton.setText("正在启动…");
-        } else if ("offline".equals(latestState)) {
-            connectButton.setText("Unity 尚未运行");
-            quickConnectButton.setText("Unity 尚未运行");
+            boolean mediaVisible = glassesConnected && libraryReady;
+            sessionTitleText.setText(mediaVisible ? "媒体库已在眼镜中打开" : "Jellyfin 已配置");
+            String user = TextUtils.isEmpty(latestUsername) ? "Jellyfin 用户" : latestUsername;
+            String server = TextUtils.isEmpty(latestServerUrl) ? "Jellyfin 服务器" : latestServerUrl;
+            if (mediaVisible) {
+                sessionDetailText.setText(user + " · " + server);
+            } else if (glassesConnected) {
+                sessionDetailText.setText(
+                        user + " · " + server + "\n眼镜已连接，媒体库正在同步。");
+            } else {
+                sessionDetailText.setText(
+                        user + " · " + server + "\n连接 RayNeo Air 后会自动同步媒体库。");
+            }
         } else {
-            connectButton.setText("连接并在眼镜中打开");
-            quickConnectButton.setText("使用 Jellyfin 快速登录");
+            setControlsEnabled(!busy && !waitingForQuickConnect);
+            quickConnectPanel.setVisibility(waitingForQuickConnect ? View.VISIBLE : View.GONE);
+            quickConnectButton.setVisibility(waitingForQuickConnect ? View.GONE : View.VISIBLE);
+            manualLoginContainer.setVisibility(waitingForQuickConnect ? View.GONE : View.VISIBLE);
+            if (waitingForQuickConnect) {
+                quickConnectCodeText.setText(formatQuickConnectCode(latestQuickConnectCode));
+            }
+
+            if (isUsableServerValue(latestServerUrl)
+                    && !latestServerUrl.equals(serverInput.getText().toString().trim())) {
+                serverInput.setText(latestServerUrl);
+                serverInput.setSelection(serverInput.length());
+            }
+            if (!TextUtils.isEmpty(latestUsername)
+                    && !latestUsername.equals(usernameInput.getText().toString())) {
+                usernameInput.setText(latestUsername);
+                usernameInput.setSelection(usernameInput.length());
+            }
+
+            if (busy) {
+                connectButton.setText("正在登录…");
+                quickConnectButton.setText("正在申请登录码…");
+            } else {
+                connectButton.setText("登录 Jellyfin");
+                quickConnectButton.setText("使用 Jellyfin 快速登录");
+            }
         }
 
-        statusText.setText(TextUtils.isEmpty(latestMessage)
+        String visibleMessage = TextUtils.isEmpty(latestMessage)
                 ? defaultMessageForState(latestState)
-                : latestMessage);
+                : latestMessage;
+        if (libraryReady) {
+            visibleMessage = glassesConnected
+                    ? "Jellyfin 已连接，媒体库正在眼镜中显示。"
+                    : "Jellyfin 已配置。请连接 RayNeo Air 以浏览和播放。";
+        }
+        statusText.setText(visibleMessage);
         statusText.setTextColor(latestIsError ? COLOR_ERROR : COLOR_SECONDARY);
 
-        if (canEdit && !automaticDiscoveryStarted) {
+        if (!sessionAvailable && !busy && !automaticDiscoveryStarted) {
             automaticDiscoveryStarted = true;
             serverInput.post(new Runnable() {
                 @Override
                 public void run() {
-                    if ("login_required".equals(latestState)) {
+                    if (!nativeOperationRunning && !hasNativeSession()) {
                         discoverServers();
                     }
                 }
@@ -814,13 +1546,30 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         usernameInput.setEnabled(enabled);
         passwordInput.setEnabled(enabled);
         connectButton.setEnabled(enabled);
-        float alpha = enabled ? 1f : 0.62f;
+        float alpha = enabled ? 1f : 0.72f;
         serverInput.setAlpha(alpha);
         discoverButton.setAlpha(alpha);
         quickConnectButton.setAlpha(alpha);
         usernameInput.setAlpha(alpha);
         passwordInput.setAlpha(alpha);
         connectButton.setAlpha(alpha);
+    }
+
+    private boolean hasConnectedRayNeoDisplay() {
+        return DisplayUtil.checkTCLGlasses(this) != null;
+    }
+
+    private void refreshGlassesConnectionState() {
+        final boolean connected = hasConnectedRayNeoDisplay();
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                glassesConnected = connected;
+                if (companionOverlay != null && !isFinishing()) {
+                    applyCompanionState();
+                }
+            }
+        });
     }
 
     private void copyQuickConnectCode() {
@@ -864,16 +1613,16 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         if ("quick_connect_waiting".equals(state)) {
             return "等待 Jellyfin 授权快速登录码…";
         }
-        if ("connecting".equals(state)) {
+        if ("connecting".equals(state) || "native_connecting".equals(state)) {
             return "正在连接 Jellyfin…";
         }
-        if ("initializing".equals(state)) {
-            return "正在启动 Jellyfin 客户端…";
+        if ("session_ready".equals(state)) {
+            return "Jellyfin 配置已保存，请连接 RayNeo Air。";
         }
-        if ("offline".equals(state)) {
-            return "Unity 尚未运行，请重新启动应用。";
+        if ("initializing".equals(state) || "offline".equals(state)) {
+            return "未连接眼镜；你可以先完成 Jellyfin 配置。";
         }
-        return "请选择服务器，然后使用快速登录或帐号密码。";
+        return "请选择服务器，然后使用快速登录或账户密码。";
     }
 
     private String formatQuickConnectCode(String code) {
@@ -904,12 +1653,15 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private EditText createInput(String hint) {
         EditText input = new EditText(this);
         input.setSingleLine(true);
+        input.setFocusable(true);
+        input.setFocusableInTouchMode(true);
+        input.setCursorVisible(true);
         input.setHint(hint);
         input.setHintTextColor(Color.rgb(115, 123, 150));
         input.setTextColor(COLOR_PRIMARY);
         input.setTextSize(16);
         input.setPadding(dp(16), 0, dp(16), 0);
-        input.setBackground(rounded(COLOR_FIELD, 13));
+        input.setBackground(roundedWithStroke(COLOR_FIELD, COLOR_BORDER, 14));
         return input;
     }
 
@@ -945,6 +1697,46 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         drawable.setColor(color);
         drawable.setCornerRadius(dp(radiusDp));
         return drawable;
+    }
+
+    private GradientDrawable roundedWithStroke(
+            int color,
+            int strokeColor,
+            int radiusDp) {
+        GradientDrawable drawable = rounded(color, radiusDp);
+        drawable.setStroke(dp(1), strokeColor);
+        return drawable;
+    }
+
+    private GradientDrawable backgroundGradient() {
+        GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[] { COLOR_BACKGROUND_TOP, COLOR_BACKGROUND_BOTTOM });
+        drawable.setGradientType(GradientDrawable.LINEAR_GRADIENT);
+        return drawable;
+    }
+
+    private GradientDrawable accentGradient(int radiusDp) {
+        GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                new int[] { COLOR_ACCENT, COLOR_ACCENT_END });
+        drawable.setCornerRadius(dp(radiusDp));
+        return drawable;
+    }
+
+    private GradientDrawable connectionCardGradient() {
+        GradientDrawable drawable = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[] { Color.rgb(24, 66, 70), COLOR_SURFACE });
+        drawable.setCornerRadius(dp(24));
+        drawable.setStroke(dp(1), Color.rgb(54, 104, 105));
+        return drawable;
+    }
+
+    private LinearLayout.LayoutParams wrapWrap() {
+        return new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     private LinearLayout.LayoutParams matchWrap(int bottomMargin) {
@@ -989,6 +1781,17 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             this.name = name;
             this.address = address;
             this.id = id;
+        }
+    }
+
+    private static final class CompanionHttpException extends Exception {
+        final int statusCode;
+        final String response;
+
+        CompanionHttpException(int statusCode, String response) {
+            super("HTTP " + statusCode);
+            this.statusCode = statusCode;
+            this.response = response == null ? "" : response.trim();
         }
     }
 }

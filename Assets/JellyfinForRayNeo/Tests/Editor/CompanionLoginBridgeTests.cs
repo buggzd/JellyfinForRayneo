@@ -14,6 +14,19 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [Test]
+        public void Project_UsesSingleLegacyInputBackendOnAndroid()
+        {
+            UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(
+                "ProjectSettings/ProjectSettings.asset");
+            Assert.IsNotEmpty(assets);
+
+            SerializedObject settings = new SerializedObject(assets[0]);
+            SerializedProperty inputHandler = settings.FindProperty("activeInputHandler");
+            Assert.NotNull(inputHandler);
+            Assert.AreEqual(0, inputHandler.intValue);
+        }
+
+        [Test]
         public void ValidNativePayload_ParsesLoginRequest()
         {
             const string payload =
@@ -68,6 +81,45 @@ namespace JellyfinForRayNeo.Tests
                 "{\"serverUrl\":\"\"}",
                 out request,
                 out validationMessage));
+            Assert.IsNull(request);
+            Assert.IsNotEmpty(validationMessage);
+        }
+
+        [Test]
+        public void NativeSessionPayload_ImportsTokenWithoutPassword()
+        {
+            const string payload =
+                "{\"serverUrl\":\"http://server:8096\",\"serverName\":\"Living Room\"," +
+                "\"serverVersion\":\"10.10.7\",\"serverId\":\"server-id\"," +
+                "\"accessToken\":\"token\",\"userId\":\"user-id\"," +
+                "\"userName\":\"alice\",\"deviceId\":\"phone-id\"}";
+
+            bool parsed = CompanionLoginBridge.TryParseSessionPayload(
+                payload,
+                out CompanionSessionRequest request,
+                out string validationMessage);
+
+            Assert.IsTrue(parsed, validationMessage);
+            Assert.NotNull(request);
+            JellyfinSession session = request.ToSession();
+            Assert.IsTrue(session.IsValid);
+            Assert.AreEqual("http://server:8096", session.ServerUrl);
+            Assert.AreEqual("token", session.AccessToken);
+            Assert.AreEqual("alice", session.UserName);
+            Assert.IsNull(typeof(CompanionSessionRequest).GetProperty("Password"));
+        }
+
+        [Test]
+        public void NativeSessionPayload_RejectsMissingToken()
+        {
+            const string payload =
+                "{\"serverUrl\":\"http://server:8096\",\"userId\":\"user-id\"," +
+                "\"deviceId\":\"phone-id\"}";
+
+            Assert.IsFalse(CompanionLoginBridge.TryParseSessionPayload(
+                payload,
+                out CompanionSessionRequest request,
+                out string validationMessage));
             Assert.IsNull(request);
             Assert.IsNotEmpty(validationMessage);
         }

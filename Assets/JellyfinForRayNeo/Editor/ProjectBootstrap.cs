@@ -28,8 +28,32 @@ namespace JellyfinForRayNeo.Editor
             Debug.Log("Jellyfin for RayNeo project configuration completed.");
         }
 
+        [MenuItem("Jellyfin for RayNeo/Configure Android Input")]
+        public static void ConfigureAndroidInput()
+        {
+            UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(
+                "ProjectSettings/ProjectSettings.asset");
+            if (assets == null || assets.Length == 0)
+            {
+                throw new InvalidOperationException("Unity PlayerSettings asset could not be loaded.");
+            }
+
+            SerializedObject settings = new SerializedObject(assets[0]);
+            SerializedProperty inputHandler = settings.FindProperty("activeInputHandler");
+            if (inputHandler == null)
+            {
+                throw new InvalidOperationException("Unity active input handler setting was not found.");
+            }
+
+            inputHandler.intValue = 0;
+            settings.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.SaveAssets();
+            Debug.Log("Android input configured for the legacy Input Manager.");
+        }
+
         private static void ConfigurePlayerSettings()
         {
+            ConfigureAndroidInput();
             PlayerSettings.companyName = "JellyfinForRayNeo";
             PlayerSettings.productName = "Jellyfin for RayNeo";
             PlayerSettings.bundleVersion = AppConstants.ClientVersion;

@@ -56,6 +56,7 @@ namespace JellyfinForRayNeo
             _companionBridge.LoginRequested += HandleCompanionLoginRequested;
             _companionBridge.QuickConnectRequested += HandleCompanionQuickConnectRequested;
             _companionBridge.QuickConnectCancelRequested += HandleCompanionQuickConnectCancelRequested;
+            _companionBridge.SessionAvailable += HandleCompanionSessionAvailable;
             _companionBridge.PublishState(
                 CompanionLoginState.Initializing,
                 "正在启动 Jellyfin 客户端…",
@@ -124,6 +125,7 @@ namespace JellyfinForRayNeo
             {
                 _sessionStore.ClearSession();
                 _api.ClearSession();
+                _companionBridge.ClearNativeSession();
                 ShowLogin("登录会话已失效，请重新输入密码。", true);
             }
             catch (Exception exception)
@@ -210,6 +212,75 @@ namespace JellyfinForRayNeo
                 false,
                 _pendingServerUrl,
                 _pendingUserName);
+        }
+
+        private void HandleCompanionSessionAvailable(CompanionSessionRequest request)
+        {
+            if (request == null || _api == null || _sessionStore == null)
+            {
+                return;
+            }
+
+            JellyfinSession session = request.ToSession();
+            JellyfinSession current = _api.Session;
+            if (current != null
+                && string.Equals(
+                    current.AccessToken,
+                    session.AccessToken,
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            AdoptCompanionSessionAsync(session).Forget(HandleFatalError);
+        }
+
+        private async Task AdoptCompanionSessionAsync(JellyfinSession session)
+        {
+            _loginInProgress = true;
+            _pendingServerUrl = session.ServerUrl;
+            _pendingUserName = session.UserName ?? string.Empty;
+            CancellationToken token = BeginOperation();
+            _loginView.SetBusy(true);
+            _loginView.SetMessage("手机端已登录，正在同步媒体库…", false);
+            _companionBridge.PublishState(
+                CompanionLoginState.Connecting,
+                "登录成功，正在为眼镜同步媒体库…",
+                false,
+                session.ServerUrl,
+                session.UserName);
+            ShowLoading(true, "正在同步海报墙与观看记录…");
+
+            try
+            {
+                _api.SetSession(session);
+                _sessionStore.Save(session);
+                await LoadHomeAsync(session, token);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (JellyfinApiException exception) when (exception.IsUnauthorized)
+            {
+                _sessionStore.ClearSession();
+                _api.ClearSession();
+                _companionBridge.ClearNativeSession();
+                ShowLogin("手机端会话已失效，请重新登录。", true, session.ServerUrl, session.UserName);
+            }
+            catch (Exception exception)
+            {
+                ShowLogin(
+                    "手机已登录，但媒体库同步失败：" + UserMessage(exception),
+                    true,
+                    session.ServerUrl,
+                    session.UserName);
+            }
+            finally
+            {
+                _loginInProgress = false;
+                _loginView.SetBusy(false);
+                ShowLoading(false);
+            }
         }
 
         private async Task LoginAsync(string serverInput, string username, string password)
@@ -971,6 +1042,7 @@ namespace JellyfinForRayNeo
             CancelAndDispose(ref _detailImages);
             _sessionStore.ClearSession();
             _api.ClearSession();
+            _companionBridge.ClearNativeSession();
             _detailView.Hide();
             _homeView.Show(false);
             ShowLogin(
@@ -1065,6 +1137,7 @@ namespace JellyfinForRayNeo
                 _companionBridge.LoginRequested -= HandleCompanionLoginRequested;
                 _companionBridge.QuickConnectRequested -= HandleCompanionQuickConnectRequested;
                 _companionBridge.QuickConnectCancelRequested -= HandleCompanionQuickConnectCancelRequested;
+                _companionBridge.SessionAvailable -= HandleCompanionSessionAvailable;
                 _companionBridge.PublishState(
                     CompanionLoginState.Offline,
                     "Jellyfin 客户端已停止。",
