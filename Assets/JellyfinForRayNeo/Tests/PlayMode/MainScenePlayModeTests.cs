@@ -318,6 +318,7 @@ namespace JellyfinForRayNeo.Tests
                     Id = "series",
                     Name = "测试剧集",
                     Type = "Series",
+                    Overview = new string('介', 220),
                     UserData = new JellyfinUserData()
                 },
                 api,
@@ -332,7 +333,7 @@ namespace JellyfinForRayNeo.Tests
             Transform viewport = FindDescendant(shelf, "Episode Viewport");
             Transform artwork = FindDescendant(shelf, "Artwork Frame");
             Button continueButton = FindDescendant(host.transform, "Continue").GetComponent<Button>();
-            Text nextEpisode = FindDescendant(host.transform, "Next Episode").GetComponent<Text>();
+            Text overview = FindDescendant(host.transform, "Overview").GetComponent<Text>();
             Assert.IsTrue(shelf.gameObject.activeInHierarchy);
             Assert.NotNull(viewport);
             AssertTransparentDragSurface(viewport);
@@ -340,8 +341,12 @@ namespace JellyfinForRayNeo.Tests
             Assert.That(
                 ((RectTransform)artwork).rect.width / ((RectTransform)artwork).rect.height,
                 Is.EqualTo(16f / 9f).Within(0.01f));
-            Assert.AreEqual("继续 S01E02", continueButton.GetComponentInChildren<Text>().text);
-            StringAssert.Contains("S01E02", nextEpisode.text);
+            Assert.AreEqual("继续 S1E2 · 第二集", continueButton.GetComponentInChildren<Text>().text);
+            Assert.AreEqual("Hero Information", overview.transform.parent.name);
+            Assert.AreEqual(VerticalWrapMode.Truncate, overview.verticalOverflow);
+            StringAssert.EndsWith("…", overview.text);
+            Assert.LessOrEqual(overview.text.Length, 150);
+            Assert.IsNull(FindDescendant(host.transform, "Next Episode"));
             Assert.IsNull(FindDescendant(host.transform, "Episodes"));
 
             AxisRoutingScrollRect episodeScroll = viewport.GetComponent<AxisRoutingScrollRect>();
@@ -398,14 +403,19 @@ namespace JellyfinForRayNeo.Tests
                 ContentSizeFitter.FitMode.PreferredSize,
                 content.GetComponent<ContentSizeFitter>().verticalFit);
             Assert.AreEqual(
-                VerticalWrapMode.Overflow,
+                VerticalWrapMode.Truncate,
                 overview.GetComponent<Text>().verticalOverflow,
-                "Long Jellyfin summaries must grow instead of overlapping the next section.");
+                "The hero summary must stay compact like Jellyfin Web.");
+            Assert.AreEqual("Hero Information", overview.parent.name);
+            Assert.Greater(
+                overview.GetSiblingIndex(),
+                actions.GetSiblingIndex(),
+                "The compact summary must appear immediately after the playback actions.");
             Assert.IsTrue(
                 actions.GetComponent<HorizontalLayoutGroup>().childControlWidth,
                 "Action buttons must use their LayoutElement widths instead of Unity's 100 px default.");
             Assert.AreEqual(0f, actions.GetComponent<LayoutElement>().flexibleHeight);
-            Assert.AreEqual(236f, continueButton.GetComponent<LayoutElement>().preferredWidth);
+            Assert.AreEqual(420f, continueButton.GetComponent<LayoutElement>().preferredWidth);
             Assert.IsTrue(metadataChips.GetComponent<HorizontalLayoutGroup>().childControlWidth);
             Assert.AreEqual(0f, metadataChips.GetComponent<LayoutElement>().flexibleHeight);
             Assert.NotNull(FindDescendant(host.transform, "Favorite"));

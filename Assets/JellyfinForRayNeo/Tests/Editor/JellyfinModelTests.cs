@@ -111,7 +111,9 @@ namespace JellyfinForRayNeo.Tests
                 new List<JellyfinItem> { episodeThree, episodeOne, episodeTwo });
 
             Assert.AreSame(episodeTwo, selected);
-            Assert.AreEqual("S01E02", EpisodePlaybackResolver.EpisodeCode(selected));
+            Assert.AreEqual("S1E2", EpisodePlaybackResolver.EpisodeCode(selected));
+            episodeTwo.SeriesName = "测试剧集";
+            Assert.AreEqual("测试剧集  S1E2", episodeTwo.Subtitle);
         }
 
         private static JellyfinItem CreateEpisode(

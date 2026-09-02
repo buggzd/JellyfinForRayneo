@@ -22,7 +22,6 @@ namespace JellyfinForRayNeo
         private readonly Text _originalTitle;
         private readonly RectTransform _metadataChips;
         private readonly Text _tagline;
-        private readonly Text _nextEpisodeLabel;
         private readonly Text _overview;
         private readonly Image _factsCard;
         private readonly RectTransform _factsContainer;
@@ -231,15 +230,6 @@ namespace JellyfinForRayNeo
                 34f);
             _tagline.lineSpacing = 1.08f;
 
-            _nextEpisodeLabel = CreateFlowText(
-                "Next Episode",
-                heroInfo,
-                20,
-                UiTheme.AccentBright,
-                FontStyle.Bold,
-                30f);
-            _nextEpisodeLabel.gameObject.SetActive(false);
-
             RectTransform progress = UiFactory.CreateRect("Watch Progress", heroInfo);
             LayoutElement progressElement = progress.gameObject.AddComponent<LayoutElement>();
             progressElement.minHeight = 42f;
@@ -304,8 +294,11 @@ namespace JellyfinForRayNeo
                 UiTheme.Focus,
                 new Color(0.025f, 0.028f, 0.045f, 1f),
                 23);
-            ConfigureActionButton(_continueButton, 236f);
+            ConfigureActionButton(_continueButton, 420f);
             _continueLabel = _continueButton.GetComponentInChildren<Text>();
+            _continueLabel.resizeTextForBestFit = true;
+            _continueLabel.resizeTextMinSize = 18;
+            _continueLabel.resizeTextMaxSize = 23;
             _continueButton.onClick.AddListener(() => RequestPlayback(_playTarget, true));
 
             _fromStartButton = UiFactory.CreateButton(
@@ -356,19 +349,20 @@ namespace JellyfinForRayNeo
                 PlayedStateChangeRequested?.Invoke(_item, !current);
             });
 
-            _episodeShelf = new EpisodeShelfView(_content, _scroll);
-            _episodeShelf.EpisodeSelected += episode => RequestPlayback(episode, true);
-
-            Image overviewCard = CreateCard("Overview Card", _content);
-            CreateSectionHeading(overviewCard.transform, "内容简介", "STORY");
             _overview = CreateFlowText(
                 "Overview",
-                overviewCard.transform,
-                25,
-                UiTheme.TextPrimary,
+                heroInfo,
+                21,
+                new Color(0.88f, 0.89f, 0.93f, 1f),
                 FontStyle.Normal,
-                72f);
-            _overview.lineSpacing = 1.22f;
+                86f);
+            _overview.verticalOverflow = VerticalWrapMode.Truncate;
+            _overview.lineSpacing = 1.16f;
+            LayoutElement overviewElement = _overview.GetComponent<LayoutElement>();
+            overviewElement.preferredHeight = 86f;
+
+            _episodeShelf = new EpisodeShelfView(_content, _scroll);
+            _episodeShelf.EpisodeSelected += episode => RequestPlayback(episode, true);
 
             _factsCard = CreateCard("Details Card", _content);
             CreateSectionHeading(_factsCard.transform, "详细信息", "ABOUT");
@@ -447,7 +441,9 @@ namespace JellyfinForRayNeo
             _tagline.gameObject.SetActive(!string.IsNullOrWhiteSpace(tagline));
 
             string overview = item != null ? JellyfinText.ToPlainText(item.Overview) : string.Empty;
-            _overview.text = string.IsNullOrWhiteSpace(overview) ? "暂无简介。" : overview;
+            _overview.text = string.IsNullOrWhiteSpace(overview)
+                ? "暂无简介。"
+                : Condense(overview, 150);
             PopulateFacts(item);
             PopulateMediaFacts(item);
             _episodeShelf.Bind(
@@ -559,7 +555,7 @@ namespace JellyfinForRayNeo
                 if (item.ParentIndexNumber.HasValue && item.IndexNumber.HasValue)
                 {
                     values.Add(string.Format(
-                        "S{0:00} E{1:00}",
+                        "S{0} E{1}",
                         item.ParentIndexNumber.Value,
                         item.IndexNumber.Value));
                 }
@@ -755,21 +751,9 @@ namespace JellyfinForRayNeo
             _continueButton.gameObject.SetActive(playable);
             string episodeCode = EpisodePlaybackResolver.EpisodeCode(_playTarget);
             _continueLabel.text = isSeries && !string.IsNullOrWhiteSpace(episodeCode)
-                ? string.Format("{0} {1}", hasResumePosition ? "继续" : "播放", episodeCode)
+                ? BuildSeriesPlaybackLabel(hasResumePosition, _playTarget)
                 : hasResumePosition ? "继续播放" : "播放";
             _fromStartButton.gameObject.SetActive(playable && hasResumePosition);
-
-            _nextEpisodeLabel.gameObject.SetActive(isSeries);
-            if (isSeries)
-            {
-                _nextEpisodeLabel.text = playable
-                    ? string.Format(
-                        "{0} · {1} · {2}",
-                        hasResumePosition ? "继续观看" : "接下来",
-                        episodeCode,
-                        JellyfinText.ToPlainText(_playTarget.Name))
-                    : "暂未找到可播放剧集";
-            }
 
             JellyfinUserData userData = isSeries && _playTarget != null
                 ? _playTarget.UserData
@@ -934,6 +918,37 @@ namespace JellyfinForRayNeo
             element.preferredHeight = 60f;
             element.flexibleWidth = 0f;
             element.flexibleHeight = 0f;
+        }
+
+        private static string Condense(string value, int maximumLength)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return string.Empty;
+            }
+
+            string compact = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+            while (compact.Contains("  "))
+            {
+                compact = compact.Replace("  ", " ");
+            }
+            if (compact.Length <= maximumLength)
+            {
+                return compact;
+            }
+            return compact.Substring(0, Math.Max(1, maximumLength - 1)).TrimEnd() + "…";
+        }
+
+        private static string BuildSeriesPlaybackLabel(bool resume, JellyfinItem episode)
+        {
+            string action = resume ? "继续" : "播放";
+            string code = EpisodePlaybackResolver.EpisodeCode(episode);
+            string title = Condense(
+                JellyfinText.ToPlainText(episode != null ? episode.Name : null),
+                14);
+            return string.IsNullOrWhiteSpace(title)
+                ? action + " " + code
+                : string.Format("{0} {1} · {2}", action, code, title);
         }
 
         private static string BuildKindLabel(JellyfinItem item)

@@ -102,7 +102,7 @@ namespace JellyfinForRayNeo
                 {
                     if (ParentIndexNumber.HasValue && IndexNumber.HasValue)
                     {
-                        return string.Format("{0}  S{1:00}E{2:00}", SeriesName, ParentIndexNumber.Value, IndexNumber.Value);
+                        return string.Format("{0}  S{1}E{2}", SeriesName, ParentIndexNumber.Value, IndexNumber.Value);
                     }
                     return SeriesName;
                 }

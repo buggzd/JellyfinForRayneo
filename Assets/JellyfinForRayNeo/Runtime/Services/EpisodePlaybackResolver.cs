@@ -54,12 +54,12 @@ namespace JellyfinForRayNeo
             if (episode.ParentIndexNumber.HasValue && episode.IndexNumber.HasValue)
             {
                 return string.Format(
-                    "S{0:00}E{1:00}",
+                    "S{0}E{1}",
                     episode.ParentIndexNumber.Value,
                     episode.IndexNumber.Value);
             }
             return episode.IndexNumber.HasValue
-                ? "E" + episode.IndexNumber.Value.ToString("00")
+                ? "E" + episode.IndexNumber.Value
                 : "剧集";
         }
 
