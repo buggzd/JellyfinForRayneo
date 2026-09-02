@@ -38,7 +38,6 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.tcl.unity.unityadapter.DisplayUtil;
 import com.tcl.unity.unityadapter.UnityXRSupportActivity;
 
 import org.json.JSONObject;
@@ -1696,7 +1695,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     }
 
     private boolean hasConnectedRayNeoDisplay() {
-        return findExternalDisplay() != null || DisplayUtil.hasExtDisplay(this);
+        return findExternalDisplay() != null;
     }
 
     private Display findExternalDisplay() {
@@ -1708,26 +1707,45 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             return null;
         }
 
-        Display display = firstUsableExternalDisplay(
+        Display display = findBestExternalDisplay(
                 manager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION));
         if (display != null) {
             return display;
         }
-        return firstUsableExternalDisplay(manager.getDisplays());
+        return findBestExternalDisplay(manager.getDisplays());
     }
 
-    private Display firstUsableExternalDisplay(Display[] displays) {
+    private Display findBestExternalDisplay(Display[] displays) {
         if (displays == null) {
             return null;
         }
+
+        Display bestDisplay = null;
+        int bestScore = Integer.MIN_VALUE;
         for (Display display : displays) {
-            if (display != null
-                    && display.isValid()
-                    && display.getDisplayId() != Display.DEFAULT_DISPLAY) {
-                return display;
+            if (display == null
+                    || !display.isValid()
+                    || display.getDisplayId() == Display.DEFAULT_DISPLAY
+                    || display.getState() != Display.STATE_ON) {
+                continue;
+            }
+
+            int score = 0;
+            String name = display.getName();
+            String normalizedName = name == null ? "" : name.toLowerCase(Locale.ROOT);
+            if (normalizedName.contains("smartglasses")
+                    || normalizedName.contains("rayneo")
+                    || normalizedName.contains("tcl")
+                    || normalizedName.contains("hdmi")) {
+                score += 200;
+            }
+
+            if (bestDisplay == null || score > bestScore) {
+                bestDisplay = display;
+                bestScore = score;
             }
         }
-        return null;
+        return bestDisplay;
     }
 
     private boolean isUnityPresentationActive() {
