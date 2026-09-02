@@ -17,7 +17,7 @@ namespace JellyfinForRayNeo
         private readonly Text _title;
         private readonly Text _countLabel;
         private readonly Text _pageLabel;
-        private readonly Text _emptyLabel;
+        private readonly EmptyStateView _emptyState;
         private readonly InputField _searchInput;
         private readonly Button _searchSubmitButton;
         private readonly Button _sortButton;
@@ -271,22 +271,11 @@ namespace JellyfinForRayNeo
             _scroll.decelerationRate = 0.11f;
             _scroll.scrollSensitivity = 58f;
 
-            _emptyLabel = UiFactory.CreateText(
-                "Browse Empty",
+            _emptyState = new EmptyStateView(
                 rootImage.transform,
-                string.Empty,
-                29,
-                UiTheme.TextSecondary,
-                TextAnchor.MiddleCenter,
-                FontStyle.Bold);
-            _emptyLabel.lineSpacing = 1.25f;
-            UiFactory.SetRect(
-                _emptyLabel.rectTransform,
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -30f),
-                new Vector2(1180f, 180f));
+                "Browse Empty State",
+                new Vector2(0f, -45f),
+                new Vector2(1080f, 330f));
 
             _motion.SetVisibleImmediately(false);
         }
@@ -369,15 +358,34 @@ namespace JellyfinForRayNeo
             }
 
             bool empty = items.Count == 0;
-            _emptyLabel.gameObject.SetActive(empty);
             if (empty)
             {
-                _emptyLabel.text = searchMode && string.IsNullOrWhiteSpace(_state.SearchTerm)
-                    ? "搜索你的 Jellyfin\n在手机键盘输入关键词，然后选择“开始搜索”"
-                    : searchMode
-                        ? "没有找到匹配内容\n换一个关键词再试试"
-                        : "这里暂时没有可显示的内容";
+                if (searchMode && string.IsNullOrWhiteSpace(_state.SearchTerm))
+                {
+                    _emptyState.SetContent(
+                        "SEARCH  ·  DISCOVER",
+                        "从你的 Jellyfin 开始搜索",
+                        "在上方输入片名、剧集、演员或课程名称，然后选择“开始搜索”。",
+                        UiTheme.AccentSecondary);
+                }
+                else if (searchMode)
+                {
+                    _emptyState.SetContent(
+                        "SEARCH  ·  NO RESULTS",
+                        "没有找到匹配内容",
+                        "尝试更短的关键词，或检查当前媒体库与筛选条件。",
+                        UiTheme.AccentSecondary);
+                }
+                else
+                {
+                    _emptyState.SetContent(
+                        "JELLYFIN  ·  LIBRARY",
+                        "这里暂时没有内容",
+                        "调整筛选条件，或等待 Jellyfin 完成媒体库扫描。",
+                        UiTheme.AccentBright);
+                }
             }
+            _emptyState.SetVisible(empty);
 
             Canvas.ForceUpdateCanvases();
             LayoutRebuilder.ForceRebuildLayoutImmediate(_grid);

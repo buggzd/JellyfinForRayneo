@@ -13,12 +13,16 @@ namespace JellyfinForRayNeo
         private readonly UiViewMotion _motion;
         private readonly Text _title;
         private readonly Text _summary;
-        private readonly Text _emptyLabel;
+        private readonly EmptyStateView _emptyState;
         private readonly ScrollRect _verticalScroll;
         private readonly RectTransform _seasonTabs;
         private readonly RectTransform _content;
         private readonly JellyfinApiClient _api;
         private readonly JellyfinImageCache _imageCache;
+        private readonly Dictionary<int, Button> _seasonButtons =
+            new Dictionary<int, Button>();
+        private readonly Dictionary<int, GameObject> _seasonIndicators =
+            new Dictionary<int, GameObject>();
 
         public event Action<JellyfinItem> EpisodeSelected;
         public event Action CloseRequested;
@@ -36,32 +40,147 @@ namespace JellyfinForRayNeo
             _motion = UiFactory.AddViewMotion(_root, 22f, 0.99f);
             UiFactory.CreateAmbientBackdrop(rootImage.transform);
 
-            Image header = UiFactory.CreatePanel("Header", rootImage.transform, new Color(0.025f, 0.03f, 0.05f, 0.98f));
-            UiFactory.SetRect(header.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 190f));
+            Image headerGlow = UiFactory.CreateGradientPanel(
+                "Header Ambient Glow",
+                rootImage.transform,
+                new Color(0.08f, 0.32f, 0.34f, 0.22f),
+                new Color(UiTheme.Background.r, UiTheme.Background.g, UiTheme.Background.b, 0f),
+                true);
+            UiFactory.SetRect(
+                headerGlow.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f),
+                Vector2.zero,
+                new Vector2(0f, 280f));
 
-            _title = UiFactory.CreateText("Series Title", header.transform, string.Empty, 40, UiTheme.TextPrimary, TextAnchor.MiddleLeft, FontStyle.Bold);
-            UiFactory.SetRect(_title.rectTransform, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0.5f), new Vector2(52f, 43f), new Vector2(-260f, 54f));
+            Image headerShadow = UiFactory.CreateRoundedPanel(
+                "Header Shadow",
+                rootImage.transform,
+                new Color(0f, 0f, 0f, 0.48f));
+            headerShadow.raycastTarget = false;
+            UiFactory.SetRect(
+                headerShadow.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, -32f),
+                new Vector2(-72f, 176f));
 
-            _summary = UiFactory.CreateText("Series Summary", header.transform, string.Empty, 20, UiTheme.TextSecondary, TextAnchor.MiddleLeft);
-            UiFactory.SetRect(_summary.rectTransform, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0.5f), new Vector2(54f, 0f), new Vector2(-260f, 32f));
+            Image header = UiFactory.CreateRoundedPanel("Header", rootImage.transform, Color.white);
+            UiFactory.SetRect(
+                header.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, -24f),
+                new Vector2(-76f, 176f));
+            UiGradient headerGradient = header.gameObject.AddComponent<UiGradient>();
+            headerGradient.StartColor = new Color(0.068f, 0.078f, 0.105f, 0.96f);
+            headerGradient.EndColor = new Color(0.026f, 0.032f, 0.050f, 0.94f);
+            headerGradient.Horizontal = true;
+            Outline headerOutline = header.gameObject.AddComponent<Outline>();
+            headerOutline.effectColor = UiTheme.Border;
+            headerOutline.effectDistance = new Vector2(1f, -1f);
 
-            Button close = UiFactory.CreateButton("Close", header.transform, "返回", UiTheme.SurfaceRaised, UiTheme.TextPrimary, 23);
-            UiFactory.SetRect(close.GetComponent<RectTransform>(), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-52f, 43f), new Vector2(128f, 60f));
+            Image headerAccent = UiFactory.CreateRoundedPanel(
+                "Header Accent",
+                header.transform,
+                UiTheme.AccentBright);
+            headerAccent.raycastTarget = false;
+            UiFactory.SetRect(
+                headerAccent.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(9f, -18f),
+                new Vector2(5f, 72f));
+
+            Text eyebrow = UiFactory.CreateText(
+                "Series Eyebrow",
+                header.transform,
+                "JELLYFIN  ·  SERIES",
+                14,
+                UiTheme.AccentBright,
+                TextAnchor.MiddleLeft,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                eyebrow.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(34f, -17f),
+                new Vector2(560f, 24f));
+
+            _title = UiFactory.CreateText(
+                "Series Title",
+                header.transform,
+                string.Empty,
+                42,
+                UiTheme.TextPrimary,
+                TextAnchor.MiddleLeft,
+                FontStyle.Bold);
+            _title.resizeTextForBestFit = true;
+            _title.resizeTextMinSize = 27;
+            _title.resizeTextMaxSize = 42;
+            UiFactory.SetRect(
+                _title.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(34f, -42f),
+                new Vector2(1180f, 52f));
+
+            _summary = UiFactory.CreateText(
+                "Series Summary",
+                header.transform,
+                string.Empty,
+                19,
+                UiTheme.TextSecondary,
+                TextAnchor.MiddleLeft);
+            UiFactory.SetRect(
+                _summary.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(36f, -94f),
+                new Vector2(1080f, 28f));
+
+            Button close = UiFactory.CreateButton(
+                "Close",
+                header.transform,
+                "返回详情",
+                UiTheme.SurfaceRaised,
+                UiTheme.TextPrimary,
+                20);
+            UiFactory.SetRect(
+                close.GetComponent<RectTransform>(),
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(-26f, -25f),
+                new Vector2(146f, 52f));
             close.onClick.AddListener(() => CloseRequested?.Invoke());
 
             RectTransform tabsViewport = UiFactory.CreateRect("Season Tabs Viewport", header.transform);
             tabsViewport.gameObject.AddComponent<RectMask2D>();
-            UiFactory.SetRect(tabsViewport, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0.5f), new Vector2(0f, 40f), new Vector2(-104f, 56f));
+            UiFactory.SetRect(
+                tabsViewport,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(-82f, 10f),
+                new Vector2(-220f, 44f));
 
             _seasonTabs = UiFactory.CreateRect("Season Tabs", tabsViewport);
             _seasonTabs.anchorMin = new Vector2(0f, 0.5f);
             _seasonTabs.anchorMax = new Vector2(0f, 0.5f);
             _seasonTabs.pivot = new Vector2(0f, 0.5f);
             _seasonTabs.anchoredPosition = Vector2.zero;
-            _seasonTabs.sizeDelta = new Vector2(0f, 54f);
+            _seasonTabs.sizeDelta = new Vector2(0f, 42f);
             HorizontalLayoutGroup tabsLayout = _seasonTabs.gameObject.AddComponent<HorizontalLayoutGroup>();
-            tabsLayout.spacing = 14f;
-            tabsLayout.padding = new RectOffset(4, 24, 2, 2);
+            tabsLayout.spacing = 12f;
+            tabsLayout.padding = new RectOffset(4, 24, 1, 1);
             tabsLayout.childAlignment = TextAnchor.MiddleLeft;
             tabsLayout.childControlHeight = false;
             tabsLayout.childControlWidth = false;
@@ -110,9 +229,16 @@ namespace JellyfinForRayNeo
             _verticalScroll.scrollSensitivity = 42f;
             _verticalScroll.decelerationRate = 0.13f;
 
-            _emptyLabel = UiFactory.CreateText("Empty", rootImage.transform, "这部剧集暂时没有可播放的分集", 32, UiTheme.TextSecondary, TextAnchor.MiddleCenter);
-            UiFactory.SetRect(_emptyLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -20f), new Vector2(1000f, 100f));
-            _emptyLabel.gameObject.SetActive(false);
+            _emptyState = new EmptyStateView(
+                rootImage.transform,
+                "Episode Empty State",
+                new Vector2(0f, -42f),
+                new Vector2(1080f, 330f));
+            _emptyState.SetContent(
+                "SERIES  ·  EPISODES",
+                "这部剧集暂时没有可播放的分集",
+                "等待 Jellyfin 完成剧集扫描，或返回详情页选择其他内容。",
+                UiTheme.AccentSecondary);
             _motion.SetVisibleImmediately(false);
         }
 
@@ -133,7 +259,7 @@ namespace JellyfinForRayNeo
                 .Count();
             _summary.text = playableEpisodes.Count == 0
                 ? "未找到可播放分集"
-                : string.Format("{0} 季  ·  {1} 集", seasonCount, playableEpisodes.Count);
+                : string.Format("{0} 季  ·  {1} 集  ·  选择分集后直接播放", seasonCount, playableEpisodes.Count);
 
             List<KeyValuePair<int, List<JellyfinItem>>> seasons = playableEpisodes
                 .GroupBy(item => item.ParentIndexNumber ?? int.MaxValue)
@@ -147,17 +273,41 @@ namespace JellyfinForRayNeo
 
             UiFactory.DestroyChildren(_seasonTabs);
             UiFactory.DestroyChildren(_content);
-            _emptyLabel.gameObject.SetActive(playableEpisodes.Count == 0);
+            _seasonButtons.Clear();
+            _seasonIndicators.Clear();
+            _emptyState.SetVisible(playableEpisodes.Count == 0);
             foreach (KeyValuePair<int, List<JellyfinItem>> season in seasons)
             {
                 KeyValuePair<int, List<JellyfinItem>> selectedSeason = season;
                 string title = SeasonTitle(selectedSeason.Key, selectedSeason.Value);
-                Button tab = UiFactory.CreateButton("Season Tab - " + title, _seasonTabs, title, UiTheme.SurfaceRaised, UiTheme.TextPrimary, 21);
+                Button tab = UiFactory.CreateButton(
+                    "Season Tab - " + title,
+                    _seasonTabs,
+                    title,
+                    UiTheme.SurfaceSoft,
+                    UiTheme.TextSecondary,
+                    19);
                 LayoutElement layout = tab.gameObject.AddComponent<LayoutElement>();
-                layout.preferredWidth = 178f;
-                layout.preferredHeight = 50f;
+                layout.preferredWidth = 164f;
+                layout.preferredHeight = 42f;
                 RectTransform tabRect = tab.GetComponent<RectTransform>();
-                tabRect.sizeDelta = new Vector2(178f, 50f);
+                tabRect.sizeDelta = new Vector2(164f, 42f);
+                Image indicator = UiFactory.CreateRoundedPanel(
+                    "Active Season",
+                    tab.transform,
+                    UiTheme.AccentBright);
+                indicator.raycastTarget = false;
+                UiFactory.SetRect(
+                    indicator.rectTransform,
+                    new Vector2(0.5f, 0f),
+                    new Vector2(0.5f, 0f),
+                    new Vector2(0.5f, 0f),
+                    new Vector2(0f, 3f),
+                    new Vector2(54f, 3f));
+                indicator.gameObject.SetActive(false);
+                _seasonButtons[selectedSeason.Key] = tab;
+                _seasonIndicators[selectedSeason.Key] = indicator.gameObject;
+                UiFactory.AddItemReveal(tab.gameObject, Mathf.Min(0.18f, _seasonButtons.Count * 0.025f));
                 tab.onClick.AddListener(() => ShowSeason(selectedSeason.Key, selectedSeason.Value, cancellationToken));
             }
             if (seasons.Count > 0)
@@ -178,6 +328,7 @@ namespace JellyfinForRayNeo
 
         private void ShowSeason(int seasonNumber, IList<JellyfinItem> episodes, CancellationToken cancellationToken)
         {
+            UpdateSeasonSelection(seasonNumber);
             UiFactory.DestroyChildren(_content);
             CreateSeasonShelf(seasonNumber, episodes, cancellationToken);
             Canvas.ForceUpdateCanvases();
@@ -192,13 +343,55 @@ namespace JellyfinForRayNeo
             shelfLayout.minHeight = 360f;
             shelfLayout.flexibleHeight = 0f;
 
-            Text title = UiFactory.CreateText("Season Title", shelf, SeasonTitle(seasonNumber, items), 32, UiTheme.TextPrimary, TextAnchor.MiddleLeft, FontStyle.Bold);
-            UiFactory.SetRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -4f), new Vector2(-10f, 52f));
+            Image titleAccent = UiFactory.CreateRoundedPanel(
+                "Season Accent",
+                shelf,
+                UiTheme.AccentBright);
+            titleAccent.raycastTarget = false;
+            UiFactory.SetRect(
+                titleAccent.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(2f, -11f),
+                new Vector2(5f, 34f));
+
+            Text title = UiFactory.CreateText(
+                "Season Title",
+                shelf,
+                SeasonTitle(seasonNumber, items),
+                31,
+                UiTheme.TextPrimary,
+                TextAnchor.MiddleLeft,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                title.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(20f, -4f),
+                new Vector2(-220f, 52f));
+
+            Text count = UiFactory.CreateText(
+                "Season Episode Count",
+                shelf,
+                (items != null ? items.Count : 0) + " 集",
+                18,
+                UiTheme.TextMuted,
+                TextAnchor.MiddleRight,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                count.rectTransform,
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(-6f, -8f),
+                new Vector2(160f, 40f));
 
             RectTransform viewport = UiFactory.CreateRect("Viewport", shelf);
             viewport.gameObject.AddComponent<RectMask2D>();
             AddTransparentDragSurface(viewport);
-            UiFactory.SetRect(viewport, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -28f), new Vector2(0f, -62f));
+            UiFactory.SetRect(viewport, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -28f), new Vector2(0f, -66f));
 
             RectTransform row = UiFactory.CreateRect("Episodes", viewport);
             row.anchorMin = new Vector2(0f, 0.5f);
@@ -242,6 +435,41 @@ namespace JellyfinForRayNeo
                     true);
                 UiFactory.AddItemReveal(card.gameObject, Mathf.Min(0.20f, cardIndex * 0.025f));
                 cardIndex++;
+            }
+        }
+
+        private void UpdateSeasonSelection(int seasonNumber)
+        {
+            foreach (KeyValuePair<int, Button> pair in _seasonButtons)
+            {
+                bool selected = pair.Key == seasonNumber;
+                Button button = pair.Value;
+                if (button == null)
+                {
+                    continue;
+                }
+
+                Image background = button.targetGraphic as Image;
+                if (background != null)
+                {
+                    background.color = selected
+                        ? new Color(0.18f, 0.46f, 0.43f, 0.96f)
+                        : UiTheme.SurfaceSoft;
+                }
+
+                Text label = button.GetComponentInChildren<Text>();
+                if (label != null)
+                {
+                    label.color = selected ? UiTheme.TextPrimary : UiTheme.TextSecondary;
+                }
+            }
+
+            foreach (KeyValuePair<int, GameObject> pair in _seasonIndicators)
+            {
+                if (pair.Value != null)
+                {
+                    pair.Value.SetActive(pair.Key == seasonNumber);
+                }
             }
         }
 

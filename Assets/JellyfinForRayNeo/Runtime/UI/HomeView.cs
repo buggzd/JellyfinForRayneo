@@ -15,7 +15,7 @@ namespace JellyfinForRayNeo
         private readonly GameObject _root;
         private readonly UiViewMotion _motion;
         private readonly Text _serverLabel;
-        private readonly Text _emptyLabel;
+        private readonly EmptyStateView _emptyState;
         private readonly ScrollRect _verticalScroll;
         private readonly RectTransform _content;
         private readonly JellyfinApiClient _api;
@@ -83,21 +83,16 @@ namespace JellyfinForRayNeo
             _verticalScroll.scrollSensitivity = 54f;
             _verticalScroll.decelerationRate = 0.11f;
 
-            _emptyLabel = UiFactory.CreateText(
-                "Empty",
+            _emptyState = new EmptyStateView(
                 rootRect,
-                "媒体库中还没有可显示的电影或剧集",
-                30,
-                UiTheme.TextSecondary,
-                TextAnchor.MiddleCenter);
-            UiFactory.SetRect(
-                _emptyLabel.rectTransform,
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -24f),
-                new Vector2(1000f, 100f));
-            _emptyLabel.gameObject.SetActive(false);
+                "Home Empty State",
+                new Vector2(0f, -34f),
+                new Vector2(1080f, 330f));
+            _emptyState.SetContent(
+                "JELLYFIN  ·  LIBRARY",
+                "媒体库还没有可展示的内容",
+                "检查媒体库权限或等待 Jellyfin 完成扫描，然后选择右上角“刷新”。",
+                UiTheme.AccentBright);
 
             Image topScrim = UiFactory.CreateGradientPanel(
                 "Top Scrim",
@@ -320,7 +315,7 @@ namespace JellyfinForRayNeo
             }
 
             bool hasSections = populatedSections.Count > 0;
-            _emptyLabel.gameObject.SetActive(!hasSections);
+            _emptyState.SetVisible(!hasSections);
             if (!hasSections)
             {
                 return;

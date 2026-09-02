@@ -117,6 +117,12 @@ namespace JellyfinForRayNeo.Tests
             Transform phoneSignal = FindDescendant(canvas.transform, "Phone Signal Ring 1");
             Transform firstPhoneStep = FindDescendant(canvas.transform, "Phone Step 1");
             Transform connectionSignal = FindDescendant(canvas.transform, "Connection Signal");
+            Transform loadingCard = FindDescendant(canvas.transform, "Loading Card");
+            Transform loadingSignal = FindDescendant(canvas.transform, "Loading Signal Plate");
+            Transform loadingDetail = FindDescendant(canvas.transform, "Loading Detail");
+            Transform toast = FindDescendant(canvas.transform, "Toast");
+            Transform toastSurface = FindDescendant(canvas.transform, "Toast Surface");
+            Transform toastAccent = FindDescendant(canvas.transform, "Toast Accent");
             Transform homeContent = FindDescendant(canvas.transform, "Home Content");
             Transform homeViewport = FindDescendant(canvas.transform, "Home Viewport");
             Assert.NotNull(login);
@@ -132,6 +138,15 @@ namespace JellyfinForRayNeo.Tests
             Assert.NotNull(firstPhoneStep.GetComponent<UiItemReveal>());
             Assert.NotNull(connectionSignal);
             Assert.NotNull(connectionSignal.GetComponent<UiSignalPulse>());
+            Assert.NotNull(loadingCard);
+            Assert.NotNull(loadingCard.GetComponent<UiGradient>());
+            Assert.NotNull(loadingSignal);
+            Assert.NotNull(loadingDetail);
+            Assert.NotNull(toast);
+            Assert.NotNull(toast.GetComponent<UiViewMotion>());
+            Assert.NotNull(toastSurface);
+            Assert.NotNull(toastSurface.GetComponent<Outline>());
+            Assert.NotNull(toastAccent);
             Assert.NotNull(homeContent);
             Assert.NotNull(homeViewport);
             Assert.IsTrue(login.gameObject.activeInHierarchy);
@@ -144,6 +159,50 @@ namespace JellyfinForRayNeo.Tests
             Assert.AreEqual(
                 CompanionLoginState.LoginRequired,
                 CompanionLoginRuntime.Current.State);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator EmptyStates_UseSharedGlassCardsAndLayeredMotion()
+        {
+            GameObject host = new GameObject("Empty State Test Host", typeof(RectTransform));
+            host.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
+            JellyfinApiClient api = new JellyfinApiClient("empty-state-test-device");
+            api.SetSession(new JellyfinSession
+            {
+                ServerUrl = "http://127.0.0.1:8096",
+                AccessToken = "empty-state-token",
+                UserId = "empty-state-user",
+                DeviceId = "empty-state-test-device"
+            });
+            JellyfinImageCache imageCache = new JellyfinImageCache();
+
+            HomeView home = new HomeView(host.transform, api, imageCache);
+            home.SetSections(new List<JellyfinHomeSection>(), CancellationToken.None);
+
+            BrowseView browse = new BrowseView(host.transform, api, imageCache);
+            browse.SetPage(
+                JellyfinBrowseState.ForSearch(),
+                new JellyfinQueryResult
+                {
+                    TotalRecordCount = 0,
+                    Items = new List<JellyfinItem>()
+                },
+                CancellationToken.None);
+
+            EpisodeBrowserView episodes = new EpisodeBrowserView(host.transform, api, imageCache);
+            episodes.Show(
+                new JellyfinItem { Id = "empty-series", Name = "空剧集", Type = "Series" },
+                new List<JellyfinItem>(),
+                CancellationToken.None);
+            yield return null;
+
+            AssertModernEmptyState(host.transform, "Home Empty State");
+            AssertModernEmptyState(host.transform, "Browse Empty State");
+            AssertModernEmptyState(host.transform, "Episode Empty State");
+
+            imageCache.Dispose();
+            Object.Destroy(host);
             yield return null;
         }
 
@@ -234,6 +293,8 @@ namespace JellyfinForRayNeo.Tests
 
             RectTransform viewport = FindDescendant(shelf, "Viewport") as RectTransform;
             RectTransform artwork = FindDescendant(shelf, "Artwork Frame") as RectTransform;
+            Transform header = FindDescendant(host.transform, "Header");
+            Transform activeSeason = FindDescendant(host.transform, "Active Season");
             PosterCardView card = shelf.GetComponentInChildren<PosterCardView>(true);
             AxisRoutingScrollRect horizontalScroll = shelf.GetComponent<AxisRoutingScrollRect>();
             Assert.IsTrue(seasons.GetComponent<VerticalLayoutGroup>().childControlHeight);
@@ -243,6 +304,10 @@ namespace JellyfinForRayNeo.Tests
             AssertTransparentDragSurface(viewport);
             Assert.NotNull(artwork);
             Assert.That(artwork.rect.width / artwork.rect.height, Is.EqualTo(16f / 9f).Within(0.01f));
+            Assert.NotNull(header);
+            Assert.NotNull(header.GetComponent<UiGradient>());
+            Assert.NotNull(activeSeason);
+            Assert.IsTrue(activeSeason.gameObject.activeInHierarchy);
             Assert.NotNull(card);
             Assert.AreEqual(PosterCardView.LandscapeHeight, card.GetComponent<LayoutElement>().preferredHeight);
             Assert.NotNull(horizontalScroll);
@@ -1020,6 +1085,25 @@ namespace JellyfinForRayNeo.Tests
             navigation.mode = Navigation.Mode.Automatic;
             button.navigation = navigation;
             return button;
+        }
+
+        private static void AssertModernEmptyState(Transform parent, string name)
+        {
+            Transform state = FindDescendant(parent, name);
+            Assert.NotNull(state, name + " must exist.");
+            Assert.IsTrue(state.GetComponent<UiViewMotion>().IsVisible);
+
+            Transform card = FindDescendant(state, "State Card");
+            Transform signal = FindDescendant(state, "Library Signal");
+            Transform pulse = FindDescendant(state, "Status Signal");
+            Transform title = FindDescendant(state, "State Title");
+            Assert.NotNull(card);
+            Assert.NotNull(card.GetComponent<UiGradient>());
+            Assert.NotNull(card.GetComponent<Outline>());
+            Assert.NotNull(signal);
+            Assert.NotNull(pulse);
+            Assert.NotNull(pulse.GetComponent<UiSignalPulse>());
+            Assert.IsFalse(string.IsNullOrWhiteSpace(title.GetComponent<Text>().text));
         }
 
         private static void PerformDrag(

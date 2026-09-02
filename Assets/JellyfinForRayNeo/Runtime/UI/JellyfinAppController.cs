@@ -46,9 +46,13 @@ namespace JellyfinForRayNeo
         private GameObject _loadingOverlay;
         private UiViewMotion _loadingMotion;
         private Text _loadingLabel;
+        private Text _loadingDetail;
         private GameObject _toast;
         private UiViewMotion _toastMotion;
         private Text _toastLabel;
+        private Image _toastSurface;
+        private Image _toastAccent;
+        private Image _toastStatusDot;
         private float _toastHideAt;
         private float _nextProgressCheck;
         private bool _stoppingPlayback;
@@ -1748,48 +1752,182 @@ namespace JellyfinForRayNeo
             Image loading = UiFactory.CreatePanel(
                 "Loading Overlay",
                 parent,
-                new Color(0.004f, 0.007f, 0.014f, 0.74f));
+                new Color(0.002f, 0.005f, 0.011f, 0.70f));
             UiFactory.Stretch(loading.rectTransform);
             _loadingOverlay = loading.gameObject;
+
+            Image loadingGlow = UiFactory.CreateGlowPanel(
+                "Loading Ambient Glow",
+                loading.transform,
+                new Color(UiTheme.Accent.r, UiTheme.Accent.g, UiTheme.Accent.b, 0.16f));
+            UiFactory.SetRect(
+                loadingGlow.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                new Vector2(980f, 580f));
+            UiAmbientFloat loadingGlowMotion = loadingGlow.gameObject.AddComponent<UiAmbientFloat>();
+            loadingGlowMotion.Amplitude = new Vector2(16f, 9f);
+            loadingGlowMotion.Speed = 0.09f;
+            loadingGlowMotion.Phase = 1.2f;
+
+            Image loadingShadow = UiFactory.CreateRoundedPanel(
+                "Loading Card Shadow",
+                loading.transform,
+                new Color(0f, 0f, 0f, 0.56f));
+            loadingShadow.raycastTarget = false;
+            UiFactory.SetRect(
+                loadingShadow.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -13f),
+                new Vector2(760f, 230f));
+
             Image loadingCard = UiFactory.CreateRoundedPanel(
                 "Loading Card",
                 loading.transform,
-                UiTheme.SurfaceGlass);
+                Color.white);
             UiFactory.SetRect(
                 loadingCard.rectTransform,
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
                 Vector2.zero,
-                new Vector2(760f, 190f));
+                new Vector2(760f, 230f));
+            UiGradient loadingGradient = loadingCard.gameObject.AddComponent<UiGradient>();
+            loadingGradient.StartColor = new Color(0.072f, 0.084f, 0.112f, 0.98f);
+            loadingGradient.EndColor = new Color(0.025f, 0.031f, 0.049f, 0.97f);
+            loadingGradient.Horizontal = true;
             Outline loadingOutline = loadingCard.gameObject.AddComponent<Outline>();
             loadingOutline.effectColor = UiTheme.Border;
             loadingOutline.effectDistance = new Vector2(1f, -1f);
+
+            Image loadingAccent = UiFactory.CreateRoundedPanel(
+                "Loading Accent",
+                loadingCard.transform,
+                UiTheme.AccentBright);
+            loadingAccent.raycastTarget = false;
+            UiFactory.SetRect(
+                loadingAccent.rectTransform,
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(8f, 0f),
+                new Vector2(5f, 174f));
+
+            Image signalPlate = UiFactory.CreateRoundedPanel(
+                "Loading Signal Plate",
+                loadingCard.transform,
+                new Color(0.10f, 0.116f, 0.15f, 0.92f));
+            signalPlate.raycastTarget = false;
+            UiFactory.SetRect(
+                signalPlate.rectTransform,
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(104f, 0f),
+                new Vector2(118f, 118f));
+            Outline signalOutline = signalPlate.gameObject.AddComponent<Outline>();
+            signalOutline.effectColor = new Color(0.82f, 0.91f, 0.96f, 0.12f);
+            signalOutline.effectDistance = new Vector2(1f, -1f);
+
+            for (int index = 0; index < 2; index++)
+            {
+                Image signal = UiFactory.CreateGlowPanel(
+                    "Loading Signal " + (index + 1),
+                    signalPlate.transform,
+                    new Color(
+                        index == 0 ? UiTheme.Accent.r : UiTheme.AccentSecondary.r,
+                        index == 0 ? UiTheme.Accent.g : UiTheme.AccentSecondary.g,
+                        index == 0 ? UiTheme.Accent.b : UiTheme.AccentSecondary.b,
+                        index == 0 ? 0.23f : 0.16f));
+                UiFactory.SetRect(
+                    signal.rectTransform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    Vector2.zero,
+                    new Vector2(76f, 76f));
+                UiSignalPulse signalMotion = signal.gameObject.AddComponent<UiSignalPulse>();
+                signalMotion.CycleSeconds = 2.45f;
+                signalMotion.Phase = index * 0.48f;
+                signalMotion.StartScale = 0.48f;
+                signalMotion.EndScale = 1.18f;
+            }
+
+            Image signalCore = UiFactory.CreateRoundedPanel(
+                "Loading Signal Core",
+                signalPlate.transform,
+                UiTheme.AccentBright);
+            signalCore.raycastTarget = false;
+            UiFactory.SetRect(
+                signalCore.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                new Vector2(16f, 16f));
+
+            Text loadingEyebrow = UiFactory.CreateText(
+                "Loading Eyebrow",
+                loadingCard.transform,
+                "JELLYFIN  ·  SYNC",
+                14,
+                UiTheme.AccentBright,
+                TextAnchor.MiddleLeft,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                loadingEyebrow.rectTransform,
+                new Vector2(0f, 0.5f),
+                new Vector2(1f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(188f, 68f),
+                new Vector2(-220f, 26f));
 
             _loadingLabel = UiFactory.CreateText(
                 "Loading Label",
                 loadingCard.transform,
                 "正在加载…",
-                31,
+                29,
                 UiTheme.TextPrimary,
-                TextAnchor.MiddleCenter,
+                TextAnchor.MiddleLeft,
                 FontStyle.Bold);
+            _loadingLabel.resizeTextForBestFit = true;
+            _loadingLabel.resizeTextMinSize = 21;
+            _loadingLabel.resizeTextMaxSize = 29;
             UiFactory.SetRect(
                 _loadingLabel.rectTransform,
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0f, 30f),
-                new Vector2(680f, 64f));
+                new Vector2(0f, 0.5f),
+                new Vector2(1f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(188f, 27f),
+                new Vector2(-220f, 50f));
+
+            _loadingDetail = UiFactory.CreateText(
+                "Loading Detail",
+                loadingCard.transform,
+                "请稍候，完成后将自动继续",
+                18,
+                UiTheme.TextSecondary,
+                TextAnchor.MiddleLeft);
+            UiFactory.SetRect(
+                _loadingDetail.rectTransform,
+                new Vector2(0f, 0.5f),
+                new Vector2(1f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(188f, -14f),
+                new Vector2(-220f, 30f));
 
             RectTransform pulse = UiFactory.CreateRect("Loading Pulse", loadingCard.transform);
             UiFactory.SetRect(
                 pulse,
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -38f),
-                new Vector2(112f, 28f));
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(188f, -59f),
+                new Vector2(132f, 24f));
             for (int index = 0; index < 3; index++)
             {
                 Image dot = UiFactory.CreateRoundedPanel(
@@ -1801,23 +1939,97 @@ namespace JellyfinForRayNeo
                     new Vector2(0.5f, 0.5f),
                     new Vector2(0.5f, 0.5f),
                     new Vector2(0.5f, 0.5f),
-                    new Vector2((index - 1) * 38f, 0f),
-                    new Vector2(16f, 16f));
+                    new Vector2((index - 1) * 34f, 0f),
+                    new Vector2(12f, 12f));
                 dot.raycastTarget = false;
             }
             pulse.gameObject.AddComponent<UiLoadingPulse>();
             _loadingMotion = UiFactory.AddViewMotion(_loadingOverlay, 0f, 1f);
+            _loadingMotion.EnterDuration = 0.24f;
             _loadingMotion.SetVisibleImmediately(false);
 
-            Image toast = UiFactory.CreateRoundedPanel(
-                "Toast",
-                parent,
+            RectTransform toastRoot = UiFactory.CreateRect("Toast", parent);
+            UiFactory.SetRect(
+                toastRoot,
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 34f),
+                new Vector2(980f, 92f));
+            _toast = toastRoot.gameObject;
+
+            Image toastShadow = UiFactory.CreateRoundedPanel(
+                "Toast Shadow",
+                toastRoot,
+                new Color(0f, 0f, 0f, 0.50f));
+            toastShadow.raycastTarget = false;
+            UiFactory.SetRect(
+                toastShadow.rectTransform,
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, -2f),
+                new Vector2(980f, 82f));
+
+            _toastSurface = UiFactory.CreateRoundedPanel(
+                "Toast Surface",
+                toastRoot,
                 new Color(0.055f, 0.066f, 0.089f, 0.98f));
-            UiFactory.SetRect(toast.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 46f), new Vector2(1080f, 82f));
-            _toast = toast.gameObject;
-            _toastLabel = UiFactory.CreateText("Toast Label", toast.transform, string.Empty, 24, UiTheme.TextPrimary, TextAnchor.MiddleCenter, FontStyle.Bold);
-            UiFactory.Stretch(_toastLabel.rectTransform, 20f, 20f, 8f, 8f);
-            Outline toastOutline = toast.gameObject.AddComponent<Outline>();
+            UiFactory.SetRect(
+                _toastSurface.rectTransform,
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 6f),
+                new Vector2(960f, 78f));
+            _toastAccent = UiFactory.CreateRoundedPanel(
+                "Toast Accent",
+                _toastSurface.transform,
+                UiTheme.Success);
+            _toastAccent.raycastTarget = false;
+            UiFactory.SetRect(
+                _toastAccent.rectTransform,
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(7f, 0f),
+                new Vector2(5f, 48f));
+
+            Image statusPlate = UiFactory.CreateRoundedPanel(
+                "Toast Status Plate",
+                _toastSurface.transform,
+                new Color(1f, 1f, 1f, 0.07f));
+            statusPlate.raycastTarget = false;
+            UiFactory.SetRect(
+                statusPlate.rectTransform,
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(45f, 0f),
+                new Vector2(42f, 42f));
+            _toastStatusDot = UiFactory.CreateRoundedPanel(
+                "Toast Status Dot",
+                statusPlate.transform,
+                UiTheme.Success);
+            _toastStatusDot.raycastTarget = false;
+            UiFactory.SetRect(
+                _toastStatusDot.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                new Vector2(11f, 11f));
+
+            _toastLabel = UiFactory.CreateText(
+                "Toast Label",
+                _toastSurface.transform,
+                string.Empty,
+                22,
+                UiTheme.TextPrimary,
+                TextAnchor.MiddleLeft,
+                FontStyle.Bold);
+            UiFactory.Stretch(_toastLabel.rectTransform, 82f, 28f, 8f, 8f);
+            Outline toastOutline = _toastSurface.gameObject.AddComponent<Outline>();
             toastOutline.effectColor = UiTheme.Border;
             toastOutline.effectDistance = new Vector2(1f, -1f);
             _toastMotion = UiFactory.AddViewMotion(_toast, 24f, 0.98f);
@@ -1852,10 +2064,18 @@ namespace JellyfinForRayNeo
                 return;
             }
             _toastLabel.text = message ?? string.Empty;
-            _toastLabel.color = isError ? new Color(1f, 0.72f, 0.76f, 1f) : UiTheme.TextPrimary;
-            _toast.GetComponent<Image>().color = isError
-                ? new Color(0.32f, 0.06f, 0.10f, 0.98f)
-                : new Color(0.08f, 0.09f, 0.13f, 0.98f);
+            Color accent = isError ? UiTheme.Danger : UiTheme.Success;
+            _toastLabel.color = isError ? new Color(1f, 0.80f, 0.83f, 1f) : UiTheme.TextPrimary;
+            _toastAccent.color = accent;
+            _toastStatusDot.color = accent;
+            _toastSurface.color = isError
+                ? new Color(0.22f, 0.045f, 0.07f, 0.98f)
+                : new Color(0.042f, 0.095f, 0.092f, 0.98f);
+            Outline outline = _toastSurface.GetComponent<Outline>();
+            if (outline != null)
+            {
+                outline.effectColor = new Color(accent.r, accent.g, accent.b, 0.30f);
+            }
             _toast.transform.SetAsLastSibling();
             _toastMotion.Show();
             _toastHideAt = Time.unscaledTime + 5f;
