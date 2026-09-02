@@ -117,7 +117,7 @@ namespace JellyfinForRayNeo
             return motion;
         }
 
-        public static void AddItemReveal(GameObject target, float delay)
+        public static UiItemReveal AddItemReveal(GameObject target, float delay)
         {
             UiItemReveal reveal = target.GetComponent<UiItemReveal>();
             if (reveal == null)
@@ -125,6 +125,21 @@ namespace JellyfinForRayNeo
                 reveal = target.AddComponent<UiItemReveal>();
             }
             reveal.Configure(delay);
+            return reveal;
+        }
+
+        public static UiScrollReveal AddScrollReveal(
+            GameObject target,
+            ScrollRect scrollRect,
+            float delay = 0f)
+        {
+            UiScrollReveal reveal = target.GetComponent<UiScrollReveal>();
+            if (reveal == null)
+            {
+                reveal = target.AddComponent<UiScrollReveal>();
+            }
+            reveal.Configure(scrollRect, delay);
+            return reveal;
         }
 
         public static void RevealGraphic(Graphic graphic, float duration = 0.28f)

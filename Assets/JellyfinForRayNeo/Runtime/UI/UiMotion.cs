@@ -343,6 +343,181 @@ namespace JellyfinForRayNeo
         }
     }
 
+    /// <summary>
+    /// Adds a restrained, long-cycle scale drift to full-bleed hero artwork.
+    /// The amplitude stays deliberately small for a comfortable fixed glasses display.
+    /// </summary>
+    public sealed class UiHeroBreath : MonoBehaviour
+    {
+        [Range(0f, 0.03f)]
+        public float ScaleAmplitude = 0.012f;
+
+        [Range(8f, 40f)]
+        public float CycleSeconds = 20f;
+
+        private Vector3 _restScale;
+        private float _phase;
+
+        private void Awake()
+        {
+            _restScale = transform.localScale;
+            _phase = Mathf.Abs(GetInstanceID() % 997) / 997f * Mathf.PI * 2f;
+        }
+
+        private void OnEnable()
+        {
+            transform.localScale = _restScale;
+        }
+
+        private void OnDisable()
+        {
+            transform.localScale = _restScale;
+        }
+
+        private void Update()
+        {
+            float cycle = Mathf.Max(1f, CycleSeconds);
+            float wave = Mathf.Sin(Time.unscaledTime / cycle * Mathf.PI * 2f + _phase);
+            float amount = (wave + 1f) * 0.5f;
+            float scale = 1f + Mathf.SmoothStep(0f, ScaleAmplitude, amount);
+            transform.localScale = _restScale * scale;
+        }
+    }
+
+    /// <summary>
+    /// Defers a section reveal until it reaches the visible scroll viewport.
+    /// Interactivity remains enabled so remote focus can still scroll toward it.
+    /// </summary>
+    public sealed class UiScrollReveal : MonoBehaviour
+    {
+        public float Duration = 0.34f;
+        public float StartScale = 0.978f;
+        public float VisibilityPadding = 42f;
+
+        private RectTransform _rect;
+        private CanvasGroup _group;
+        private ScrollRect _scroll;
+        private Vector3 _restScale;
+        private Coroutine _routine;
+        private float _delay;
+        private bool _configured;
+
+        private void Awake()
+        {
+            _rect = transform as RectTransform;
+            _restScale = transform.localScale;
+            _group = GetComponent<CanvasGroup>();
+            if (_group == null)
+            {
+                _group = gameObject.AddComponent<CanvasGroup>();
+            }
+        }
+
+        private void OnEnable()
+        {
+            if (_configured)
+            {
+                Restart();
+            }
+        }
+
+        private void OnDisable()
+        {
+            StopMotion();
+            Restore();
+        }
+
+        public void Configure(ScrollRect scrollRect, float delay)
+        {
+            _scroll = scrollRect;
+            _delay = Mathf.Clamp(delay, 0f, 0.24f);
+            _configured = true;
+            if (gameObject.activeInHierarchy)
+            {
+                Restart();
+            }
+        }
+
+        private void Restart()
+        {
+            StopMotion();
+            _group.alpha = 0f;
+            _group.interactable = true;
+            _group.blocksRaycasts = true;
+            transform.localScale = _restScale * StartScale;
+            _routine = StartCoroutine(RevealWhenVisible());
+        }
+
+        private IEnumerator RevealWhenVisible()
+        {
+            yield return null;
+            while (!IntersectsViewport())
+            {
+                yield return null;
+            }
+
+            float waited = 0f;
+            while (waited < _delay)
+            {
+                waited += Time.unscaledDeltaTime;
+                yield return null;
+            }
+
+            float elapsed = 0f;
+            Vector3 startScale = transform.localScale;
+            while (elapsed < Duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float normalized = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, Duration));
+                float amount = 1f - Mathf.Pow(1f - normalized, 3f);
+                _group.alpha = amount;
+                transform.localScale = Vector3.LerpUnclamped(startScale, _restScale, amount);
+                yield return null;
+            }
+
+            Restore();
+            _routine = null;
+        }
+
+        private bool IntersectsViewport()
+        {
+            if (_rect == null || _scroll == null || _scroll.viewport == null)
+            {
+                return true;
+            }
+
+            RectTransform viewport = _scroll.viewport;
+            Bounds bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(
+                viewport,
+                _rect);
+            Rect rect = viewport.rect;
+            float padding = Mathf.Max(0f, VisibilityPadding);
+            return bounds.max.x >= rect.xMin - padding
+                && bounds.min.x <= rect.xMax + padding
+                && bounds.max.y >= rect.yMin - padding
+                && bounds.min.y <= rect.yMax + padding;
+        }
+
+        private void StopMotion()
+        {
+            if (_routine == null)
+            {
+                return;
+            }
+            StopCoroutine(_routine);
+            _routine = null;
+        }
+
+        private void Restore()
+        {
+            if (_group != null)
+            {
+                _group.alpha = 1f;
+            }
+            transform.localScale = _restScale;
+        }
+    }
+
     public sealed class SmoothScrollMotion : MonoBehaviour
     {
         private ScrollRect _scroll;

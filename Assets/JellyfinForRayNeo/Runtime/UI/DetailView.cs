@@ -16,6 +16,8 @@ namespace JellyfinForRayNeo
         private readonly Image _backdrop;
         private readonly Image _poster;
         private readonly Text _posterPlaceholder;
+        private readonly GameObject _posterFrame;
+        private readonly GameObject _heroInformation;
         private readonly RectTransform _content;
         private readonly ScrollRect _scroll;
         private readonly Text _kindLabel;
@@ -76,6 +78,9 @@ namespace JellyfinForRayNeo
                 new Color(0.07f, 0.075f, 0.10f, 1f));
             _backdrop.preserveAspect = false;
             _backdrop.raycastTarget = false;
+            UiHeroBreath heroBreath = _backdrop.gameObject.AddComponent<UiHeroBreath>();
+            heroBreath.ScaleAmplitude = 0.011f;
+            heroBreath.CycleSeconds = 22f;
             UiFactory.SetRect(
                 _backdrop.rectTransform,
                 new Vector2(0f, 1f),
@@ -160,6 +165,7 @@ namespace JellyfinForRayNeo
             heroLayout.childForceExpandHeight = false;
 
             Image posterFrame = UiFactory.CreateRoundedPanel("Poster Frame", hero, UiTheme.SurfaceRaised);
+            _posterFrame = posterFrame.gameObject;
             posterFrame.raycastTarget = false;
             LayoutElement posterElement = posterFrame.gameObject.AddComponent<LayoutElement>();
             posterElement.minWidth = 330f;
@@ -189,6 +195,7 @@ namespace JellyfinForRayNeo
             UiFactory.Stretch(_posterPlaceholder.rectTransform);
 
             RectTransform heroInfo = UiFactory.CreateRect("Hero Information", hero);
+            _heroInformation = heroInfo.gameObject;
             LayoutElement heroInfoElement = heroInfo.gameObject.AddComponent<LayoutElement>();
             heroInfoElement.minWidth = 700f;
             heroInfoElement.preferredHeight = 540f;
@@ -200,6 +207,29 @@ namespace JellyfinForRayNeo
             heroInfoLayout.childControlHeight = true;
             heroInfoLayout.childForceExpandWidth = true;
             heroInfoLayout.childForceExpandHeight = false;
+
+            Image heroGlass = UiFactory.CreateRoundedPanel(
+                "Hero Information Glass",
+                heroInfo,
+                new Color(0.018f, 0.025f, 0.040f, 0.54f));
+            heroGlass.raycastTarget = false;
+            UiFactory.SetRect(
+                heroGlass.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f),
+                Vector2.zero,
+                new Vector2(48f, 470f));
+            LayoutElement heroGlassLayout = heroGlass.gameObject.AddComponent<LayoutElement>();
+            heroGlassLayout.ignoreLayout = true;
+            UiGradient heroGlassGradient = heroGlass.gameObject.AddComponent<UiGradient>();
+            heroGlassGradient.StartColor = new Color(1f, 1f, 1f, 0.72f);
+            heroGlassGradient.EndColor = Color.white;
+            Outline heroGlassOutline = heroGlass.gameObject.AddComponent<Outline>();
+            heroGlassOutline.effectColor = new Color(0.78f, 0.91f, 1f, 0.10f);
+            heroGlassOutline.effectDistance = new Vector2(1f, -1f);
+            heroGlassOutline.useGraphicAlpha = true;
+            heroGlass.transform.SetAsFirstSibling();
 
             _kindLabel = CreateFlowText(
                 "Kind",
@@ -490,6 +520,8 @@ namespace JellyfinForRayNeo
             _userActionBusy = false;
             _root.transform.SetAsLastSibling();
             _motion.Show();
+            UiFactory.AddItemReveal(_posterFrame, 0.025f);
+            UiFactory.AddItemReveal(_heroInformation, 0.075f);
 
             _kindLabel.text = BuildKindLabel(item);
             _title.text = item != null
@@ -538,6 +570,14 @@ namespace JellyfinForRayNeo
                 api,
                 imageCache,
                 cancellationToken);
+            if (_factsCard.gameObject.activeSelf)
+            {
+                UiFactory.AddScrollReveal(_factsCard.gameObject, _scroll, 0.04f);
+            }
+            if (_mediaCard.gameObject.activeSelf)
+            {
+                UiFactory.AddScrollReveal(_mediaCard.gameObject, _scroll, 0.06f);
+            }
             UpdatePlaybackState();
             UpdateUserActionState();
 
@@ -621,7 +661,12 @@ namespace JellyfinForRayNeo
             _overviewToggleRow.SetActive(canExpand);
             _overviewToggleLabel.text = _overviewExpanded ? "收起简介" : "展开简介";
             _expandedOverview.text = _fullOverview ?? string.Empty;
-            _expandedOverviewCard.gameObject.SetActive(canExpand && _overviewExpanded);
+            bool showExpanded = canExpand && _overviewExpanded;
+            _expandedOverviewCard.gameObject.SetActive(showExpanded);
+            if (showExpanded)
+            {
+                UiFactory.AddItemReveal(_expandedOverviewCard.gameObject, 0f);
+            }
         }
 
         private async Task LoadImageAsync(
@@ -706,6 +751,12 @@ namespace JellyfinForRayNeo
                 AddChip(value);
             }
             _metadataChips.gameObject.SetActive(_metadataChips.childCount > 0);
+            for (int index = 0; index < _metadataChips.childCount; index++)
+            {
+                UiFactory.AddItemReveal(
+                    _metadataChips.GetChild(index).gameObject,
+                    Mathf.Min(0.14f, index * 0.018f));
+            }
         }
 
         private void AddChip(string value)

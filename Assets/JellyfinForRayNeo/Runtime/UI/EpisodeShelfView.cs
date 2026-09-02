@@ -171,6 +171,7 @@ namespace JellyfinForRayNeo
             {
                 return;
             }
+            UiFactory.AddScrollReveal(_root, _parentScroll, 0.04f);
 
             List<KeyValuePair<int, List<JellyfinItem>>> seasons = playable
                 .GroupBy(episode => episode.ParentIndexNumber ?? int.MaxValue)
@@ -200,6 +201,9 @@ namespace JellyfinForRayNeo
                 tab.onClick.AddListener(() =>
                     ShowSeason(selectedSeason, selectedEpisodes, api, imageCache, cancellationToken));
                 _seasonButtons.Add(tab);
+                UiFactory.AddItemReveal(
+                    tab.gameObject,
+                    Mathf.Min(0.14f, _seasonButtons.Count * 0.018f));
             }
 
             KeyValuePair<int, List<JellyfinItem>> initial = seasons
@@ -227,6 +231,7 @@ namespace JellyfinForRayNeo
             UiFactory.DestroyChildren(_episodeRow);
             _episodeScroll.StopMovement();
             _episodeRow.anchoredPosition = Vector2.zero;
+            int cardIndex = 0;
             foreach (JellyfinItem episode in episodes)
             {
                 PosterCardView card = PosterCardView.Create(_episodeRow, true);
@@ -239,6 +244,10 @@ namespace JellyfinForRayNeo
                     cancellationToken,
                     640,
                     true);
+                UiFactory.AddItemReveal(
+                    card.gameObject,
+                    Mathf.Min(0.20f, cardIndex * 0.028f));
+                cardIndex++;
             }
 
             foreach (Button button in _seasonButtons)

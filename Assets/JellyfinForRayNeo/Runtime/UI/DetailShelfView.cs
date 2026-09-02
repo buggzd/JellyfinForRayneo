@@ -120,9 +120,11 @@ namespace JellyfinForRayNeo
             layout.minHeight = height;
             layout.preferredHeight = height;
             _root.gameObject.SetActive(true);
+            UiFactory.AddScrollReveal(_root.gameObject, _parentScroll, 0.06f);
 
-            foreach (JellyfinItem item in populated)
+            for (int index = 0; index < populated.Count; index++)
             {
+                JellyfinItem item = populated[index];
                 PosterCardView card = PosterCardView.Create(_row, landscape);
                 card.ConfigureScrollRects(_horizontalScroll, _parentScroll);
                 card.Bind(
@@ -133,6 +135,9 @@ namespace JellyfinForRayNeo
                     cancellationToken,
                     landscape ? 760 : 480,
                     landscape || item.IsBrowsableContainer);
+                UiFactory.AddItemReveal(
+                    card.gameObject,
+                    Mathf.Min(0.20f, index * 0.025f));
             }
 
             Canvas.ForceUpdateCanvases();

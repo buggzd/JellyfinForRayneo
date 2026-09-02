@@ -106,6 +106,7 @@ namespace JellyfinForRayNeo
             }
 
             _root.gameObject.SetActive(true);
+            UiFactory.AddScrollReveal(_root.gameObject, _parentScroll, 0.06f);
             for (int index = 0; index < populated.Count; index++)
             {
                 JellyfinChapter chapter = populated[index];
@@ -136,6 +137,9 @@ namespace JellyfinForRayNeo
                 button.onClick.AddListener(() => ChapterSelected?.Invoke(startPosition));
                 FocusScale focus = button.GetComponent<FocusScale>();
                 focus?.ConfigureScrollRects(_horizontalScroll, _parentScroll);
+                UiFactory.AddItemReveal(
+                    button.gameObject,
+                    Mathf.Min(0.20f, index * 0.024f));
             }
 
             Canvas.ForceUpdateCanvases();
