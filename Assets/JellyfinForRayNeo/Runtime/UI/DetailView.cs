@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,18 +15,37 @@ namespace JellyfinForRayNeo
         private readonly Image _backdrop;
         private readonly Image _poster;
         private readonly Text _posterPlaceholder;
+        private readonly RectTransform _content;
+        private readonly ScrollRect _scroll;
+        private readonly Text _kindLabel;
         private readonly Text _title;
-        private readonly Text _metadata;
+        private readonly Text _originalTitle;
+        private readonly RectTransform _metadataChips;
+        private readonly Text _tagline;
         private readonly Text _overview;
+        private readonly Image _factsCard;
+        private readonly RectTransform _factsContainer;
+        private readonly Image _mediaCard;
+        private readonly RectTransform _mediaContainer;
+        private readonly GameObject _progressGroup;
+        private readonly Text _progressLabel;
+        private readonly Image _progressFill;
         private readonly Button _continueButton;
         private readonly Text _continueLabel;
         private readonly Button _fromStartButton;
         private readonly Button _episodesButton;
+        private readonly Button _favoriteButton;
+        private readonly Text _favoriteLabel;
+        private readonly Button _playedButton;
+        private readonly Text _playedLabel;
         private JellyfinItem _item;
+        private bool _userActionBusy;
         private int _bindingVersion;
 
         public event Action<JellyfinItem, long> PlayRequested;
         public event Action<JellyfinItem> EpisodesRequested;
+        public event Action<JellyfinItem, bool> FavoriteStateChangeRequested;
+        public event Action<JellyfinItem, bool> PlayedStateChangeRequested;
         public event Action CloseRequested;
 
         public DetailView(Transform parent)
@@ -33,51 +54,347 @@ namespace JellyfinForRayNeo
             UiFactory.Stretch(rootImage.rectTransform);
             _root = rootImage.gameObject;
 
-            _backdrop = UiFactory.CreatePanel("Backdrop", rootImage.transform, new Color(0.06f, 0.07f, 0.10f, 1f));
+            _backdrop = UiFactory.CreatePanel(
+                "Backdrop",
+                rootImage.transform,
+                new Color(0.07f, 0.075f, 0.10f, 1f));
             _backdrop.preserveAspect = false;
             _backdrop.raycastTarget = false;
-            UiFactory.SetRect(_backdrop.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 560f));
+            UiFactory.SetRect(
+                _backdrop.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f),
+                Vector2.zero,
+                new Vector2(0f, 720f));
 
-            Image shade = UiFactory.CreatePanel("Backdrop Shade", _backdrop.transform, new Color(0.015f, 0.02f, 0.035f, 0.62f));
-            shade.raycastTarget = false;
-            UiFactory.Stretch(shade.rectTransform);
+            Image backdropShade = UiFactory.CreatePanel(
+                "Backdrop Shade",
+                _backdrop.transform,
+                new Color(0.005f, 0.008f, 0.016f, 0.58f));
+            backdropShade.raycastTarget = false;
+            UiFactory.Stretch(backdropShade.rectTransform);
 
-            _poster = UiFactory.CreatePanel("Poster", rootImage.transform, UiTheme.SurfaceRaised);
-            _poster.preserveAspect = true;
+            Image backdropFade = UiFactory.CreateGradientPanel(
+                "Backdrop Fade",
+                rootImage.transform,
+                UiTheme.Background,
+                new Color(UiTheme.Background.r, UiTheme.Background.g, UiTheme.Background.b, 0f));
+            UiFactory.SetRect(
+                backdropFade.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, -256f),
+                new Vector2(0f, 520f));
+
+            Image scrollSurface = UiFactory.CreatePanel("Detail Scroll", rootImage.transform, Color.clear);
+            UiFactory.Stretch(scrollSurface.rectTransform);
+            _scroll = scrollSurface.gameObject.AddComponent<ScrollRect>();
+
+            RectTransform viewport = UiFactory.CreateRect("Detail Viewport", scrollSurface.transform);
+            UiFactory.Stretch(viewport);
+            Image viewportHitSurface = viewport.gameObject.AddComponent<Image>();
+            viewportHitSurface.color = Color.clear;
+            viewportHitSurface.raycastTarget = true;
+            viewport.gameObject.AddComponent<RectMask2D>();
+
+            _content = UiFactory.CreateRect("Detail Content", viewport);
+            _content.anchorMin = new Vector2(0f, 1f);
+            _content.anchorMax = new Vector2(1f, 1f);
+            _content.pivot = new Vector2(0.5f, 1f);
+            _content.anchoredPosition = Vector2.zero;
+            _content.sizeDelta = Vector2.zero;
+
+            VerticalLayoutGroup contentLayout = _content.gameObject.AddComponent<VerticalLayoutGroup>();
+            contentLayout.padding = new RectOffset(88, 88, 64, 110);
+            contentLayout.spacing = 20f;
+            contentLayout.childAlignment = TextAnchor.UpperCenter;
+            contentLayout.childControlWidth = true;
+            contentLayout.childControlHeight = true;
+            contentLayout.childForceExpandWidth = true;
+            contentLayout.childForceExpandHeight = false;
+
+            ContentSizeFitter contentFitter = _content.gameObject.AddComponent<ContentSizeFitter>();
+            contentFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            contentFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            _scroll.viewport = viewport;
+            _scroll.content = _content;
+            _scroll.horizontal = false;
+            _scroll.vertical = true;
+            _scroll.movementType = ScrollRect.MovementType.Elastic;
+            _scroll.elasticity = 0.085f;
+            _scroll.decelerationRate = 0.11f;
+            _scroll.scrollSensitivity = 54f;
+
+            RectTransform hero = UiFactory.CreateRect("Hero Section", _content);
+            LayoutElement heroElement = hero.gameObject.AddComponent<LayoutElement>();
+            heroElement.minHeight = 560f;
+            heroElement.preferredHeight = 596f;
+            heroElement.flexibleWidth = 1f;
+            heroElement.flexibleHeight = 0f;
+
+            HorizontalLayoutGroup heroLayout = hero.gameObject.AddComponent<HorizontalLayoutGroup>();
+            heroLayout.spacing = 54f;
+            heroLayout.childAlignment = TextAnchor.UpperLeft;
+            heroLayout.childControlWidth = true;
+            heroLayout.childControlHeight = true;
+            heroLayout.childForceExpandWidth = false;
+            heroLayout.childForceExpandHeight = false;
+
+            Image posterFrame = UiFactory.CreateRoundedPanel("Poster Frame", hero, UiTheme.SurfaceRaised);
+            posterFrame.raycastTarget = false;
+            LayoutElement posterElement = posterFrame.gameObject.AddComponent<LayoutElement>();
+            posterElement.minWidth = 330f;
+            posterElement.preferredWidth = 330f;
+            posterElement.minHeight = 495f;
+            posterElement.preferredHeight = 495f;
+            posterElement.flexibleWidth = 0f;
+            Outline posterOutline = posterFrame.gameObject.AddComponent<Outline>();
+            posterOutline.effectColor = new Color(1f, 1f, 1f, 0.18f);
+            posterOutline.effectDistance = new Vector2(2f, -2f);
+            posterOutline.useGraphicAlpha = true;
+            Mask posterMask = posterFrame.gameObject.AddComponent<Mask>();
+            posterMask.showMaskGraphic = true;
+
+            _poster = UiFactory.CreatePanel("Poster Artwork", posterFrame.transform, UiTheme.SurfaceRaised);
+            _poster.preserveAspect = false;
             _poster.raycastTarget = false;
-            UiFactory.SetRect(_poster.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(100f, -40f), new Vector2(340f, 510f));
-            _posterPlaceholder = UiFactory.CreateText("Poster Placeholder", _poster.transform, "J", 120, new Color(1f, 1f, 1f, 0.2f), TextAnchor.MiddleCenter, FontStyle.Bold);
+            UiFactory.Stretch(_poster.rectTransform);
+            _posterPlaceholder = UiFactory.CreateText(
+                "Poster Placeholder",
+                posterFrame.transform,
+                "J",
+                112,
+                new Color(1f, 1f, 1f, 0.18f),
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
             UiFactory.Stretch(_posterPlaceholder.rectTransform);
 
-            _title = UiFactory.CreateText("Title", rootImage.transform, string.Empty, 58, UiTheme.TextPrimary, TextAnchor.LowerLeft, FontStyle.Bold);
-            UiFactory.SetRect(_title.rectTransform, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0.5f), new Vector2(500f, 232f), new Vector2(-620f, 116f));
+            RectTransform heroInfo = UiFactory.CreateRect("Hero Information", hero);
+            LayoutElement heroInfoElement = heroInfo.gameObject.AddComponent<LayoutElement>();
+            heroInfoElement.minWidth = 700f;
+            heroInfoElement.preferredHeight = 540f;
+            heroInfoElement.flexibleWidth = 1f;
+            VerticalLayoutGroup heroInfoLayout = heroInfo.gameObject.AddComponent<VerticalLayoutGroup>();
+            heroInfoLayout.spacing = 10f;
+            heroInfoLayout.childAlignment = TextAnchor.UpperLeft;
+            heroInfoLayout.childControlWidth = true;
+            heroInfoLayout.childControlHeight = true;
+            heroInfoLayout.childForceExpandWidth = true;
+            heroInfoLayout.childForceExpandHeight = false;
 
-            _metadata = UiFactory.CreateText("Metadata", rootImage.transform, string.Empty, 24, UiTheme.TextSecondary, TextAnchor.MiddleLeft, FontStyle.Bold);
-            UiFactory.SetRect(_metadata.rectTransform, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0.5f), new Vector2(502f, 157f), new Vector2(-620f, 48f));
+            _kindLabel = CreateFlowText(
+                "Kind",
+                heroInfo,
+                17,
+                UiTheme.AccentBright,
+                FontStyle.Bold,
+                28f);
+            _title = CreateFlowText(
+                "Title",
+                heroInfo,
+                54,
+                UiTheme.TextPrimary,
+                FontStyle.Bold,
+                66f);
+            _title.lineSpacing = 0.95f;
+            _originalTitle = CreateFlowText(
+                "Original Title",
+                heroInfo,
+                22,
+                UiTheme.TextSecondary,
+                FontStyle.Normal,
+                30f);
 
-            _overview = UiFactory.CreateText("Overview", rootImage.transform, string.Empty, 26, UiTheme.TextPrimary, TextAnchor.UpperLeft);
-            _overview.lineSpacing = 1.15f;
-            UiFactory.SetRect(_overview.rectTransform, new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, 0.5f), new Vector2(502f, 76f), new Vector2(-620f, 180f));
+            _metadataChips = UiFactory.CreateRect("Metadata Chips", heroInfo);
+            LayoutElement chipRowElement = _metadataChips.gameObject.AddComponent<LayoutElement>();
+            chipRowElement.minHeight = 44f;
+            chipRowElement.preferredHeight = 44f;
+            chipRowElement.flexibleHeight = 0f;
+            HorizontalLayoutGroup chipLayout = _metadataChips.gameObject.AddComponent<HorizontalLayoutGroup>();
+            chipLayout.spacing = 9f;
+            chipLayout.childAlignment = TextAnchor.MiddleLeft;
+            chipLayout.childControlWidth = true;
+            chipLayout.childControlHeight = true;
+            chipLayout.childForceExpandWidth = false;
+            chipLayout.childForceExpandHeight = true;
 
-            _continueButton = UiFactory.CreateButton("Continue", rootImage.transform, "播放", UiTheme.Accent, UiTheme.TextPrimary, 28);
-            UiFactory.SetRect(_continueButton.GetComponent<RectTransform>(), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(500f, -82f), new Vector2(250f, 68f));
+            _tagline = CreateFlowText(
+                "Tagline",
+                heroInfo,
+                23,
+                new Color(0.86f, 0.87f, 0.92f, 1f),
+                FontStyle.Italic,
+                34f);
+            _tagline.lineSpacing = 1.08f;
+
+            RectTransform progress = UiFactory.CreateRect("Watch Progress", heroInfo);
+            LayoutElement progressElement = progress.gameObject.AddComponent<LayoutElement>();
+            progressElement.minHeight = 42f;
+            progressElement.preferredHeight = 42f;
+            progressElement.flexibleHeight = 0f;
+            _progressGroup = progress.gameObject;
+            _progressLabel = UiFactory.CreateText(
+                "Progress Label",
+                progress,
+                string.Empty,
+                18,
+                UiTheme.TextSecondary,
+                TextAnchor.UpperLeft,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                _progressLabel.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f),
+                Vector2.zero,
+                new Vector2(0f, 24f));
+            Image progressTrack = UiFactory.CreateRoundedPanel(
+                "Progress Track",
+                progress,
+                UiTheme.ProgressTrack);
+            progressTrack.raycastTarget = false;
+            UiFactory.SetRect(
+                progressTrack.rectTransform,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 2f),
+                new Vector2(0f, 7f));
+            _progressFill = UiFactory.CreateRoundedPanel(
+                "Progress Fill",
+                progressTrack.transform,
+                UiTheme.AccentBright);
+            _progressFill.raycastTarget = false;
+            _progressFill.rectTransform.anchorMin = Vector2.zero;
+            _progressFill.rectTransform.anchorMax = new Vector2(0f, 1f);
+            _progressFill.rectTransform.pivot = new Vector2(0f, 0.5f);
+            _progressFill.rectTransform.offsetMin = Vector2.zero;
+            _progressFill.rectTransform.offsetMax = Vector2.zero;
+
+            RectTransform actions = UiFactory.CreateRect("Detail Actions", heroInfo);
+            LayoutElement actionsElement = actions.gameObject.AddComponent<LayoutElement>();
+            actionsElement.minHeight = 66f;
+            actionsElement.preferredHeight = 66f;
+            actionsElement.flexibleHeight = 0f;
+            HorizontalLayoutGroup actionsLayout = actions.gameObject.AddComponent<HorizontalLayoutGroup>();
+            actionsLayout.spacing = 10f;
+            actionsLayout.childAlignment = TextAnchor.MiddleLeft;
+            actionsLayout.childControlWidth = true;
+            actionsLayout.childControlHeight = true;
+            actionsLayout.childForceExpandWidth = false;
+            actionsLayout.childForceExpandHeight = true;
+
+            _continueButton = UiFactory.CreateButton(
+                "Continue",
+                actions,
+                "播放",
+                UiTheme.Focus,
+                new Color(0.025f, 0.028f, 0.045f, 1f),
+                23);
+            ConfigureActionButton(_continueButton, 184f);
             _continueLabel = _continueButton.GetComponentInChildren<Text>();
             _continueButton.onClick.AddListener(() =>
             {
-                long position = _item != null && _item.UserData != null ? _item.UserData.PlaybackPositionTicks : 0L;
+                long position = _item != null && _item.UserData != null
+                    ? _item.UserData.PlaybackPositionTicks
+                    : 0L;
                 PlayRequested?.Invoke(_item, Math.Max(0L, position));
             });
 
-            _fromStartButton = UiFactory.CreateButton("From Start", rootImage.transform, "从头播放", UiTheme.SurfaceRaised, UiTheme.TextPrimary, 26);
-            UiFactory.SetRect(_fromStartButton.GetComponent<RectTransform>(), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(780f, -82f), new Vector2(220f, 68f));
+            _fromStartButton = UiFactory.CreateButton(
+                "From Start",
+                actions,
+                "从头播放",
+                UiTheme.SurfaceSoft,
+                UiTheme.TextPrimary,
+                21);
+            ConfigureActionButton(_fromStartButton, 174f);
             _fromStartButton.onClick.AddListener(() => PlayRequested?.Invoke(_item, 0L));
 
-            _episodesButton = UiFactory.CreateButton("Episodes", rootImage.transform, "浏览剧集", UiTheme.Accent, UiTheme.TextPrimary, 28);
-            UiFactory.SetRect(_episodesButton.GetComponent<RectTransform>(), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(500f, -82f), new Vector2(250f, 68f));
+            _episodesButton = UiFactory.CreateButton(
+                "Episodes",
+                actions,
+                "浏览剧集",
+                UiTheme.Focus,
+                new Color(0.025f, 0.028f, 0.045f, 1f),
+                22);
+            ConfigureActionButton(_episodesButton, 184f);
             _episodesButton.onClick.AddListener(() => EpisodesRequested?.Invoke(_item));
 
-            Button close = UiFactory.CreateButton("Close", rootImage.transform, "返回", new Color(0.08f, 0.09f, 0.13f, 0.9f), UiTheme.TextPrimary, 23);
-            UiFactory.SetRect(close.GetComponent<RectTransform>(), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-54f, -48f), new Vector2(128f, 58f));
+            _favoriteButton = UiFactory.CreateButton(
+                "Favorite",
+                actions,
+                "收藏",
+                UiTheme.SurfaceSoft,
+                UiTheme.TextPrimary,
+                21);
+            ConfigureActionButton(_favoriteButton, 142f);
+            _favoriteLabel = _favoriteButton.GetComponentInChildren<Text>();
+            _favoriteButton.onClick.AddListener(() =>
+            {
+                if (_item == null || _userActionBusy)
+                {
+                    return;
+                }
+                bool current = _item.UserData != null && _item.UserData.IsFavorite;
+                FavoriteStateChangeRequested?.Invoke(_item, !current);
+            });
+
+            _playedButton = UiFactory.CreateButton(
+                "Played",
+                actions,
+                "标记已看",
+                UiTheme.SurfaceSoft,
+                UiTheme.TextPrimary,
+                21);
+            ConfigureActionButton(_playedButton, 162f);
+            _playedLabel = _playedButton.GetComponentInChildren<Text>();
+            _playedButton.onClick.AddListener(() =>
+            {
+                if (_item == null || _userActionBusy)
+                {
+                    return;
+                }
+                bool current = _item.UserData != null && _item.UserData.Played;
+                PlayedStateChangeRequested?.Invoke(_item, !current);
+            });
+
+            Image overviewCard = CreateCard("Overview Card", _content);
+            CreateSectionHeading(overviewCard.transform, "内容简介", "STORY");
+            _overview = CreateFlowText(
+                "Overview",
+                overviewCard.transform,
+                25,
+                UiTheme.TextPrimary,
+                FontStyle.Normal,
+                72f);
+            _overview.lineSpacing = 1.22f;
+
+            _factsCard = CreateCard("Details Card", _content);
+            CreateSectionHeading(_factsCard.transform, "详细信息", "ABOUT");
+            _factsContainer = CreateFactContainer("Detail Facts", _factsCard.transform);
+
+            _mediaCard = CreateCard("Media Card", _content);
+            CreateSectionHeading(_mediaCard.transform, "媒体规格", "TECHNICAL");
+            _mediaContainer = CreateFactContainer("Media Facts", _mediaCard.transform);
+
+            Button close = UiFactory.CreateButton(
+                "Close",
+                rootImage.transform,
+                "返回",
+                new Color(0.055f, 0.061f, 0.082f, 0.94f),
+                UiTheme.TextPrimary,
+                22);
+            UiFactory.SetRect(
+                close.GetComponent<RectTransform>(),
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(-46f, -38f),
+                new Vector2(126f, 58f));
             close.onClick.AddListener(() => CloseRequested?.Invoke());
 
             _root.SetActive(false);
@@ -101,32 +418,84 @@ namespace JellyfinForRayNeo
         {
             _bindingVersion++;
             _item = item;
+            _userActionBusy = false;
             _root.SetActive(true);
             _root.transform.SetAsLastSibling();
-            _title.text = item != null ? item.Name : string.Empty;
-            _metadata.text = BuildMetadata(item);
-            _overview.text = item != null && !string.IsNullOrWhiteSpace(item.Overview)
-                ? item.Overview
-                : "暂无简介。";
+
+            _kindLabel.text = BuildKindLabel(item);
+            _title.text = item != null
+                ? JellyfinText.ToPlainText(item.Name)
+                : string.Empty;
+            string originalTitle = item != null
+                ? JellyfinText.ToPlainText(item.OriginalTitle)
+                : string.Empty;
+            bool showOriginalTitle = !string.IsNullOrWhiteSpace(originalTitle)
+                && !string.Equals(originalTitle, _title.text, StringComparison.OrdinalIgnoreCase);
+            _originalTitle.text = showOriginalTitle ? originalTitle : string.Empty;
+            _originalTitle.gameObject.SetActive(showOriginalTitle);
+
+            PopulateMetadataChips(item);
+            string tagline = item != null && item.Taglines != null
+                ? item.Taglines
+                    .Select(JellyfinText.ToPlainText)
+                    .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
+                : null;
+            _tagline.text = tagline ?? string.Empty;
+            _tagline.gameObject.SetActive(!string.IsNullOrWhiteSpace(tagline));
+
+            string overview = item != null ? JellyfinText.ToPlainText(item.Overview) : string.Empty;
+            _overview.text = string.IsNullOrWhiteSpace(overview) ? "暂无简介。" : overview;
+            PopulateFacts(item);
+            PopulateMediaFacts(item);
+            UpdatePlaybackState();
+            UpdateUserActionState();
+
             _poster.sprite = null;
+            _poster.color = UiTheme.SurfaceRaised;
             _backdrop.sprite = null;
+            _backdrop.color = new Color(0.07f, 0.075f, 0.10f, 1f);
             _posterPlaceholder.gameObject.SetActive(true);
 
-            long resumePosition = item != null && item.UserData != null ? item.UserData.PlaybackPositionTicks : 0L;
-            _continueLabel.text = resumePosition > AppConstants.TicksPerSecond * 10L ? "继续播放" : "播放";
-            _fromStartButton.gameObject.SetActive(resumePosition > AppConstants.TicksPerSecond * 10L);
-            bool playable = item != null && item.IsPlayable;
-            _continueButton.gameObject.SetActive(playable);
-            bool isSeries = item != null && string.Equals(item.Type, "Series", StringComparison.OrdinalIgnoreCase);
-            _episodesButton.gameObject.SetActive(isSeries);
-            if (!playable)
+            int version = _bindingVersion;
+            if (item != null && api != null && imageCache != null)
             {
-                _fromStartButton.gameObject.SetActive(false);
+                LoadImageAsync(
+                    api.BuildPrimaryImageUrl(item, 560),
+                    imageCache,
+                    _poster,
+                    _posterPlaceholder.gameObject,
+                    version,
+                    cancellationToken).Forget();
+                LoadImageAsync(
+                    api.BuildBackdropImageUrl(item, 1920),
+                    imageCache,
+                    _backdrop,
+                    null,
+                    version,
+                    cancellationToken).Forget();
             }
 
-            int version = _bindingVersion;
-            LoadImageAsync(api.BuildPrimaryImageUrl(item, 520), imageCache, _poster, _posterPlaceholder.gameObject, version, cancellationToken).Forget();
-            LoadImageAsync(api.BuildBackdropImageUrl(item, 1600), imageCache, _backdrop, null, version, cancellationToken).Forget();
+            RebuildLayout();
+            _scroll.verticalNormalizedPosition = 1f;
+        }
+
+        public void ApplyUserData(JellyfinUserData userData)
+        {
+            if (_item == null)
+            {
+                return;
+            }
+
+            _item.UserData = userData ?? new JellyfinUserData();
+            UpdatePlaybackState();
+            UpdateUserActionState();
+            RebuildLayout();
+        }
+
+        public void SetUserActionBusy(bool busy)
+        {
+            _userActionBusy = busy;
+            UpdateUserActionState();
         }
 
         public void Hide()
@@ -156,6 +525,7 @@ namespace JellyfinForRayNeo
                     return;
                 }
                 target.sprite = sprite;
+                target.color = Color.white;
                 if (placeholder != null)
                 {
                     placeholder.SetActive(false);
@@ -170,26 +540,611 @@ namespace JellyfinForRayNeo
             }
         }
 
-        private static string BuildMetadata(JellyfinItem item)
+        private void PopulateMetadataChips(JellyfinItem item)
+        {
+            UiFactory.DestroyChildren(_metadataChips);
+            List<string> values = new List<string>();
+            if (item != null && string.Equals(item.Type, "Episode", StringComparison.OrdinalIgnoreCase))
+            {
+                if (item.ParentIndexNumber.HasValue && item.IndexNumber.HasValue)
+                {
+                    values.Add(string.Format(
+                        "S{0:00} E{1:00}",
+                        item.ParentIndexNumber.Value,
+                        item.IndexNumber.Value));
+                }
+            }
+            if (item != null && item.ProductionYear.HasValue)
+            {
+                values.Add(item.ProductionYear.Value.ToString());
+            }
+            AddDistinct(values, BuildRuntime(item));
+            if (item != null)
+            {
+                AddDistinct(values, item.OfficialRating);
+                if (item.CommunityRating.HasValue)
+                {
+                    AddDistinct(values, "★ " + item.CommunityRating.Value.ToString("0.0"));
+                }
+                if (item.CriticRating.HasValue)
+                {
+                    AddDistinct(values, "影评 " + item.CriticRating.Value.ToString("0"));
+                }
+                AddDistinct(values, BuildVideoBadge(item));
+                if (item.Genres != null)
+                {
+                    foreach (string genre in item.Genres.Take(2))
+                    {
+                        AddDistinct(values, genre);
+                    }
+                }
+            }
+
+            foreach (string value in values.Where(value => !string.IsNullOrWhiteSpace(value)).Take(8))
+            {
+                AddChip(value);
+            }
+            _metadataChips.gameObject.SetActive(_metadataChips.childCount > 0);
+        }
+
+        private void AddChip(string value)
+        {
+            string clean = JellyfinText.ToPlainText(value);
+            if (string.IsNullOrWhiteSpace(clean))
+            {
+                return;
+            }
+
+            Image chip = UiFactory.CreateRoundedPanel(
+                "Metadata - " + clean,
+                _metadataChips,
+                new Color(1f, 1f, 1f, 0.105f));
+            chip.raycastTarget = false;
+            LayoutElement element = chip.gameObject.AddComponent<LayoutElement>();
+            element.minWidth = 68f;
+            element.preferredWidth = Mathf.Clamp(34f + clean.Length * 13f, 76f, 226f);
+            element.preferredHeight = 38f;
+            element.flexibleHeight = 0f;
+            Text label = UiFactory.CreateText(
+                "Label",
+                chip.transform,
+                clean,
+                18,
+                UiTheme.TextPrimary,
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
+            UiFactory.Stretch(label.rectTransform, 13f, 13f, 4f, 4f);
+        }
+
+        private void PopulateFacts(JellyfinItem item)
+        {
+            UiFactory.DestroyChildren(_factsContainer);
+            if (item == null)
+            {
+                _factsCard.gameObject.SetActive(false);
+                return;
+            }
+
+            AddFact("类型", JoinValues(item.Genres, 8));
+            AddFact("导演", JoinPeople(item.People, "Director", 4));
+            AddFact("主演", JoinPeople(item.People, "Actor", 7));
+            AddFact(
+                "工作室",
+                item.Studios != null
+                    ? JoinValues(item.Studios.Select(studio => studio != null ? studio.Name : null), 6)
+                    : null);
+            AddFact("制作地区", JoinValues(item.ProductionLocations, 6));
+            AddFact("首映日期", FormatDate(item.PremiereDate));
+            AddFact("状态", LocalizeStatus(item.Status));
+            AddFact("标签", JoinValues(item.Tags, 10));
+            AddFact("外部 ID", BuildProviderIds(item));
+            _factsCard.gameObject.SetActive(_factsContainer.childCount > 0);
+        }
+
+        private void PopulateMediaFacts(JellyfinItem item)
+        {
+            UiFactory.DestroyChildren(_mediaContainer);
+            JellyfinMediaSource source = item != null && item.MediaSources != null
+                ? item.MediaSources.FirstOrDefault(candidate => candidate != null)
+                : null;
+            if (source == null)
+            {
+                _mediaCard.gameObject.SetActive(false);
+                return;
+            }
+
+            List<JellyfinMediaStream> streams = source.MediaStreams ?? new List<JellyfinMediaStream>();
+            JellyfinMediaStream video = streams.FirstOrDefault(stream =>
+                stream != null && string.Equals(stream.Type, "Video", StringComparison.OrdinalIgnoreCase));
+            JellyfinMediaStream audio = streams.FirstOrDefault(stream =>
+                    stream != null
+                    && stream.IsDefault
+                    && string.Equals(stream.Type, "Audio", StringComparison.OrdinalIgnoreCase))
+                ?? streams.FirstOrDefault(stream =>
+                    stream != null && string.Equals(stream.Type, "Audio", StringComparison.OrdinalIgnoreCase));
+            List<JellyfinMediaStream> subtitles = streams
+                .Where(stream =>
+                    stream != null && string.Equals(stream.Type, "Subtitle", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            AddMediaFact("视频", BuildVideoDescription(video));
+            AddMediaFact("音频", BuildAudioDescription(audio));
+            AddMediaFact("字幕", BuildSubtitleDescription(subtitles));
+            AddMediaFact("封装", !string.IsNullOrWhiteSpace(source.Container)
+                ? source.Container.ToUpperInvariant()
+                : null);
+            AddMediaFact("播放能力", BuildPlaybackCapabilities(source));
+            _mediaCard.gameObject.SetActive(_mediaContainer.childCount > 0);
+        }
+
+        private void AddFact(string label, string value)
+        {
+            AddFactRow(_factsContainer, label, value);
+        }
+
+        private void AddMediaFact(string label, string value)
+        {
+            AddFactRow(_mediaContainer, label, value);
+        }
+
+        private static void AddFactRow(Transform parent, string label, string value)
+        {
+            string clean = JellyfinText.ToPlainText(value);
+            if (string.IsNullOrWhiteSpace(clean))
+            {
+                return;
+            }
+
+            RectTransform row = UiFactory.CreateRect(label + " Row", parent);
+            LayoutElement rowElement = row.gameObject.AddComponent<LayoutElement>();
+            rowElement.minHeight = 38f;
+            rowElement.flexibleHeight = 0f;
+            HorizontalLayoutGroup layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.spacing = 18f;
+            layout.childAlignment = TextAnchor.UpperLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = false;
+
+            Text key = CreateFlowText(
+                "Label",
+                row,
+                20,
+                UiTheme.TextMuted,
+                FontStyle.Bold,
+                32f);
+            LayoutElement keyElement = key.GetComponent<LayoutElement>();
+            keyElement.minWidth = 136f;
+            keyElement.preferredWidth = 136f;
+            keyElement.flexibleWidth = 0f;
+            key.text = label;
+
+            Text content = CreateFlowText(
+                "Value",
+                row,
+                22,
+                UiTheme.TextPrimary,
+                FontStyle.Normal,
+                32f);
+            LayoutElement contentElement = content.GetComponent<LayoutElement>();
+            contentElement.flexibleWidth = 1f;
+            content.text = clean;
+            content.lineSpacing = 1.12f;
+        }
+
+        private void UpdatePlaybackState()
+        {
+            bool playable = _item != null && _item.IsPlayable;
+            bool isSeries = _item != null
+                && string.Equals(_item.Type, "Series", StringComparison.OrdinalIgnoreCase);
+            long resumePosition = _item != null && _item.UserData != null
+                ? _item.UserData.PlaybackPositionTicks
+                : 0L;
+            bool hasResumePosition = resumePosition > AppConstants.TicksPerSecond * 10L;
+
+            _continueButton.gameObject.SetActive(playable);
+            _continueLabel.text = hasResumePosition ? "继续播放" : "播放";
+            _fromStartButton.gameObject.SetActive(playable && hasResumePosition);
+            _episodesButton.gameObject.SetActive(isSeries);
+
+            JellyfinUserData userData = _item != null ? _item.UserData : null;
+            double percentage = userData != null && userData.PlayedPercentage.HasValue
+                ? userData.PlayedPercentage.Value
+                : 0d;
+            if (userData != null && userData.Played)
+            {
+                percentage = 100d;
+            }
+            bool showProgress = percentage > 0.1d || hasResumePosition || (userData != null && userData.Played);
+            _progressGroup.SetActive(showProgress);
+            if (showProgress)
+            {
+                float normalized = Mathf.Clamp01((float)(percentage / 100d));
+                _progressFill.rectTransform.anchorMax = new Vector2(normalized, 1f);
+                _progressFill.rectTransform.offsetMax = Vector2.zero;
+                _progressLabel.text = userData != null && userData.Played
+                    ? "已看完"
+                    : "已观看 " + Math.Max(1d, percentage).ToString("0") + "%";
+            }
+        }
+
+        private void UpdateUserActionState()
+        {
+            bool hasItem = _item != null && !string.IsNullOrWhiteSpace(_item.Id);
+            bool isFavorite = hasItem && _item.UserData != null && _item.UserData.IsFavorite;
+            bool isPlayed = hasItem && _item.UserData != null && _item.UserData.Played;
+
+            _favoriteButton.interactable = hasItem && !_userActionBusy;
+            _playedButton.interactable = hasItem && !_userActionBusy;
+            _favoriteLabel.text = isFavorite ? "已收藏" : "收藏";
+            _playedLabel.text = isPlayed ? "已看完" : "标记已看";
+            _favoriteButton.targetGraphic.color = isFavorite ? UiTheme.Accent : UiTheme.SurfaceSoft;
+            _playedButton.targetGraphic.color = isPlayed
+                ? new Color(0.15f, 0.52f, 0.43f, 0.94f)
+                : UiTheme.SurfaceSoft;
+        }
+
+        private void RebuildLayout()
+        {
+            Canvas.ForceUpdateCanvases();
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_factsContainer);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_mediaContainer);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_content);
+            Canvas.ForceUpdateCanvases();
+        }
+
+        private static Image CreateCard(string name, Transform parent)
+        {
+            Image card = UiFactory.CreateRoundedPanel(name, parent, UiTheme.SurfaceGlass);
+            card.raycastTarget = true;
+            Outline outline = card.gameObject.AddComponent<Outline>();
+            outline.effectColor = UiTheme.Border;
+            outline.effectDistance = new Vector2(1f, -1f);
+            outline.useGraphicAlpha = true;
+
+            VerticalLayoutGroup layout = card.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(30, 30, 24, 26);
+            layout.spacing = 12f;
+            layout.childAlignment = TextAnchor.UpperLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+
+            ContentSizeFitter fitter = card.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            LayoutElement element = card.gameObject.AddComponent<LayoutElement>();
+            element.minHeight = 110f;
+            element.flexibleWidth = 1f;
+            element.flexibleHeight = 0f;
+            return card;
+        }
+
+        private static void CreateSectionHeading(Transform parent, string title, string eyebrow)
+        {
+            Text eyebrowLabel = CreateFlowText(
+                "Section Eyebrow",
+                parent,
+                15,
+                UiTheme.AccentBright,
+                FontStyle.Bold,
+                22f);
+            eyebrowLabel.text = eyebrow;
+            Text titleLabel = CreateFlowText(
+                "Section Title",
+                parent,
+                30,
+                UiTheme.TextPrimary,
+                FontStyle.Bold,
+                42f);
+            titleLabel.text = title;
+        }
+
+        private static RectTransform CreateFactContainer(string name, Transform parent)
+        {
+            RectTransform container = UiFactory.CreateRect(name, parent);
+            VerticalLayoutGroup layout = container.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = 10f;
+            layout.childAlignment = TextAnchor.UpperLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            ContentSizeFitter fitter = container.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            LayoutElement element = container.gameObject.AddComponent<LayoutElement>();
+            element.minHeight = 1f;
+            element.flexibleWidth = 1f;
+            element.flexibleHeight = 0f;
+            return container;
+        }
+
+        private static Text CreateFlowText(
+            string name,
+            Transform parent,
+            int fontSize,
+            Color color,
+            FontStyle fontStyle,
+            float minHeight)
+        {
+            Text text = UiFactory.CreateText(
+                name,
+                parent,
+                string.Empty,
+                fontSize,
+                color,
+                TextAnchor.UpperLeft,
+                fontStyle);
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            LayoutElement element = text.gameObject.AddComponent<LayoutElement>();
+            element.minHeight = minHeight;
+            element.flexibleWidth = 1f;
+            element.flexibleHeight = 0f;
+            return text;
+        }
+
+        private static void ConfigureActionButton(Button button, float width)
+        {
+            LayoutElement element = button.gameObject.AddComponent<LayoutElement>();
+            element.minWidth = width;
+            element.preferredWidth = width;
+            element.minHeight = 60f;
+            element.preferredHeight = 60f;
+            element.flexibleWidth = 0f;
+            element.flexibleHeight = 0f;
+        }
+
+        private static string BuildKindLabel(JellyfinItem item)
         {
             if (item == null)
             {
-                return string.Empty;
+                return "JELLYFIN · DETAILS";
             }
 
-            string year = item.ProductionYear.HasValue ? item.ProductionYear.Value.ToString() : string.Empty;
-            string duration = string.Empty;
-            if (item.RunTimeTicks.HasValue && item.RunTimeTicks.Value > 0)
+            string kind;
+            switch ((item.Type ?? string.Empty).ToLowerInvariant())
             {
-                TimeSpan span = TimeSpan.FromSeconds(item.RunTimeTicks.Value / (double)AppConstants.TicksPerSecond);
-                duration = span.TotalHours >= 1d
-                    ? string.Format("{0}小时{1}分", (int)span.TotalHours, span.Minutes)
-                    : string.Format("{0}分钟", Math.Max(1, span.Minutes));
+                case "movie":
+                    kind = "电影";
+                    break;
+                case "series":
+                    kind = "剧集";
+                    break;
+                case "episode":
+                    kind = "单集";
+                    break;
+                default:
+                    kind = item.Type;
+                    break;
+            }
+            return "JELLYFIN  ·  " + (string.IsNullOrWhiteSpace(kind) ? "详情" : kind);
+        }
+
+        private static string BuildRuntime(JellyfinItem item)
+        {
+            if (item == null || !item.RunTimeTicks.HasValue || item.RunTimeTicks.Value <= 0L)
+            {
+                return null;
             }
 
-            string genres = item.Genres != null ? string.Join(" / ", item.Genres.Take(3)) : string.Empty;
-            string rating = item.CommunityRating.HasValue ? item.CommunityRating.Value.ToString("0.0") + " ★" : string.Empty;
-            return string.Join("   ", new[] { year, duration, item.OfficialRating, genres, rating }.Where(value => !string.IsNullOrWhiteSpace(value)));
+            TimeSpan span = TimeSpan.FromSeconds(
+                item.RunTimeTicks.Value / (double)AppConstants.TicksPerSecond);
+            return span.TotalHours >= 1d
+                ? string.Format("{0}小时{1}分", (int)span.TotalHours, span.Minutes)
+                : string.Format("{0}分钟", Math.Max(1, span.Minutes));
+        }
+
+        private static string BuildVideoBadge(JellyfinItem item)
+        {
+            JellyfinMediaStream video = item != null && item.MediaSources != null
+                ? item.MediaSources
+                    .Where(source => source != null && source.MediaStreams != null)
+                    .SelectMany(source => source.MediaStreams)
+                    .FirstOrDefault(stream =>
+                        stream != null && string.Equals(stream.Type, "Video", StringComparison.OrdinalIgnoreCase))
+                : null;
+            if (video == null)
+            {
+                return null;
+            }
+            if (video.Height.HasValue)
+            {
+                if (video.Height.Value >= 2100)
+                {
+                    return "4K";
+                }
+                if (video.Height.Value >= 1000)
+                {
+                    return "1080p";
+                }
+                if (video.Height.Value >= 700)
+                {
+                    return "720p";
+                }
+            }
+            return null;
+        }
+
+        private static string BuildVideoDescription(JellyfinMediaStream video)
+        {
+            if (video == null)
+            {
+                return null;
+            }
+
+            List<string> values = new List<string>();
+            if (video.Width.HasValue && video.Height.HasValue)
+            {
+                values.Add(video.Width.Value + "×" + video.Height.Value);
+            }
+            AddDistinct(values, !string.IsNullOrWhiteSpace(video.Codec)
+                ? video.Codec.ToUpperInvariant()
+                : null);
+            AddDistinct(values, !string.IsNullOrWhiteSpace(video.VideoRangeType)
+                ? video.VideoRangeType
+                : video.VideoRange);
+            if (video.BitDepth.HasValue)
+            {
+                values.Add(video.BitDepth.Value + "-bit");
+            }
+            float? frameRate = video.AverageFrameRate ?? video.RealFrameRate;
+            if (frameRate.HasValue && frameRate.Value > 0f)
+            {
+                values.Add(frameRate.Value.ToString("0.##") + " fps");
+            }
+            if (video.BitRate.HasValue && video.BitRate.Value > 0)
+            {
+                values.Add((video.BitRate.Value / 1000000f).ToString("0.##") + " Mbps");
+            }
+            return string.Join(" · ", values);
+        }
+
+        private static string BuildAudioDescription(JellyfinMediaStream audio)
+        {
+            if (audio == null)
+            {
+                return null;
+            }
+
+            List<string> values = new List<string>();
+            AddDistinct(values, audio.Language);
+            AddDistinct(values, !string.IsNullOrWhiteSpace(audio.Codec)
+                ? audio.Codec.ToUpperInvariant()
+                : null);
+            if (audio.Channels.HasValue)
+            {
+                values.Add(audio.Channels.Value + " 声道");
+            }
+            AddDistinct(values, audio.ChannelLayout);
+            AddDistinct(values, audio.DisplayTitle);
+            return string.Join(" · ", values);
+        }
+
+        private static string BuildSubtitleDescription(IList<JellyfinMediaStream> subtitles)
+        {
+            if (subtitles == null || subtitles.Count == 0)
+            {
+                return "无";
+            }
+
+            List<string> languages = subtitles
+                .Select(stream => !string.IsNullOrWhiteSpace(stream.Language)
+                    ? stream.Language
+                    : stream.DisplayTitle)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(6)
+                .ToList();
+            return subtitles.Count + " 条"
+                + (languages.Count > 0 ? " · " + string.Join(" / ", languages) : string.Empty);
+        }
+
+        private static string BuildPlaybackCapabilities(JellyfinMediaSource source)
+        {
+            List<string> values = new List<string>();
+            if (source.SupportsDirectPlay)
+            {
+                values.Add("直接播放");
+            }
+            if (source.SupportsDirectStream)
+            {
+                values.Add("直接串流");
+            }
+            if (source.SupportsTranscoding)
+            {
+                values.Add("转码");
+            }
+            return string.Join(" · ", values);
+        }
+
+        private static string JoinPeople(IEnumerable<JellyfinPerson> people, string type, int limit)
+        {
+            return people == null
+                ? null
+                : JoinValues(
+                    people
+                        .Where(person =>
+                            person != null
+                            && string.Equals(person.Type, type, StringComparison.OrdinalIgnoreCase))
+                        .Select(person => person.Name),
+                    limit);
+        }
+
+        private static string JoinValues(IEnumerable<string> values, int limit)
+        {
+            if (values == null)
+            {
+                return null;
+            }
+
+            List<string> clean = values
+                .Select(JellyfinText.ToPlainText)
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(Math.Max(1, limit))
+                .ToList();
+            return clean.Count > 0 ? string.Join(" · ", clean) : null;
+        }
+
+        private static string BuildProviderIds(JellyfinItem item)
+        {
+            if (item == null || item.ProviderIds == null || item.ProviderIds.Count == 0)
+            {
+                return item != null && item.ExternalUrls != null
+                    ? JoinValues(item.ExternalUrls.Select(value => value != null ? value.Name : null), 6)
+                    : null;
+            }
+
+            return string.Join(
+                " · ",
+                item.ProviderIds
+                    .Where(pair => !string.IsNullOrWhiteSpace(pair.Value))
+                    .OrderBy(pair => pair.Key)
+                    .Take(6)
+                    .Select(pair => pair.Key + ": " + pair.Value));
+        }
+
+        private static string FormatDate(string value)
+        {
+            DateTimeOffset date;
+            return DateTimeOffset.TryParse(
+                value,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out date)
+                ? date.ToString("yyyy-MM-dd")
+                : value;
+        }
+
+        private static string LocalizeStatus(string value)
+        {
+            switch ((value ?? string.Empty).ToLowerInvariant())
+            {
+                case "continuing":
+                    return "连载中";
+                case "ended":
+                    return "已完结";
+                case "released":
+                    return "已发行";
+                default:
+                    return value;
+            }
+        }
+
+        private static void AddDistinct(ICollection<string> values, string value)
+        {
+            string clean = JellyfinText.ToPlainText(value);
+            if (string.IsNullOrWhiteSpace(clean)
+                || values.Any(existing => string.Equals(existing, clean, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+            values.Add(clean);
         }
     }
 }

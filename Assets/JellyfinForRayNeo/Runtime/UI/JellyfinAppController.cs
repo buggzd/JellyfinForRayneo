@@ -138,6 +138,10 @@ namespace JellyfinForRayNeo
             _detailView.CloseRequested += _detailView.Hide;
             _detailView.PlayRequested += (item, position) => PlayAsync(item, position).Forget(HandleFatalError);
             _detailView.EpisodesRequested += series => ShowEpisodesAsync(series).Forget(HandleFatalError);
+            _detailView.FavoriteStateChangeRequested += (item, isFavorite) =>
+                SetFavoriteStateAsync(item, isFavorite).Forget(HandleFatalError);
+            _detailView.PlayedStateChangeRequested += (item, isPlayed) =>
+                SetPlayedStateAsync(item, isPlayed).Forget(HandleFatalError);
             _episodeBrowser.CloseRequested += _episodeBrowser.Hide;
             _episodeBrowser.EpisodeSelected += episode => ShowDetailsAsync(episode).Forget(HandleFatalError);
             _playerView.BackRequested += () => StopPlaybackAsync(false, null).Forget(HandleFatalError);
@@ -305,6 +309,102 @@ namespace JellyfinForRayNeo
             {
                 ShowLoading(false);
             }
+        }
+
+        private async Task SetFavoriteStateAsync(JellyfinItem item, bool isFavorite)
+        {
+            if (item == null || string.IsNullOrWhiteSpace(item.Id))
+            {
+                return;
+            }
+
+            CancellationToken token = BeginOperation();
+            _detailView.SetUserActionBusy(true);
+            try
+            {
+                JellyfinUserData userData = await _api.SetFavoriteAsync(item.Id, isFavorite, token);
+                userData = await ResolveUserDataAsync(item, userData, token);
+                token.ThrowIfCancellationRequested();
+                if (IsCurrentDetail(item))
+                {
+                    _detailView.ApplyUserData(userData);
+                    ShowToast(isFavorite ? "已加入收藏" : "已取消收藏", false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception exception)
+            {
+                ShowToast("收藏状态同步失败：" + UserMessage(exception), true);
+            }
+            finally
+            {
+                if (IsCurrentDetail(item))
+                {
+                    _detailView.SetUserActionBusy(false);
+                }
+            }
+        }
+
+        private async Task SetPlayedStateAsync(JellyfinItem item, bool isPlayed)
+        {
+            if (item == null || string.IsNullOrWhiteSpace(item.Id))
+            {
+                return;
+            }
+
+            CancellationToken token = BeginOperation();
+            _detailView.SetUserActionBusy(true);
+            try
+            {
+                JellyfinUserData userData = await _api.SetPlayedAsync(item.Id, isPlayed, token);
+                userData = await ResolveUserDataAsync(item, userData, token);
+                token.ThrowIfCancellationRequested();
+                if (IsCurrentDetail(item))
+                {
+                    _detailView.ApplyUserData(userData);
+                    ShowToast(isPlayed ? "已标记为看完" : "已标记为未看", false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception exception)
+            {
+                ShowToast("观看状态同步失败：" + UserMessage(exception), true);
+            }
+            finally
+            {
+                if (IsCurrentDetail(item))
+                {
+                    _detailView.SetUserActionBusy(false);
+                }
+            }
+        }
+
+        private async Task<JellyfinUserData> ResolveUserDataAsync(
+            JellyfinItem item,
+            JellyfinUserData userData,
+            CancellationToken cancellationToken)
+        {
+            if (userData != null)
+            {
+                return userData;
+            }
+
+            JellyfinItem refreshed = await _api.GetItemAsync(item.Id, cancellationToken);
+            return refreshed != null && refreshed.UserData != null
+                ? refreshed.UserData
+                : item.UserData ?? new JellyfinUserData();
+        }
+
+        private bool IsCurrentDetail(JellyfinItem item)
+        {
+            JellyfinItem current = _detailView != null ? _detailView.CurrentItem : null;
+            return current != null
+                && item != null
+                && string.Equals(current.Id, item.Id, StringComparison.OrdinalIgnoreCase);
         }
 
         private async Task ShowEpisodesAsync(JellyfinItem series)

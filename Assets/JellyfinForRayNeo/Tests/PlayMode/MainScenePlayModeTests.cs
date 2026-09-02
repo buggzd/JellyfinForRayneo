@@ -158,6 +158,58 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [UnityTest]
+        public IEnumerator DetailView_UsesScrollableContentDrivenLayout()
+        {
+            GameObject host = new GameObject("Detail Layout Test Host", typeof(RectTransform));
+            DetailView detail = new DetailView(host.transform);
+            yield return null;
+
+            Transform scrollTransform = FindDescendant(host.transform, "Detail Scroll");
+            Transform viewport = FindDescendant(host.transform, "Detail Viewport");
+            Transform content = FindDescendant(host.transform, "Detail Content");
+            Transform overview = FindDescendant(host.transform, "Overview");
+            Transform actions = FindDescendant(host.transform, "Detail Actions");
+            Transform continueButton = FindDescendant(host.transform, "Continue");
+            Transform metadataChips = FindDescendant(host.transform, "Metadata Chips");
+            Assert.NotNull(scrollTransform);
+            Assert.NotNull(viewport);
+            Assert.NotNull(content);
+            Assert.NotNull(overview);
+            Assert.NotNull(actions);
+            Assert.NotNull(continueButton);
+            Assert.NotNull(metadataChips);
+
+            ScrollRect scroll = scrollTransform.GetComponent<ScrollRect>();
+            Assert.NotNull(scroll);
+            Assert.IsTrue(scroll.vertical);
+            Assert.IsFalse(scroll.horizontal);
+            Assert.AreSame(viewport, scroll.viewport);
+            Assert.AreSame(content, scroll.content);
+            AssertTransparentDragSurface(viewport);
+            Assert.NotNull(content.GetComponent<VerticalLayoutGroup>());
+            Assert.AreEqual(
+                ContentSizeFitter.FitMode.PreferredSize,
+                content.GetComponent<ContentSizeFitter>().verticalFit);
+            Assert.AreEqual(
+                VerticalWrapMode.Overflow,
+                overview.GetComponent<Text>().verticalOverflow,
+                "Long Jellyfin summaries must grow instead of overlapping the next section.");
+            Assert.IsTrue(
+                actions.GetComponent<HorizontalLayoutGroup>().childControlWidth,
+                "Action buttons must use their LayoutElement widths instead of Unity's 100 px default.");
+            Assert.AreEqual(0f, actions.GetComponent<LayoutElement>().flexibleHeight);
+            Assert.AreEqual(184f, continueButton.GetComponent<LayoutElement>().preferredWidth);
+            Assert.IsTrue(metadataChips.GetComponent<HorizontalLayoutGroup>().childControlWidth);
+            Assert.AreEqual(0f, metadataChips.GetComponent<LayoutElement>().flexibleHeight);
+            Assert.NotNull(FindDescendant(host.transform, "Favorite"));
+            Assert.NotNull(FindDescendant(host.transform, "Played"));
+
+            detail.Hide();
+            Object.Destroy(host);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator PosterCards_KeepPortraitAndLandscapeArtworkRatios()
         {
             GameObject host = new GameObject("Poster Card Test Host", typeof(RectTransform));

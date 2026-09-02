@@ -13,7 +13,9 @@ namespace JellyfinForRayNeo
     {
         private const int DefaultItemLimit = 18;
         private const int DefaultMaxBitrate = 20_000_000;
-        private const string ItemFields = "PrimaryImageAspectRatio,Overview,Genres,MediaSources,MediaStreams,DateCreated";
+        private const string ItemFields =
+            "PrimaryImageAspectRatio,Overview,OriginalTitle,Genres,Studios,People,ProviderIds," +
+            "ExternalUrls,Tags,Taglines,ProductionLocations,MediaSources,MediaStreams,DateCreated";
 
         private readonly string _deviceId;
         private JellyfinSession _session;
@@ -173,11 +175,51 @@ namespace JellyfinForRayNeo
 
         public Task<JellyfinItem> GetItemAsync(string itemId, CancellationToken cancellationToken)
         {
+            RequireItemId(itemId);
             string url = BuildSessionUrl("/Items/" + Uri.EscapeDataString(itemId), new Dictionary<string, string>
             {
-                { "userId", RequireSession().UserId }
+                { "userId", RequireSession().UserId },
+                { "fields", ItemFields },
+                { "enableImages", "true" },
+                { "enableUserData", "true" }
             });
             return SendJsonAsync<JellyfinItem>(UnityWebRequest.kHttpVerbGET, url, null, true, cancellationToken);
+        }
+
+        public Task<JellyfinUserData> SetFavoriteAsync(
+            string itemId,
+            bool isFavorite,
+            CancellationToken cancellationToken)
+        {
+            RequireItemId(itemId);
+            JellyfinSession session = RequireSession();
+            string path = "/Users/" + Uri.EscapeDataString(session.UserId)
+                + "/FavoriteItems/" + Uri.EscapeDataString(itemId);
+            string method = isFavorite ? UnityWebRequest.kHttpVerbPOST : UnityWebRequest.kHttpVerbDELETE;
+            return SendJsonAsync<JellyfinUserData>(
+                method,
+                BuildSessionUrl(path, null),
+                null,
+                true,
+                cancellationToken);
+        }
+
+        public Task<JellyfinUserData> SetPlayedAsync(
+            string itemId,
+            bool isPlayed,
+            CancellationToken cancellationToken)
+        {
+            RequireItemId(itemId);
+            JellyfinSession session = RequireSession();
+            string path = "/Users/" + Uri.EscapeDataString(session.UserId)
+                + "/PlayedItems/" + Uri.EscapeDataString(itemId);
+            string method = isPlayed ? UnityWebRequest.kHttpVerbPOST : UnityWebRequest.kHttpVerbDELETE;
+            return SendJsonAsync<JellyfinUserData>(
+                method,
+                BuildSessionUrl(path, null),
+                null,
+                true,
+                cancellationToken);
         }
 
         public async Task<JellyfinPlaybackPlan> GetPlaybackPlanAsync(
@@ -406,6 +448,14 @@ namespace JellyfinForRayNeo
                 throw new InvalidOperationException("Jellyfin user session is not available.");
             }
             return _session;
+        }
+
+        private static void RequireItemId(string itemId)
+        {
+            if (string.IsNullOrWhiteSpace(itemId))
+            {
+                throw new ArgumentException("A Jellyfin item id is required.", nameof(itemId));
+            }
         }
 
         private static bool IsUnityDirectPlayContainer(string container)

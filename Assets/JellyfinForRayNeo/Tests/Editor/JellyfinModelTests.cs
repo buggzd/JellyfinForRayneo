@@ -31,6 +31,32 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [Test]
+        public void ItemResponse_DeserializesExpandedDetailMetadata()
+        {
+            const string json = "{\"OriginalTitle\":\"Original\",\"Tags\":[\"Drama\"],\"ProductionLocations\":[\"Japan\"],\"Studios\":[{\"Name\":\"Studio A\"}],\"People\":[{\"Name\":\"Director A\",\"Type\":\"Director\"}],\"ProviderIds\":{\"Tmdb\":\"123\"},\"CriticRating\":91,\"PremiereDate\":\"2025-04-01T00:00:00.0000000Z\",\"MediaSources\":[{\"MediaStreams\":[{\"Type\":\"Video\",\"Codec\":\"h264\",\"Width\":1920,\"Height\":1080,\"VideoRange\":\"SDR\"}]}]}";
+            JellyfinItem item = JsonConvert.DeserializeObject<JellyfinItem>(json);
+
+            Assert.AreEqual("Original", item.OriginalTitle);
+            Assert.AreEqual("Drama", item.Tags[0]);
+            Assert.AreEqual("Studio A", item.Studios[0].Name);
+            Assert.AreEqual("Director", item.People[0].Type);
+            Assert.AreEqual("123", item.ProviderIds["Tmdb"]);
+            Assert.AreEqual(1920, item.MediaSources[0].MediaStreams[0].Width);
+            Assert.AreEqual("SDR", item.MediaSources[0].MediaStreams[0].VideoRange);
+        }
+
+        [Test]
+        public void OverviewMarkup_IsConvertedToReadablePlainText()
+        {
+            const string overview = "<p>第一行<br>第二行 &amp; 内容</p><ul><li>条目一</li><li>条目二</li></ul>";
+
+            string result = JellyfinText.ToPlainText(overview);
+
+            Assert.AreEqual("第一行\n第二行 & 内容\n• 条目一\n• 条目二", result);
+            StringAssert.DoesNotContain("<br>", result);
+        }
+
+        [Test]
         public void RayNeoPlaybackProfile_RequestsAndroidFriendlyHlsFallback()
         {
             JellyfinDeviceProfile profile = JellyfinDeviceProfile.CreateRayNeoAirProfile(20_000_000);
@@ -59,4 +85,3 @@ namespace JellyfinForRayNeo.Tests
         }
     }
 }
-

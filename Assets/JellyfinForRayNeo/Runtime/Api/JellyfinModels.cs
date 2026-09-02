@@ -69,8 +69,19 @@ namespace JellyfinForRayNeo
         public List<JellyfinMediaSource> MediaSources;
         public List<string> Genres;
         public List<string> Taglines;
+        public List<string> Tags;
+        public List<string> ProductionLocations;
+        public List<JellyfinStudio> Studios;
+        public List<JellyfinPerson> People;
+        public List<JellyfinExternalUrl> ExternalUrls;
+        public Dictionary<string, string> ProviderIds;
         public string OfficialRating;
         public float? CommunityRating;
+        public float? CriticRating;
+        public string PremiereDate;
+        public string EndDate;
+        public string Status;
+        public string VideoType;
 
         public bool IsPlayable
         {
@@ -114,6 +125,30 @@ namespace JellyfinForRayNeo
     }
 
     [Serializable]
+    public sealed class JellyfinStudio
+    {
+        public string Name;
+        public string Id;
+    }
+
+    [Serializable]
+    public sealed class JellyfinPerson
+    {
+        public string Name;
+        public string Id;
+        public string Role;
+        public string Type;
+        public string PrimaryImageTag;
+    }
+
+    [Serializable]
+    public sealed class JellyfinExternalUrl
+    {
+        public string Name;
+        public string Url;
+    }
+
+    [Serializable]
     public sealed class JellyfinMediaSource
     {
         public string Protocol;
@@ -145,6 +180,24 @@ namespace JellyfinForRayNeo
         public bool IsForced;
         public bool SupportsExternalStream;
         public string DeliveryUrl;
+        public string Profile;
+        public string Level;
+        public string PixelFormat;
+        public string VideoRange;
+        public string VideoRangeType;
+        public string ColorSpace;
+        public string ColorTransfer;
+        public string ColorPrimaries;
+        public int? Width;
+        public int? Height;
+        public int? BitRate;
+        public int? BitDepth;
+        public int? Channels;
+        public string ChannelLayout;
+        public float? AverageFrameRate;
+        public float? RealFrameRate;
+        public bool IsInterlaced;
+        public bool IsExternal;
     }
 
     [Serializable]
@@ -306,4 +359,3 @@ namespace JellyfinForRayNeo
         public bool Failed;
     }
 }
-
