@@ -16,6 +16,8 @@ namespace JellyfinForRayNeo
         private readonly Image _backdrop;
         private readonly Image _poster;
         private readonly Text _posterPlaceholder;
+        private readonly Text _posterPlaceholderCaption;
+        private readonly UiArtworkPlaceholderMotion _posterPlaceholderMotion;
         private readonly GameObject _posterFrame;
         private readonly GameObject _heroInformation;
         private readonly RectTransform _content;
@@ -89,11 +91,12 @@ namespace JellyfinForRayNeo
                 Vector2.zero,
                 new Vector2(0f, 720f));
 
-            Image backdropShade = UiFactory.CreatePanel(
-                "Backdrop Shade",
+            Image backdropShade = UiFactory.CreateGradientPanel(
+                "Backdrop Content Shade",
                 _backdrop.transform,
-                new Color(0.005f, 0.008f, 0.016f, 0.58f));
-            backdropShade.raycastTarget = false;
+                new Color(0.003f, 0.006f, 0.014f, 0.88f),
+                new Color(0.005f, 0.008f, 0.016f, 0.22f),
+                true);
             UiFactory.Stretch(backdropShade.rectTransform);
 
             Image backdropFade = UiFactory.CreateGradientPanel(
@@ -173,6 +176,10 @@ namespace JellyfinForRayNeo
             posterElement.minHeight = 495f;
             posterElement.preferredHeight = 495f;
             posterElement.flexibleWidth = 0f;
+            Shadow posterShadow = posterFrame.gameObject.AddComponent<Shadow>();
+            posterShadow.effectColor = new Color(0f, 0f, 0f, 0.62f);
+            posterShadow.effectDistance = new Vector2(0f, -13f);
+            posterShadow.useGraphicAlpha = true;
             Outline posterOutline = posterFrame.gameObject.AddComponent<Outline>();
             posterOutline.effectColor = new Color(1f, 1f, 1f, 0.18f);
             posterOutline.effectDistance = new Vector2(2f, -2f);
@@ -184,15 +191,91 @@ namespace JellyfinForRayNeo
             _poster.preserveAspect = false;
             _poster.raycastTarget = false;
             UiFactory.Stretch(_poster.rectTransform);
+
+            UiGradient posterFrameGradient = posterFrame.gameObject.AddComponent<UiGradient>();
+            posterFrameGradient.StartColor = new Color(0.46f, 0.86f, 0.82f, 0.58f);
+            posterFrameGradient.EndColor = new Color(0.49f, 0.35f, 0.70f, 0.44f);
+            posterFrameGradient.Horizontal = true;
+
+            RectTransform posterPlaceholderLayer = UiFactory.CreateRect(
+                "Poster Placeholder Layer",
+                posterFrame.transform);
+            UiFactory.Stretch(posterPlaceholderLayer);
+            Image posterPlaceholderGlow = UiFactory.CreateGlowPanel(
+                "Poster Placeholder Glow",
+                posterPlaceholderLayer,
+                new Color(0.34f, 0.96f, 0.88f, 0.11f));
+            UiFactory.SetRect(
+                posterPlaceholderGlow.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 8f),
+                new Vector2(280f, 360f));
+            Image posterPlaceholderShimmer = UiFactory.CreatePanel(
+                "Poster Placeholder Shimmer",
+                posterPlaceholderLayer,
+                new Color(0.74f, 1f, 0.97f, 0.075f));
+            posterPlaceholderShimmer.raycastTarget = false;
+            UiFactory.SetRect(
+                posterPlaceholderShimmer.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                new Vector2(82f, 680f));
+            posterPlaceholderShimmer.rectTransform.localEulerAngles =
+                new Vector3(0f, 0f, -11f);
+            Image posterPlaceholderMark = UiFactory.CreateRoundedPanel(
+                "Poster Placeholder Mark",
+                posterPlaceholderLayer,
+                new Color(0.48f, 0.96f, 0.89f, 0.74f));
+            posterPlaceholderMark.raycastTarget = false;
+            UiFactory.SetRect(
+                posterPlaceholderMark.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 50f),
+                new Vector2(58f, 5f));
             _posterPlaceholder = UiFactory.CreateText(
                 "Poster Placeholder",
-                posterFrame.transform,
-                "J",
-                112,
-                new Color(1f, 1f, 1f, 0.18f),
+                posterPlaceholderLayer,
+                "JELLYFIN",
+                29,
+                new Color(0.90f, 1f, 0.98f, 0.78f),
                 TextAnchor.MiddleCenter,
                 FontStyle.Bold);
-            UiFactory.Stretch(_posterPlaceholder.rectTransform);
+            UiFactory.SetRect(
+                _posterPlaceholder.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 10f),
+                new Vector2(284f, 46f));
+            _posterPlaceholderCaption = UiFactory.CreateText(
+                "Poster Placeholder Caption",
+                posterPlaceholderLayer,
+                "正在载入画面",
+                16,
+                new Color(0.72f, 0.79f, 0.84f, 0.70f),
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                _posterPlaceholderCaption.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -29f),
+                new Vector2(284f, 30f));
+            _posterPlaceholderMotion =
+                posterFrame.gameObject.AddComponent<UiArtworkPlaceholderMotion>();
+            _posterPlaceholderMotion.Configure(
+                posterPlaceholderLayer.gameObject,
+                posterPlaceholderShimmer.rectTransform,
+                posterPlaceholderGlow,
+                _posterPlaceholder,
+                0.31f);
 
             RectTransform heroInfo = UiFactory.CreateRect("Hero Information", hero);
             _heroInformation = heroInfo.gameObject;
@@ -211,7 +294,7 @@ namespace JellyfinForRayNeo
             Image heroGlass = UiFactory.CreateRoundedPanel(
                 "Hero Information Glass",
                 heroInfo,
-                new Color(0.018f, 0.025f, 0.040f, 0.54f));
+                new Color(0.012f, 0.018f, 0.030f, 0.56f));
             heroGlass.raycastTarget = false;
             UiFactory.SetRect(
                 heroGlass.rectTransform,
@@ -223,13 +306,47 @@ namespace JellyfinForRayNeo
             LayoutElement heroGlassLayout = heroGlass.gameObject.AddComponent<LayoutElement>();
             heroGlassLayout.ignoreLayout = true;
             UiGradient heroGlassGradient = heroGlass.gameObject.AddComponent<UiGradient>();
-            heroGlassGradient.StartColor = new Color(1f, 1f, 1f, 0.72f);
-            heroGlassGradient.EndColor = Color.white;
+            heroGlassGradient.StartColor = new Color(1f, 1f, 1f, 0.92f);
+            heroGlassGradient.EndColor = new Color(1f, 1f, 1f, 0.54f);
+            heroGlassGradient.Horizontal = true;
             Outline heroGlassOutline = heroGlass.gameObject.AddComponent<Outline>();
-            heroGlassOutline.effectColor = new Color(0.78f, 0.91f, 1f, 0.10f);
+            heroGlassOutline.effectColor = new Color(0.78f, 0.91f, 1f, 0.075f);
             heroGlassOutline.effectDistance = new Vector2(1f, -1f);
             heroGlassOutline.useGraphicAlpha = true;
             heroGlass.transform.SetAsFirstSibling();
+
+            Image heroGlow = UiFactory.CreateGlowPanel(
+                "Hero Information Glow",
+                heroInfo,
+                new Color(0.30f, 0.94f, 0.86f, 0.075f));
+            UiFactory.SetRect(
+                heroGlow.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(210f, -116f),
+                new Vector2(720f, 360f));
+            LayoutElement heroGlowLayout = heroGlow.gameObject.AddComponent<LayoutElement>();
+            heroGlowLayout.ignoreLayout = true;
+            UiAmbientFloat heroGlowMotion = heroGlow.gameObject.AddComponent<UiAmbientFloat>();
+            heroGlowMotion.Amplitude = new Vector2(12f, 6f);
+            heroGlowMotion.Speed = 0.035f;
+            heroGlowMotion.ScalePulse = 0.018f;
+
+            Image heroAccent = UiFactory.CreateGradientPanel(
+                "Hero Information Accent",
+                heroInfo,
+                new Color(UiTheme.AccentBright.r, UiTheme.AccentBright.g, UiTheme.AccentBright.b, 0f),
+                new Color(UiTheme.AccentBright.r, UiTheme.AccentBright.g, UiTheme.AccentBright.b, 0.82f));
+            UiFactory.SetRect(
+                heroAccent.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(-17f, -18f),
+                new Vector2(4f, 108f));
+            LayoutElement heroAccentLayout = heroAccent.gameObject.AddComponent<LayoutElement>();
+            heroAccentLayout.ignoreLayout = true;
 
             _kindLabel = CreateFlowText(
                 "Kind",
@@ -500,6 +617,11 @@ namespace JellyfinForRayNeo
             get { return _item; }
         }
 
+        public void SetInteractionEnabled(bool enabled)
+        {
+            _motion.SetInteractionAllowed(enabled);
+        }
+
         public void Show(
             JellyfinItem item,
             JellyfinApiClient api,
@@ -520,6 +642,7 @@ namespace JellyfinForRayNeo
             _userActionBusy = false;
             _root.transform.SetAsLastSibling();
             _motion.Show();
+            _motion.SetInteractionAllowed(true);
             UiFactory.AddItemReveal(_posterFrame, 0.025f);
             UiFactory.AddItemReveal(_heroInformation, 0.075f);
 
@@ -583,27 +706,53 @@ namespace JellyfinForRayNeo
 
             _poster.sprite = null;
             _poster.color = UiTheme.SurfaceRaised;
+            _poster.CrossFadeAlpha(1f, 0f, true);
             _backdrop.sprite = null;
             _backdrop.color = new Color(0.07f, 0.075f, 0.10f, 1f);
-            _posterPlaceholder.gameObject.SetActive(true);
+
+            string posterUrl = item != null && api != null
+                ? api.BuildPrimaryImageUrl(item, 560)
+                : null;
+            string backdropUrl = item != null && api != null
+                ? api.BuildBackdropImageUrl(item, 1920)
+                : null;
+            bool loadingPoster = imageCache != null && !string.IsNullOrWhiteSpace(posterUrl);
+            _posterPlaceholder.text = BuildPosterPlaceholderLabel(item);
+            _posterPlaceholderCaption.text = loadingPoster
+                ? "正在载入画面"
+                : "暂无画面";
+            if (loadingPoster)
+            {
+                _posterPlaceholderMotion.ShowLoading();
+            }
+            else
+            {
+                _posterPlaceholderMotion.ShowUnavailable();
+            }
 
             int version = _bindingVersion;
-            if (item != null && api != null && imageCache != null)
+            if (imageCache != null)
             {
-                LoadImageAsync(
-                    api.BuildPrimaryImageUrl(item, 560),
-                    imageCache,
-                    _poster,
-                    _posterPlaceholder.gameObject,
-                    version,
-                    cancellationToken).Forget();
-                LoadImageAsync(
-                    api.BuildBackdropImageUrl(item, 1920),
-                    imageCache,
-                    _backdrop,
-                    null,
-                    version,
-                    cancellationToken).Forget();
+                if (loadingPoster)
+                {
+                    LoadImageAsync(
+                        posterUrl,
+                        imageCache,
+                        _poster,
+                        true,
+                        version,
+                        cancellationToken).Forget();
+                }
+                if (!string.IsNullOrWhiteSpace(backdropUrl))
+                {
+                    LoadImageAsync(
+                        backdropUrl,
+                        imageCache,
+                        _backdrop,
+                        false,
+                        version,
+                        cancellationToken).Forget();
+                }
             }
 
             RebuildLayout();
@@ -673,7 +822,7 @@ namespace JellyfinForRayNeo
             string url,
             JellyfinImageCache cache,
             Image target,
-            GameObject placeholder,
+            bool posterArtwork,
             int bindingVersion,
             CancellationToken cancellationToken)
         {
@@ -685,16 +834,21 @@ namespace JellyfinForRayNeo
             try
             {
                 Sprite sprite = await cache.LoadSpriteAsync(url, cancellationToken);
-                if (bindingVersion != _bindingVersion || sprite == null)
+                if (bindingVersion != _bindingVersion)
                 {
+                    return;
+                }
+                if (sprite == null)
+                {
+                    SetPosterUnavailable(posterArtwork);
                     return;
                 }
                 target.sprite = sprite;
                 target.color = Color.white;
                 UiFactory.RevealGraphic(target, target == _backdrop ? 0.40f : 0.30f);
-                if (placeholder != null)
+                if (posterArtwork)
                 {
-                    placeholder.SetActive(false);
+                    _posterPlaceholderMotion.Complete(0.30f);
                 }
             }
             catch (OperationCanceledException)
@@ -703,7 +857,22 @@ namespace JellyfinForRayNeo
             catch (Exception)
             {
                 // Metadata remains usable even when a backdrop or poster fails.
+                if (bindingVersion == _bindingVersion)
+                {
+                    SetPosterUnavailable(posterArtwork);
+                }
             }
+        }
+
+        private void SetPosterUnavailable(bool posterArtwork)
+        {
+            if (!posterArtwork)
+            {
+                return;
+            }
+
+            _posterPlaceholderCaption.text = "暂无画面";
+            _posterPlaceholderMotion.ShowUnavailable();
         }
 
         private void PopulateMetadataChips(JellyfinItem item)
@@ -940,6 +1109,7 @@ namespace JellyfinForRayNeo
             bool hasResumePosition = resumePosition > AppConstants.TicksPerSecond * 10L;
 
             _continueButton.gameObject.SetActive(playable);
+            SetActionButtonWidth(_continueButton, isSeries ? 420f : 300f);
             string episodeCode = EpisodePlaybackResolver.EpisodeCode(_playTarget);
             _continueLabel.text = isSeries && !string.IsNullOrWhiteSpace(episodeCode)
                 ? BuildSeriesPlaybackLabel(hasResumePosition, _playTarget)
@@ -1103,12 +1273,27 @@ namespace JellyfinForRayNeo
         private static void ConfigureActionButton(Button button, float width)
         {
             LayoutElement element = button.gameObject.AddComponent<LayoutElement>();
-            element.minWidth = width;
-            element.preferredWidth = width;
+            SetActionButtonWidth(button, width);
             element.minHeight = 60f;
             element.preferredHeight = 60f;
             element.flexibleWidth = 0f;
             element.flexibleHeight = 0f;
+        }
+
+        private static void SetActionButtonWidth(Button button, float width)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            LayoutElement element = button.GetComponent<LayoutElement>();
+            if (element == null)
+            {
+                element = button.gameObject.AddComponent<LayoutElement>();
+            }
+            element.minWidth = width;
+            element.preferredWidth = width;
         }
 
         private static string Condense(string value, int maximumLength)
@@ -1140,6 +1325,38 @@ namespace JellyfinForRayNeo
             return string.IsNullOrWhiteSpace(title)
                 ? action + " " + code
                 : string.Format("{0} {1} · {2}", action, code, title);
+        }
+
+        private static string BuildPosterPlaceholderLabel(JellyfinItem item)
+        {
+            if (item == null)
+            {
+                return "JELLYFIN";
+            }
+
+            string episodeCode = EpisodePlaybackResolver.EpisodeCode(item);
+            if (!string.IsNullOrWhiteSpace(episodeCode))
+            {
+                return episodeCode;
+            }
+
+            switch ((item.Type ?? string.Empty).ToLowerInvariant())
+            {
+                case "movie":
+                    return "MOVIE";
+                case "series":
+                    return "SERIES";
+                case "season":
+                    return item.IndexNumber.HasValue
+                        ? "SEASON " + item.IndexNumber.Value
+                        : "SEASON";
+                case "boxset":
+                    return "COLLECTION";
+                case "video":
+                    return "VIDEO";
+                default:
+                    return "JELLYFIN";
+            }
         }
 
         private static string BuildKindLabel(JellyfinItem item)
