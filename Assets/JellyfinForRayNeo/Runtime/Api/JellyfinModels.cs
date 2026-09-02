@@ -19,6 +19,25 @@ namespace JellyfinForRayNeo
     }
 
     [Serializable]
+    public sealed class JellyfinQuickConnectResult
+    {
+        public bool Authenticated;
+        public string Secret;
+        public string Code;
+        public string DeviceId;
+        public string DeviceName;
+        public string AppName;
+        public string AppVersion;
+        public string DateAdded;
+    }
+
+    [Serializable]
+    public sealed class JellyfinQuickConnectAuthenticationRequest
+    {
+        public string Secret;
+    }
+
+    [Serializable]
     public sealed class JellyfinUser
     {
         public string Id;

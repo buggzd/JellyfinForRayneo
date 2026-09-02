@@ -84,6 +84,79 @@ namespace JellyfinForRayNeo
                 cancellationToken);
         }
 
+        public Task<bool> GetQuickConnectEnabledAsync(
+            string serverUrl,
+            CancellationToken cancellationToken)
+        {
+            string normalized = JellyfinUrl.NormalizeServerUrl(serverUrl);
+            return SendJsonAsync<bool>(
+                UnityWebRequest.kHttpVerbGET,
+                JellyfinUrl.Combine(normalized, "/QuickConnect/Enabled"),
+                null,
+                false,
+                cancellationToken);
+        }
+
+        public Task<JellyfinQuickConnectResult> InitiateQuickConnectAsync(
+            string serverUrl,
+            CancellationToken cancellationToken)
+        {
+            string normalized = JellyfinUrl.NormalizeServerUrl(serverUrl);
+            return SendJsonAsync<JellyfinQuickConnectResult>(
+                UnityWebRequest.kHttpVerbPOST,
+                JellyfinUrl.Combine(normalized, "/QuickConnect/Initiate"),
+                null,
+                false,
+                cancellationToken);
+        }
+
+        public Task<JellyfinQuickConnectResult> GetQuickConnectStateAsync(
+            string serverUrl,
+            string secret,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(secret))
+            {
+                throw new ArgumentException("A quick connect secret is required.", nameof(secret));
+            }
+
+            string endpoint = JellyfinUrl.WithQuery(
+                JellyfinUrl.Combine(JellyfinUrl.NormalizeServerUrl(serverUrl), "/QuickConnect/Connect"),
+                new Dictionary<string, string>
+                {
+                    { "secret", secret }
+                });
+            return SendJsonAsync<JellyfinQuickConnectResult>(
+                UnityWebRequest.kHttpVerbGET,
+                endpoint,
+                null,
+                false,
+                cancellationToken);
+        }
+
+        public Task<JellyfinAuthenticationResult> AuthenticateWithQuickConnectAsync(
+            string serverUrl,
+            string secret,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(secret))
+            {
+                throw new ArgumentException("A quick connect secret is required.", nameof(secret));
+            }
+
+            return SendJsonAsync<JellyfinAuthenticationResult>(
+                UnityWebRequest.kHttpVerbPOST,
+                JellyfinUrl.Combine(
+                    JellyfinUrl.NormalizeServerUrl(serverUrl),
+                    "/Users/AuthenticateWithQuickConnect"),
+                new JellyfinQuickConnectAuthenticationRequest
+                {
+                    Secret = secret
+                },
+                false,
+                cancellationToken);
+        }
+
         public Task<JellyfinQueryResult> GetUserViewsAsync(CancellationToken cancellationToken)
         {
             string url = BuildSessionUrl("/UserViews", new Dictionary<string, string>
@@ -504,7 +577,7 @@ namespace JellyfinForRayNeo
             bool requiresSession,
             CancellationToken cancellationToken)
         {
-            JellyfinSession session = requiresSession ? RequireSession() : _session;
+            JellyfinSession session = requiresSession ? RequireSession() : null;
             using (UnityWebRequest request = new UnityWebRequest(url, method))
             {
                 request.timeout = 30;

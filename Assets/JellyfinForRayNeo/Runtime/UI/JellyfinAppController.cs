@@ -9,6 +9,9 @@ namespace JellyfinForRayNeo
 {
     public sealed class JellyfinAppController : MonoBehaviour
     {
+        private static readonly TimeSpan QuickConnectTimeout = TimeSpan.FromMinutes(5d);
+        private static readonly TimeSpan QuickConnectPollInterval = TimeSpan.FromSeconds(1.5d);
+
         private JellyfinSessionStore _sessionStore;
         private JellyfinApiClient _api;
         private JellyfinImageCache _imageCache;
@@ -46,6 +49,8 @@ namespace JellyfinForRayNeo
             _lifetime = new CancellationTokenSource();
             _companionBridge = new CompanionLoginBridge();
             _companionBridge.LoginRequested += HandleCompanionLoginRequested;
+            _companionBridge.QuickConnectRequested += HandleCompanionQuickConnectRequested;
+            _companionBridge.QuickConnectCancelRequested += HandleCompanionQuickConnectCancelRequested;
             _companionBridge.PublishState(
                 CompanionLoginState.Initializing,
                 "正在启动 Jellyfin 客户端…",
@@ -86,7 +91,7 @@ namespace JellyfinForRayNeo
             if (!_sessionStore.TryLoad(out saved))
             {
                 ShowLogin(
-                    "请在手机端输入局域网内的 Jellyfin 地址。",
+                    "请在手机端选择自动发现的 Jellyfin 服务器，或手动输入地址。",
                     false,
                     "http://",
                     string.Empty);
@@ -165,6 +170,39 @@ namespace JellyfinForRayNeo
             LoginAsync(request.ServerUrl, request.UserName, request.Password).Forget(HandleFatalError);
         }
 
+        private void HandleCompanionQuickConnectRequested(CompanionQuickConnectRequest request)
+        {
+            if (request == null)
+            {
+                return;
+            }
+
+            if (_loginInProgress)
+            {
+                _companionBridge.PublishState(
+                    CompanionLoginState.Connecting,
+                    "连接正在进行，请稍候…",
+                    false,
+                    _pendingServerUrl,
+                    _pendingUserName);
+                return;
+            }
+
+            QuickConnectAsync(request.ServerUrl).Forget(HandleFatalError);
+        }
+
+        private void HandleCompanionQuickConnectCancelRequested()
+        {
+            CancelAndDispose(ref _operation);
+            _loginInProgress = false;
+            _loginView.SetBusy(false);
+            ShowLogin(
+                "已取消快速登录，你可以重新申请登录码或使用帐号密码。",
+                false,
+                _pendingServerUrl,
+                _pendingUserName);
+        }
+
         private async Task LoginAsync(string serverInput, string username, string password)
         {
             _loginInProgress = true;
@@ -185,27 +223,11 @@ namespace JellyfinForRayNeo
                 _pendingServerUrl = serverUrl;
                 JellyfinPublicSystemInfo publicInfo = await _api.GetPublicSystemInfoAsync(serverUrl, token);
                 JellyfinAuthenticationResult authentication = await _api.AuthenticateAsync(serverUrl, username, password, token);
-                if (authentication == null
-                    || authentication.User == null
-                    || string.IsNullOrWhiteSpace(authentication.User.Id)
-                    || string.IsNullOrWhiteSpace(authentication.AccessToken))
-                {
-                    throw new JellyfinApiException("服务器未返回有效登录会话。", 0, "/Users/AuthenticateByName");
-                }
-
-                JellyfinSession session = new JellyfinSession
-                {
-                    ServerUrl = serverUrl,
-                    ServerName = publicInfo != null ? publicInfo.ServerName : null,
-                    ServerVersion = publicInfo != null ? publicInfo.Version : null,
-                    ServerId = !string.IsNullOrWhiteSpace(authentication.ServerId)
-                        ? authentication.ServerId
-                        : publicInfo != null ? publicInfo.Id : null,
-                    AccessToken = authentication.AccessToken,
-                    UserId = authentication.User.Id,
-                    UserName = authentication.User.Name,
-                    DeviceId = _sessionStore.GetOrCreateDeviceId()
-                };
+                JellyfinSession session = CreateSession(
+                    serverUrl,
+                    publicInfo,
+                    authentication,
+                    "/Users/AuthenticateByName");
 
                 _api.SetSession(session);
                 _sessionStore.Save(session);
@@ -227,6 +249,165 @@ namespace JellyfinForRayNeo
                 _loginInProgress = false;
                 _loginView.SetBusy(false);
             }
+        }
+
+        private async Task QuickConnectAsync(string serverInput)
+        {
+            _loginInProgress = true;
+            _pendingServerUrl = serverInput != null ? serverInput.Trim() : string.Empty;
+            _pendingUserName = string.Empty;
+            CancellationToken token = BeginOperation();
+            _loginView.SetBusy(true);
+            _loginView.SetMessage("正在检查 Jellyfin 快速登录…", false);
+            _companionBridge.PublishState(
+                CompanionLoginState.Connecting,
+                "正在检查服务器是否支持快速登录…",
+                false,
+                _pendingServerUrl,
+                string.Empty);
+
+            try
+            {
+                string serverUrl = JellyfinUrl.NormalizeServerUrl(serverInput);
+                _pendingServerUrl = serverUrl;
+                JellyfinPublicSystemInfo publicInfo =
+                    await _api.GetPublicSystemInfoAsync(serverUrl, token);
+                bool enabled = await _api.GetQuickConnectEnabledAsync(serverUrl, token);
+                if (!enabled)
+                {
+                    throw new JellyfinApiException(
+                        "此 Jellyfin 服务器未启用快速连接，请在服务器设置中开启或使用帐号密码。",
+                        0,
+                        "/QuickConnect/Enabled");
+                }
+
+                JellyfinQuickConnectResult request =
+                    await _api.InitiateQuickConnectAsync(serverUrl, token);
+                if (request == null
+                    || string.IsNullOrWhiteSpace(request.Secret)
+                    || string.IsNullOrWhiteSpace(request.Code))
+                {
+                    throw new JellyfinApiException(
+                        "服务器未返回有效的快速登录码。",
+                        0,
+                        "/QuickConnect/Initiate");
+                }
+
+                string code = request.Code.Trim();
+                _loginView.SetMessage(
+                    "快速登录码：" + code + "\n请在手机上的 Jellyfin 中授权。",
+                    false);
+                _companionBridge.PublishState(
+                    CompanionLoginState.QuickConnectWaiting,
+                    "请在已登录的 Jellyfin App 或网页中授权此登录码。",
+                    false,
+                    serverUrl,
+                    string.Empty,
+                    code);
+
+                DateTime expiresAt = DateTime.UtcNow.Add(QuickConnectTimeout);
+                JellyfinQuickConnectResult state = request;
+                while (!state.Authenticated)
+                {
+                    if (DateTime.UtcNow >= expiresAt)
+                    {
+                        throw new JellyfinApiException(
+                            "快速登录码已过期，请在手机端重新申请。",
+                            408,
+                            "/QuickConnect/Connect");
+                    }
+
+                    await Task.Delay(QuickConnectPollInterval, token);
+                    state = await _api.GetQuickConnectStateAsync(
+                        serverUrl,
+                        request.Secret,
+                        token);
+                    if (state == null)
+                    {
+                        throw new JellyfinApiException(
+                            "服务器未返回快速登录状态。",
+                            0,
+                            "/QuickConnect/Connect");
+                    }
+                }
+
+                _companionBridge.PublishState(
+                    CompanionLoginState.Connecting,
+                    "登录码已授权，正在同步媒体库…",
+                    false,
+                    serverUrl,
+                    string.Empty);
+                JellyfinAuthenticationResult authentication =
+                    await _api.AuthenticateWithQuickConnectAsync(
+                        serverUrl,
+                        request.Secret,
+                        token);
+                JellyfinSession session = CreateSession(
+                    serverUrl,
+                    publicInfo,
+                    authentication,
+                    "/Users/AuthenticateWithQuickConnect");
+
+                _api.SetSession(session);
+                _sessionStore.Save(session);
+                await LoadHomeAsync(session, token);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (JellyfinApiException exception) when (exception.StatusCode == 404)
+            {
+                ShowLogin(
+                    "快速登录码已失效，请重新申请。",
+                    true,
+                    _pendingServerUrl,
+                    string.Empty);
+            }
+            catch (Exception exception)
+            {
+                ShowLogin(
+                    UserMessage(exception),
+                    true,
+                    _pendingServerUrl,
+                    string.Empty);
+            }
+            finally
+            {
+                _loginInProgress = false;
+                _loginView.SetBusy(false);
+            }
+        }
+
+        private JellyfinSession CreateSession(
+            string serverUrl,
+            JellyfinPublicSystemInfo publicInfo,
+            JellyfinAuthenticationResult authentication,
+            string endpoint)
+        {
+            if (authentication == null
+                || authentication.User == null
+                || string.IsNullOrWhiteSpace(authentication.User.Id)
+                || string.IsNullOrWhiteSpace(authentication.AccessToken))
+            {
+                throw new JellyfinApiException(
+                    "服务器未返回有效登录会话。",
+                    0,
+                    endpoint);
+            }
+
+            return new JellyfinSession
+            {
+                ServerUrl = serverUrl,
+                ServerName = publicInfo != null ? publicInfo.ServerName : null,
+                ServerVersion = publicInfo != null ? publicInfo.Version : null,
+                ServerId = !string.IsNullOrWhiteSpace(authentication.ServerId)
+                    ? authentication.ServerId
+                    : publicInfo != null ? publicInfo.Id : null,
+                AccessToken = authentication.AccessToken,
+                UserId = authentication.User.Id,
+                UserName = authentication.User.Name,
+                DeviceId = _sessionStore.GetOrCreateDeviceId()
+            };
         }
 
         private async Task LoadHomeAsync(JellyfinSession session, CancellationToken cancellationToken)
@@ -633,6 +814,8 @@ namespace JellyfinForRayNeo
             if (_companionBridge != null)
             {
                 _companionBridge.LoginRequested -= HandleCompanionLoginRequested;
+                _companionBridge.QuickConnectRequested -= HandleCompanionQuickConnectRequested;
+                _companionBridge.QuickConnectCancelRequested -= HandleCompanionQuickConnectCancelRequested;
                 _companionBridge.PublishState(
                     CompanionLoginState.Offline,
                     "Jellyfin 客户端已停止。",

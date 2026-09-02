@@ -1,3 +1,4 @@
+using System;
 using UnityEditor;
 using UnityEngine;
 
@@ -23,7 +24,7 @@ namespace JellyfinForRayNeo.Editor
         {
             CompanionSimulatorWindow window = GetWindow<CompanionSimulatorWindow>();
             window.titleContent = new GUIContent("RayNeo Phone");
-            window.minSize = new Vector2(390f, 520f);
+            window.minSize = new Vector2(390f, 600f);
             window.Show();
         }
 
@@ -67,6 +68,15 @@ namespace JellyfinForRayNeo.Editor
             using (new EditorGUI.DisabledScope(!canSubmit))
             {
                 _serverUrl = EditorGUILayout.TextField("服务器地址", _serverUrl);
+
+                EditorGUILayout.Space(8f);
+                if (GUILayout.Button("申请 Jellyfin 快速登录码", GUILayout.Height(34f)))
+                {
+                    SubmitQuickConnect();
+                }
+
+                EditorGUILayout.Space(8f);
+                EditorGUILayout.LabelField("或使用帐号密码", EditorStyles.boldLabel);
                 _username = EditorGUILayout.TextField("用户名", _username);
                 _password = EditorGUILayout.PasswordField("密码", _password);
 
@@ -74,6 +84,29 @@ namespace JellyfinForRayNeo.Editor
                 if (GUILayout.Button("连接并在眼镜中打开", GUILayout.Height(38f)))
                 {
                     SubmitLogin();
+                }
+            }
+
+            if (snapshot.State == CompanionLoginState.QuickConnectWaiting
+                && !string.IsNullOrWhiteSpace(snapshot.QuickConnectCode))
+            {
+                EditorGUILayout.Space(10f);
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                {
+                    EditorGUILayout.LabelField("快速登录码", snapshot.QuickConnectCode);
+                    EditorGUILayout.HelpBox(
+                        "在已登录的 Jellyfin App 中打开“快速连接”，或使用下方网页完成授权。",
+                        MessageType.Info);
+                    if (GUILayout.Button("在浏览器中打开授权页", GUILayout.Height(32f)))
+                    {
+                        Application.OpenURL(BuildQuickConnectUrl(
+                            snapshot.ServerUrl,
+                            snapshot.QuickConnectCode));
+                    }
+                    if (GUILayout.Button("取消快速登录", GUILayout.Height(28f)))
+                    {
+                        CompanionLoginRuntime.CancelQuickConnect();
+                    }
                 }
             }
 
@@ -136,6 +169,22 @@ namespace JellyfinForRayNeo.Editor
             }
         }
 
+        private void SubmitQuickConnect()
+        {
+            _localMessage = string.Empty;
+            if (string.IsNullOrWhiteSpace(_serverUrl))
+            {
+                _localMessage = "请先输入 Jellyfin 服务器地址。";
+                return;
+            }
+
+            if (!CompanionLoginRuntime.SubmitQuickConnect(_serverUrl))
+            {
+                _localMessage = "快速登录桥尚未就绪，请确认 Main 场景正在 Play Mode 中运行。";
+            }
+            GUI.FocusControl(null);
+        }
+
         private void SynchronizeNonSecretFields(CompanionLoginSnapshot snapshot)
         {
             if (snapshot == null || snapshot.State == _lastObservedState)
@@ -179,11 +228,20 @@ namespace JellyfinForRayNeo.Editor
                     return "等待手机登录";
                 case CompanionLoginState.Connecting:
                     return "正在连接";
+                case CompanionLoginState.QuickConnectWaiting:
+                    return "等待授权登录码";
                 case CompanionLoginState.Ready:
                     return "已连接";
                 default:
                     return "未运行";
             }
+        }
+
+        private static string BuildQuickConnectUrl(string serverUrl, string code)
+        {
+            return (serverUrl ?? string.Empty).TrimEnd('/')
+                + "/web/#/quickconnect?code="
+                + Uri.EscapeDataString(code ?? string.Empty);
         }
     }
 }

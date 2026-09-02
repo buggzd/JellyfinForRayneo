@@ -20,6 +20,22 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [Test]
+        public void QuickConnectResponse_DeserializesCodeAndSecret()
+        {
+            const string json =
+                "{\"Authenticated\":false,\"Secret\":\"internal-secret\",\"Code\":\"482731\",\"DeviceName\":\"RayNeo Air\"}";
+
+            JellyfinQuickConnectResult result =
+                JsonConvert.DeserializeObject<JellyfinQuickConnectResult>(json);
+
+            Assert.NotNull(result);
+            Assert.IsFalse(result.Authenticated);
+            Assert.AreEqual("internal-secret", result.Secret);
+            Assert.AreEqual("482731", result.Code);
+            Assert.AreEqual("RayNeo Air", result.DeviceName);
+        }
+
+        [Test]
         public void ItemResponse_DeserializesPosterAndResumeMetadata()
         {
             const string json = "{\"Id\":\"item-id\",\"Name\":\"Example\",\"Type\":\"Movie\",\"MediaType\":\"Video\",\"ImageTags\":{\"Primary\":\"image-tag\"},\"UserData\":{\"PlaybackPositionTicks\":120000000,\"PlayedPercentage\":42.5}}";
