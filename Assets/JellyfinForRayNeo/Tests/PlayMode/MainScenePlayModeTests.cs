@@ -547,6 +547,53 @@ namespace JellyfinForRayNeo.Tests
                 landscapeArtwork.rect.width / landscapeArtwork.rect.height,
                 Is.EqualTo(16f / 9f).Within(0.01f));
 
+            JellyfinImageCache imageCache = new JellyfinImageCache();
+            landscape.Bind(
+                new JellyfinItem
+                {
+                    Name = "没有剧照的第二集",
+                    Type = "Episode",
+                    MediaType = "Video",
+                    ParentIndexNumber = 1,
+                    IndexNumber = 2,
+                    UserData = new JellyfinUserData()
+                },
+                new JellyfinApiClient("placeholder-test-device"),
+                imageCache,
+                null,
+                CancellationToken.None);
+            yield return null;
+
+            Transform placeholderLayer = FindDescendant(
+                landscape.transform,
+                "Artwork Placeholder Layer");
+            UiArtworkPlaceholderMotion placeholderMotion =
+                landscapeArtwork.GetComponent<UiArtworkPlaceholderMotion>();
+            Assert.NotNull(placeholderLayer);
+            Assert.NotNull(placeholderMotion);
+            Assert.IsFalse(placeholderMotion.IsLoading);
+            Assert.AreEqual(
+                "S1E2",
+                FindDescendant(placeholderLayer, "Artwork Placeholder")
+                    .GetComponent<Text>().text);
+            Assert.AreEqual(
+                "暂无画面",
+                FindDescendant(placeholderLayer, "Artwork Placeholder Caption")
+                    .GetComponent<Text>().text);
+            Assert.IsFalse(
+                FindDescendant(placeholderLayer, "Artwork Placeholder Shimmer")
+                    .gameObject.activeSelf);
+
+            placeholderMotion.ShowLoading();
+            Assert.IsTrue(placeholderMotion.IsLoading);
+            Assert.IsTrue(
+                FindDescendant(placeholderLayer, "Artwork Placeholder Shimmer")
+                    .gameObject.activeSelf);
+            placeholderMotion.Complete(0.04f);
+            yield return new WaitForSecondsRealtime(0.08f);
+            Assert.IsFalse(placeholderLayer.gameObject.activeSelf);
+
+            imageCache.Dispose();
             Object.Destroy(host);
             yield return null;
         }

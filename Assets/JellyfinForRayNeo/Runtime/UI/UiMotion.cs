@@ -641,6 +641,241 @@ namespace JellyfinForRayNeo
         }
     }
 
+    /// <summary>
+    /// Gives unloaded artwork a quiet Apple TV-style shimmer, then cross-fades
+    /// the placeholder away when the real image becomes available.
+    /// </summary>
+    public sealed class UiArtworkPlaceholderMotion : MonoBehaviour
+    {
+        public float CycleSeconds = 2.8f;
+
+        private GameObject _layer;
+        private CanvasGroup _group;
+        private RectTransform _shimmer;
+        private Graphic _shimmerGraphic;
+        private Graphic _glow;
+        private Graphic _label;
+        private Color _shimmerColor;
+        private Color _glowColor;
+        private Color _labelColor;
+        private Vector3 _labelRestScale;
+        private float _phase;
+        private bool _loading;
+        private Coroutine _fadeRoutine;
+
+        public bool IsLoading => _loading;
+
+        public void Configure(
+            GameObject layer,
+            RectTransform shimmer,
+            Graphic glow,
+            Graphic label,
+            float phase)
+        {
+            _layer = layer;
+            _shimmer = shimmer;
+            _shimmerGraphic = shimmer != null ? shimmer.GetComponent<Graphic>() : null;
+            _glow = glow;
+            _label = label;
+            _phase = Mathf.Repeat(phase, 1f);
+            _group = layer != null ? layer.GetComponent<CanvasGroup>() : null;
+            if (_group == null && layer != null)
+            {
+                _group = layer.AddComponent<CanvasGroup>();
+            }
+
+            _shimmerColor = _shimmerGraphic != null
+                ? _shimmerGraphic.color
+                : Color.clear;
+            _glowColor = _glow != null ? _glow.color : Color.clear;
+            _labelColor = _label != null ? _label.color : Color.clear;
+            _labelRestScale = _label != null ? _label.transform.localScale : Vector3.one;
+            ShowLoading();
+        }
+
+        public void ShowLoading()
+        {
+            if (_layer == null)
+            {
+                return;
+            }
+
+            StopFade();
+            _layer.SetActive(true);
+            if (_group != null)
+            {
+                _group.alpha = 1f;
+            }
+            if (_shimmer != null)
+            {
+                _shimmer.gameObject.SetActive(true);
+            }
+            _loading = true;
+            ApplyMotion(0f);
+        }
+
+        public void ShowUnavailable()
+        {
+            if (_layer == null)
+            {
+                return;
+            }
+
+            StopFade();
+            _loading = false;
+            _layer.SetActive(true);
+            if (_group != null)
+            {
+                _group.alpha = 1f;
+            }
+            if (_shimmer != null)
+            {
+                _shimmer.gameObject.SetActive(false);
+            }
+            RestoreVisuals(0.90f);
+        }
+
+        public void Complete(float duration = 0.30f)
+        {
+            if (_layer == null || !_layer.activeSelf)
+            {
+                return;
+            }
+
+            StopFade();
+            _loading = false;
+            if (!gameObject.activeInHierarchy)
+            {
+                _layer.SetActive(false);
+                if (_group != null)
+                {
+                    _group.alpha = 1f;
+                }
+                RestoreVisuals(1f);
+                return;
+            }
+            _fadeRoutine = StartCoroutine(FadeOut(Mathf.Max(0.01f, duration)));
+        }
+
+        private void Update()
+        {
+            if (!_loading || _layer == null || !_layer.activeInHierarchy)
+            {
+                return;
+            }
+
+            float cycle = Mathf.Max(0.4f, CycleSeconds);
+            float progress = Mathf.Repeat(Time.unscaledTime / cycle + _phase, 1f);
+            ApplyMotion(progress);
+        }
+
+        private void OnDisable()
+        {
+            bool wasFading = _fadeRoutine != null;
+            StopFade();
+            if (wasFading && !_loading && _layer != null)
+            {
+                _layer.SetActive(false);
+                if (_group != null)
+                {
+                    _group.alpha = 1f;
+                }
+                RestoreVisuals(1f);
+            }
+        }
+
+        private void ApplyMotion(float progress)
+        {
+            float smooth = progress * progress * (3f - 2f * progress);
+            float wave = (Mathf.Sin(progress * Mathf.PI * 2f) + 1f) * 0.5f;
+            if (_shimmer != null && _layer.transform is RectTransform layerRect)
+            {
+                float extent = layerRect.rect.width * 0.72f + _shimmer.rect.width;
+                Vector2 position = _shimmer.anchoredPosition;
+                position.x = Mathf.Lerp(-extent, extent, smooth);
+                _shimmer.anchoredPosition = position;
+            }
+            if (_shimmerGraphic != null)
+            {
+                Color color = _shimmerColor;
+                color.a *= Mathf.Sin(progress * Mathf.PI);
+                _shimmerGraphic.color = color;
+            }
+            if (_glow != null)
+            {
+                Color color = _glowColor;
+                color.a *= Mathf.Lerp(0.62f, 1f, wave);
+                _glow.color = color;
+            }
+            if (_label != null)
+            {
+                Color color = _labelColor;
+                color.a *= Mathf.Lerp(0.76f, 1f, wave);
+                _label.color = color;
+                _label.transform.localScale = _labelRestScale * Mathf.Lerp(0.985f, 1f, wave);
+            }
+        }
+
+        private IEnumerator FadeOut(float duration)
+        {
+            float elapsed = 0f;
+            float startAlpha = _group != null ? _group.alpha : 1f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float normalized = Mathf.Clamp01(elapsed / duration);
+                float amount = 1f - Mathf.Pow(1f - normalized, 3f);
+                if (_group != null)
+                {
+                    _group.alpha = Mathf.Lerp(startAlpha, 0f, amount);
+                }
+                yield return null;
+            }
+
+            _fadeRoutine = null;
+            if (_layer != null)
+            {
+                _layer.SetActive(false);
+            }
+            if (_group != null)
+            {
+                _group.alpha = 1f;
+            }
+            RestoreVisuals(1f);
+        }
+
+        private void RestoreVisuals(float alphaMultiplier)
+        {
+            if (_shimmerGraphic != null)
+            {
+                _shimmerGraphic.color = _shimmerColor;
+            }
+            if (_glow != null)
+            {
+                Color color = _glowColor;
+                color.a *= alphaMultiplier;
+                _glow.color = color;
+            }
+            if (_label != null)
+            {
+                Color color = _labelColor;
+                color.a *= alphaMultiplier;
+                _label.color = color;
+                _label.transform.localScale = _labelRestScale;
+            }
+        }
+
+        private void StopFade()
+        {
+            if (_fadeRoutine == null)
+            {
+                return;
+            }
+            StopCoroutine(_fadeRoutine);
+            _fadeRoutine = null;
+        }
+    }
+
     public sealed class UiLoadingPulse : MonoBehaviour
     {
         private Graphic[] _dots;

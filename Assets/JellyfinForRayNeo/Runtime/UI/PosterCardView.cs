@@ -18,6 +18,8 @@ namespace JellyfinForRayNeo
         private Image _artwork;
         private AspectRatioFitter _artworkAspect;
         private Text _placeholder;
+        private Text _placeholderCaption;
+        private UiArtworkPlaceholderMotion _placeholderMotion;
         private Text _title;
         private Text _subtitle;
         private Text _centerLabel;
@@ -103,15 +105,99 @@ namespace JellyfinForRayNeo
             artworkAspect.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
             artworkAspect.aspectRatio = landscape ? 16f / 9f : 2f / 3f;
 
+            UiGradient frameGradient = artworkFrame.gameObject.AddComponent<UiGradient>();
+            frameGradient.StartColor = new Color(0.038f, 0.070f, 0.082f, 1f);
+            frameGradient.EndColor = new Color(0.075f, 0.048f, 0.100f, 1f);
+            frameGradient.Horizontal = true;
+
+            RectTransform placeholderLayer = UiFactory.CreateRect(
+                "Artwork Placeholder Layer",
+                artworkFrame.transform);
+            UiFactory.Stretch(placeholderLayer);
+
+            Image placeholderGlow = UiFactory.CreateGlowPanel(
+                "Artwork Placeholder Glow",
+                placeholderLayer,
+                new Color(0.28f, 0.92f, 0.84f, landscape ? 0.11f : 0.09f));
+            UiFactory.SetRect(
+                placeholderGlow.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 10f),
+                new Vector2(
+                    landscape ? 250f : 180f,
+                    landscape ? 180f : 240f));
+
+            Image placeholderShimmer = UiFactory.CreatePanel(
+                "Artwork Placeholder Shimmer",
+                placeholderLayer,
+                new Color(0.72f, 1f, 0.97f, 0.075f));
+            placeholderShimmer.raycastTarget = false;
+            UiFactory.SetRect(
+                placeholderShimmer.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                new Vector2(
+                    landscape ? 76f : 58f,
+                    artworkHeight * 1.35f));
+            placeholderShimmer.rectTransform.localEulerAngles = new Vector3(0f, 0f, -11f);
+
+            Image placeholderMark = UiFactory.CreateRoundedPanel(
+                "Artwork Placeholder Mark",
+                placeholderLayer,
+                new Color(0.48f, 0.96f, 0.89f, 0.72f));
+            placeholderMark.raycastTarget = false;
+            UiFactory.SetRect(
+                placeholderMark.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, landscape ? 39f : 44f),
+                new Vector2(48f, 4f));
+
             Text placeholder = UiFactory.CreateText(
                 "Artwork Placeholder",
-                artworkFrame.transform,
+                placeholderLayer,
                 string.Empty,
-                landscape ? 68 : 76,
-                new Color(1f, 1f, 1f, 0.15f),
+                landscape ? 27 : 24,
+                new Color(0.90f, 1f, 0.98f, 0.76f),
                 TextAnchor.MiddleCenter,
                 FontStyle.Bold);
-            UiFactory.Stretch(placeholder.rectTransform);
+            UiFactory.SetRect(
+                placeholder.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 7f),
+                new Vector2(width - 36f, 40f));
+
+            Text placeholderCaption = UiFactory.CreateText(
+                "Artwork Placeholder Caption",
+                placeholderLayer,
+                "正在载入",
+                14,
+                new Color(0.72f, 0.79f, 0.84f, 0.68f),
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                placeholderCaption.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -25f),
+                new Vector2(width - 36f, 26f));
+
+            UiArtworkPlaceholderMotion placeholderMotion =
+                artworkFrame.gameObject.AddComponent<UiArtworkPlaceholderMotion>();
+            placeholderMotion.Configure(
+                placeholderLayer.gameObject,
+                placeholderShimmer.rectTransform,
+                placeholderGlow,
+                placeholder,
+                Mathf.Abs(rootRect.GetInstanceID() % 997) / 997f);
 
             Image artworkShade = UiFactory.CreateGradientPanel(
                 "Artwork Shade",
@@ -261,6 +347,8 @@ namespace JellyfinForRayNeo
             view._artwork = artwork;
             view._artworkAspect = artworkAspect;
             view._placeholder = placeholder;
+            view._placeholderCaption = placeholderCaption;
+            view._placeholderMotion = placeholderMotion;
             view._title = title;
             view._subtitle = subtitle;
             view._centerLabel = centerLabel;
@@ -303,8 +391,8 @@ namespace JellyfinForRayNeo
             BindBadges(item, libraryCard);
             _artwork.sprite = null;
             _artwork.color = Color.clear;
-            _placeholder.text = Initial(item != null ? item.Name : null);
-            _placeholder.gameObject.SetActive(true);
+            _artwork.CrossFadeAlpha(1f, 0f, true);
+            _placeholder.text = PlaceholderLabel(item);
 
             float progress = 0f;
             if (item != null && item.UserData != null && item.UserData.PlayedPercentage.HasValue)
@@ -327,6 +415,18 @@ namespace JellyfinForRayNeo
             {
                 fallbackUrl = null;
             }
+
+            bool loadingArtwork = !string.IsNullOrWhiteSpace(imageUrl);
+            _placeholderCaption.text = loadingArtwork ? "正在载入画面" : "暂无画面";
+            if (loadingArtwork)
+            {
+                _placeholderMotion.ShowLoading();
+            }
+            else
+            {
+                _placeholderMotion.ShowUnavailable();
+            }
+
             if (!string.IsNullOrWhiteSpace(imageUrl))
             {
                 LoadArtworkAsync(
@@ -502,26 +602,34 @@ namespace JellyfinForRayNeo
             }
             catch (Exception)
             {
-                if (!string.IsNullOrWhiteSpace(fallbackUrl)
-                    && !string.Equals(imageUrl, fallbackUrl, StringComparison.Ordinal))
+            }
+
+            if (sprite == null
+                && !string.IsNullOrWhiteSpace(fallbackUrl)
+                && !string.Equals(imageUrl, fallbackUrl, StringComparison.Ordinal))
+            {
+                try
                 {
-                    try
-                    {
-                        sprite = await imageCache.LoadSpriteAsync(fallbackUrl, cancellationToken);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        return;
-                    }
-                    catch (Exception)
-                    {
-                        return;
-                    }
+                    sprite = await imageCache.LoadSpriteAsync(fallbackUrl, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception)
+                {
                 }
             }
 
-            if (this == null || bindingVersion != _bindingVersion || sprite == null)
+            if (this == null || bindingVersion != _bindingVersion)
             {
+                return;
+            }
+
+            if (sprite == null)
+            {
+                _placeholderCaption.text = "暂无画面";
+                _placeholderMotion.ShowUnavailable();
                 return;
             }
 
@@ -532,17 +640,40 @@ namespace JellyfinForRayNeo
             {
                 _artworkAspect.aspectRatio = sprite.rect.width / sprite.rect.height;
             }
-            _placeholder.gameObject.SetActive(false);
+            _placeholderMotion.Complete(0.30f);
         }
 
-        private static string Initial(string value)
+        private static string PlaceholderLabel(JellyfinItem item)
         {
-            if (string.IsNullOrWhiteSpace(value))
+            if (item == null)
             {
-                return "J";
+                return "JELLYFIN";
             }
 
-            return value.Trim().Substring(0, 1).ToUpperInvariant();
+            if (string.Equals(item.Type, "Episode", StringComparison.OrdinalIgnoreCase))
+            {
+                string code = EpisodePlaybackResolver.EpisodeCode(item);
+                return string.IsNullOrWhiteSpace(code) ? "EPISODE" : code;
+            }
+
+            switch ((item.Type ?? string.Empty).ToLowerInvariant())
+            {
+                case "movie":
+                    return "MOVIE";
+                case "series":
+                    return "SERIES";
+                case "season":
+                    return "SEASON";
+                case "video":
+                    return "VIDEO";
+                case "folder":
+                case "collectionfolder":
+                    return "LIBRARY";
+                case "boxset":
+                    return "COLLECTION";
+                default:
+                    return "JELLYFIN";
+            }
         }
     }
 }
