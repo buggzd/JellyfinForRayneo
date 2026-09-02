@@ -213,7 +213,8 @@ namespace JellyfinForRayNeo
             JellyfinImageCache imageCache,
             Action<JellyfinItem> onSelected,
             CancellationToken cancellationToken,
-            int posterMaxWidth = 480)
+            int posterMaxWidth = 480,
+            bool preferPrimaryArtwork = false)
         {
             _bindingVersion++;
             _item = item;
@@ -237,10 +238,15 @@ namespace JellyfinForRayNeo
             _button.onClick.AddListener(() => _onSelected?.Invoke(_item));
 
             string primaryUrl = item != null ? api.BuildPrimaryImageUrl(item, posterMaxWidth) : null;
-            string imageUrl = _landscape && item != null
+            string backdropUrl = _landscape && item != null
                 ? api.BuildBackdropImageUrl(item, Math.Max(720, posterMaxWidth))
-                : primaryUrl;
-            string fallbackUrl = _landscape ? primaryUrl : null;
+                : null;
+            string imageUrl = _landscape && !preferPrimaryArtwork ? backdropUrl : primaryUrl;
+            string fallbackUrl = _landscape && preferPrimaryArtwork ? backdropUrl : primaryUrl;
+            if (string.Equals(imageUrl, fallbackUrl, StringComparison.Ordinal))
+            {
+                fallbackUrl = null;
+            }
             if (!string.IsNullOrWhiteSpace(imageUrl))
             {
                 LoadArtworkAsync(

@@ -148,12 +148,137 @@ namespace JellyfinForRayNeo.Tests
             Assert.NotNull(viewport);
             AssertTransparentDragSurface(viewport);
 
-            ScrollRect scroll = shelf.GetComponent<ScrollRect>();
+            AxisRoutingScrollRect scroll = shelf.GetComponent<AxisRoutingScrollRect>();
             Assert.NotNull(scroll);
             Assert.IsTrue(scroll.horizontal);
             Assert.AreSame(viewport, scroll.viewport);
+            ScrollRect homeScroll = FindDescendant(host.transform, "Home Screen").GetComponent<ScrollRect>();
+            Assert.AreSame(
+                homeScroll,
+                scroll.ParentScrollRect,
+                "Vertical drags that begin over a horizontal shelf must continue scrolling the home page.");
 
             Object.Destroy(host);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator EpisodeBrowser_PreservesLandscapeEpisodeCards()
+        {
+            GameObject host = new GameObject("Episode Layout Test Host", typeof(RectTransform));
+            host.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
+            JellyfinApiClient api = new JellyfinApiClient("episode-layout-test-device");
+            api.SetSession(new JellyfinSession
+            {
+                ServerUrl = "http://127.0.0.1:8096",
+                AccessToken = "episode-layout-token",
+                UserId = "episode-layout-user",
+                DeviceId = "episode-layout-test-device"
+            });
+            JellyfinImageCache imageCache = new JellyfinImageCache();
+            EpisodeBrowserView browser = new EpisodeBrowserView(host.transform, api, imageCache);
+            browser.Show(
+                new JellyfinItem { Id = "series", Name = "测试剧集", Type = "Series" },
+                new List<JellyfinItem>
+                {
+                    CreateEpisode(1, "第一集"),
+                    CreateEpisode(2, "第二集"),
+                    CreateEpisode(3, "第三集")
+                },
+                CancellationToken.None);
+            yield return null;
+
+            RectTransform seasons = FindDescendant(host.transform, "Seasons") as RectTransform;
+            RectTransform shelf = FindDescendant(host.transform, "Season - 测试第一季") as RectTransform;
+            Assert.NotNull(seasons);
+            Assert.NotNull(shelf);
+            LayoutRebuilder.ForceRebuildLayoutImmediate(seasons);
+            Canvas.ForceUpdateCanvases();
+
+            RectTransform viewport = FindDescendant(shelf, "Viewport") as RectTransform;
+            RectTransform artwork = FindDescendant(shelf, "Artwork Frame") as RectTransform;
+            PosterCardView card = shelf.GetComponentInChildren<PosterCardView>(true);
+            AxisRoutingScrollRect horizontalScroll = shelf.GetComponent<AxisRoutingScrollRect>();
+            Assert.IsTrue(seasons.GetComponent<VerticalLayoutGroup>().childControlHeight);
+            Assert.That(shelf.rect.height, Is.EqualTo(360f).Within(0.5f));
+            Assert.NotNull(viewport);
+            Assert.That(viewport.rect.height, Is.GreaterThan(250f));
+            AssertTransparentDragSurface(viewport);
+            Assert.NotNull(artwork);
+            Assert.That(artwork.rect.width / artwork.rect.height, Is.EqualTo(16f / 9f).Within(0.01f));
+            Assert.NotNull(card);
+            Assert.AreEqual(PosterCardView.LandscapeHeight, card.GetComponent<LayoutElement>().preferredHeight);
+            Assert.NotNull(horizontalScroll);
+            Assert.IsTrue(horizontalScroll.ParentScrollRect.vertical);
+
+            browser.Hide();
+            imageCache.Dispose();
+            Object.Destroy(host);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator AxisRoutingScrollRect_RoutesDragByDominantDirection()
+        {
+            GameObject root = new GameObject("Nested Scroll Test", typeof(RectTransform));
+            RectTransform rootRect = root.GetComponent<RectTransform>();
+            rootRect.sizeDelta = new Vector2(800f, 600f);
+
+            ScrollRect parentScroll = root.AddComponent<ScrollRect>();
+            parentScroll.viewport = rootRect;
+            parentScroll.horizontal = false;
+            parentScroll.vertical = true;
+            parentScroll.movementType = ScrollRect.MovementType.Unrestricted;
+            RectTransform parentContent = CreateTestRect(
+                "Parent Content",
+                rootRect,
+                new Vector2(800f, 1400f));
+            parentScroll.content = parentContent;
+
+            RectTransform childViewport = CreateTestRect(
+                "Child Viewport",
+                parentContent,
+                new Vector2(800f, 300f));
+            AxisRoutingScrollRect childScroll = childViewport.gameObject.AddComponent<AxisRoutingScrollRect>();
+            childScroll.viewport = childViewport;
+            childScroll.horizontal = true;
+            childScroll.vertical = false;
+            childScroll.movementType = ScrollRect.MovementType.Unrestricted;
+            RectTransform childContent = CreateTestRect(
+                "Child Content",
+                childViewport,
+                new Vector2(1600f, 300f));
+            childScroll.content = childContent;
+            childScroll.ConfigureParent(parentScroll);
+            yield return null;
+
+            Vector2 parentStart = parentContent.anchoredPosition;
+            Vector2 childStart = childContent.anchoredPosition;
+            PerformDrag(
+                childContent.gameObject,
+                new Vector2(400f, 500f),
+                new Vector2(390f, 430f),
+                new Vector2(390f, 250f));
+            Assert.That(
+                (parentContent.anchoredPosition - parentStart).sqrMagnitude,
+                Is.GreaterThan(1f),
+                "A vertical drag over the shelf must move the parent page.");
+            Assert.That(childContent.anchoredPosition, Is.EqualTo(childStart));
+
+            parentContent.anchoredPosition = parentStart;
+            childContent.anchoredPosition = childStart;
+            PerformDrag(
+                childContent.gameObject,
+                new Vector2(600f, 300f),
+                new Vector2(520f, 290f),
+                new Vector2(280f, 290f));
+            Assert.That(
+                (childContent.anchoredPosition - childStart).sqrMagnitude,
+                Is.GreaterThan(1f),
+                "A horizontal drag must remain on the shelf.");
+            Assert.That(parentContent.anchoredPosition, Is.EqualTo(parentStart));
+
+            Object.Destroy(root);
             yield return null;
         }
 
@@ -274,6 +399,61 @@ namespace JellyfinForRayNeo.Tests
         {
             return root.GetComponentsInChildren<Transform>(true)
                 .FirstOrDefault(candidate => candidate.name == objectName);
+        }
+
+        private static JellyfinItem CreateEpisode(int index, string name)
+        {
+            return new JellyfinItem
+            {
+                Name = name,
+                Type = "Episode",
+                MediaType = "Video",
+                SeasonName = "测试第一季",
+                ParentIndexNumber = 1,
+                IndexNumber = index
+            };
+        }
+
+        private static RectTransform CreateTestRect(string name, Transform parent, Vector2 size)
+        {
+            GameObject gameObject = new GameObject(name, typeof(RectTransform));
+            RectTransform rect = gameObject.GetComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            rect.sizeDelta = size;
+            return rect;
+        }
+
+        private static void PerformDrag(
+            GameObject dragTarget,
+            Vector2 pressPosition,
+            Vector2 beginPosition,
+            Vector2 dragPosition)
+        {
+            PointerEventData eventData = new PointerEventData(EventSystem.current)
+            {
+                button = PointerEventData.InputButton.Left,
+                pressPosition = pressPosition,
+                position = beginPosition,
+                delta = beginPosition - pressPosition
+            };
+            ExecuteEvents.ExecuteHierarchy(
+                dragTarget,
+                eventData,
+                ExecuteEvents.initializePotentialDrag);
+            ExecuteEvents.ExecuteHierarchy(
+                dragTarget,
+                eventData,
+                ExecuteEvents.beginDragHandler);
+            eventData.delta = dragPosition - beginPosition;
+            eventData.position = dragPosition;
+            ExecuteEvents.ExecuteHierarchy(
+                dragTarget,
+                eventData,
+                ExecuteEvents.dragHandler);
+            ExecuteEvents.ExecuteHierarchy(
+                dragTarget,
+                eventData,
+                ExecuteEvents.endDragHandler);
         }
 
         private static void AssertTransparentDragSurface(Transform viewport)

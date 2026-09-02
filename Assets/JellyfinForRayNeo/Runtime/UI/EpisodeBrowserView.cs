@@ -76,6 +76,7 @@ namespace JellyfinForRayNeo
 
             RectTransform viewport = UiFactory.CreateRect("Seasons Viewport", rootImage.transform);
             viewport.gameObject.AddComponent<RectMask2D>();
+            AddTransparentDragSurface(viewport);
             UiFactory.Stretch(viewport, 42f, 42f, 204f, 24f);
 
             _content = UiFactory.CreateRect("Seasons", viewport);
@@ -88,7 +89,7 @@ namespace JellyfinForRayNeo
             verticalLayout.padding = new RectOffset(10, 10, 10, 30);
             verticalLayout.spacing = 22f;
             verticalLayout.childAlignment = TextAnchor.UpperLeft;
-            verticalLayout.childControlHeight = false;
+            verticalLayout.childControlHeight = true;
             verticalLayout.childControlWidth = true;
             verticalLayout.childForceExpandHeight = false;
             verticalLayout.childForceExpandWidth = true;
@@ -184,12 +185,14 @@ namespace JellyfinForRayNeo
             LayoutElement shelfLayout = shelf.gameObject.AddComponent<LayoutElement>();
             shelfLayout.preferredHeight = 360f;
             shelfLayout.minHeight = 360f;
+            shelfLayout.flexibleHeight = 0f;
 
             Text title = UiFactory.CreateText("Season Title", shelf, SeasonTitle(seasonNumber, items), 32, UiTheme.TextPrimary, TextAnchor.MiddleLeft, FontStyle.Bold);
             UiFactory.SetRect(title.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -4f), new Vector2(-10f, 52f));
 
             RectTransform viewport = UiFactory.CreateRect("Viewport", shelf);
             viewport.gameObject.AddComponent<RectMask2D>();
+            AddTransparentDragSurface(viewport);
             UiFactory.SetRect(viewport, new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -28f), new Vector2(0f, -62f));
 
             RectTransform row = UiFactory.CreateRect("Episodes", viewport);
@@ -197,7 +200,7 @@ namespace JellyfinForRayNeo
             row.anchorMax = new Vector2(0f, 0.5f);
             row.pivot = new Vector2(0f, 0.5f);
             row.anchoredPosition = Vector2.zero;
-            row.sizeDelta = new Vector2(0f, 300f);
+            row.sizeDelta = new Vector2(0f, PosterCardView.LandscapeHeight + 20f);
             HorizontalLayoutGroup layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = 24f;
             layout.padding = new RectOffset(8, 32, 8, 8);
@@ -209,7 +212,7 @@ namespace JellyfinForRayNeo
             ContentSizeFitter fitter = row.gameObject.AddComponent<ContentSizeFitter>();
             fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            ScrollRect horizontalScroll = shelf.gameObject.AddComponent<ScrollRect>();
+            AxisRoutingScrollRect horizontalScroll = shelf.gameObject.AddComponent<AxisRoutingScrollRect>();
             horizontalScroll.viewport = viewport;
             horizontalScroll.content = row;
             horizontalScroll.horizontal = true;
@@ -217,12 +220,28 @@ namespace JellyfinForRayNeo
             horizontalScroll.movementType = ScrollRect.MovementType.Elastic;
             horizontalScroll.scrollSensitivity = 46f;
             horizontalScroll.decelerationRate = 0.13f;
+            horizontalScroll.ConfigureParent(_verticalScroll);
 
             foreach (JellyfinItem episode in items)
             {
-                PosterCardView card = PosterCardView.Create(row);
-                card.Bind(episode, _api, _imageCache, selected => EpisodeSelected?.Invoke(selected), cancellationToken, 240);
+                PosterCardView card = PosterCardView.Create(row, true);
+                card.ConfigureScrollRects(horizontalScroll, _verticalScroll);
+                card.Bind(
+                    episode,
+                    _api,
+                    _imageCache,
+                    selected => EpisodeSelected?.Invoke(selected),
+                    cancellationToken,
+                    640,
+                    true);
             }
+        }
+
+        private static void AddTransparentDragSurface(RectTransform viewport)
+        {
+            Image dragSurface = viewport.gameObject.AddComponent<Image>();
+            dragSurface.color = Color.clear;
+            dragSurface.raycastTarget = true;
         }
 
         private static int SeasonSortKey(int seasonNumber)

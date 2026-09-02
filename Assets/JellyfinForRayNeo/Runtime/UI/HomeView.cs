@@ -574,7 +574,7 @@ namespace JellyfinForRayNeo
             ContentSizeFitter fitter = row.gameObject.AddComponent<ContentSizeFitter>();
             fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
 
-            ScrollRect horizontalScroll = shelf.gameObject.AddComponent<ScrollRect>();
+            AxisRoutingScrollRect horizontalScroll = shelf.gameObject.AddComponent<AxisRoutingScrollRect>();
             horizontalScroll.viewport = viewport;
             horizontalScroll.content = row;
             horizontalScroll.horizontal = true;
@@ -583,6 +583,7 @@ namespace JellyfinForRayNeo
             horizontalScroll.elasticity = 0.085f;
             horizontalScroll.scrollSensitivity = 56f;
             horizontalScroll.decelerationRate = 0.11f;
+            horizontalScroll.ConfigureParent(_verticalScroll);
 
             foreach (JellyfinItem item in section.Items)
             {
