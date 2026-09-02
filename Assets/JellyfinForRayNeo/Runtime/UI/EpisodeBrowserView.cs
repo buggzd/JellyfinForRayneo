@@ -10,6 +10,7 @@ namespace JellyfinForRayNeo
     public sealed class EpisodeBrowserView
     {
         private readonly GameObject _root;
+        private readonly UiViewMotion _motion;
         private readonly Text _title;
         private readonly Text _summary;
         private readonly Text _emptyLabel;
@@ -22,6 +23,8 @@ namespace JellyfinForRayNeo
         public event Action<JellyfinItem> EpisodeSelected;
         public event Action CloseRequested;
 
+        public Transform FocusRoot => _root.transform;
+
         public EpisodeBrowserView(Transform parent, JellyfinApiClient api, JellyfinImageCache imageCache)
         {
             _api = api ?? throw new ArgumentNullException(nameof(api));
@@ -30,6 +33,8 @@ namespace JellyfinForRayNeo
             Image rootImage = UiFactory.CreatePanel("Episode Browser", parent, UiTheme.Background);
             UiFactory.Stretch(rootImage.rectTransform);
             _root = rootImage.gameObject;
+            _motion = UiFactory.AddViewMotion(_root, 22f, 0.99f);
+            UiFactory.CreateAmbientBackdrop(rootImage.transform);
 
             Image header = UiFactory.CreatePanel("Header", rootImage.transform, new Color(0.025f, 0.03f, 0.05f, 0.98f));
             UiFactory.SetRect(header.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 190f));
@@ -108,12 +113,12 @@ namespace JellyfinForRayNeo
             _emptyLabel = UiFactory.CreateText("Empty", rootImage.transform, "这部剧集暂时没有可播放的分集", 32, UiTheme.TextSecondary, TextAnchor.MiddleCenter);
             UiFactory.SetRect(_emptyLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -20f), new Vector2(1000f, 100f));
             _emptyLabel.gameObject.SetActive(false);
-            _root.SetActive(false);
+            _motion.SetVisibleImmediately(false);
         }
 
         public bool IsVisible
         {
-            get { return _root.activeSelf; }
+            get { return _motion.IsVisible; }
         }
 
         public void Show(JellyfinItem series, IList<JellyfinItem> episodes, CancellationToken cancellationToken)
@@ -160,15 +165,15 @@ namespace JellyfinForRayNeo
                 ShowSeason(seasons[0].Key, seasons[0].Value, cancellationToken);
             }
 
-            _root.SetActive(true);
             _root.transform.SetAsLastSibling();
+            _motion.Show();
             Canvas.ForceUpdateCanvases();
             _verticalScroll.verticalNormalizedPosition = 1f;
         }
 
         public void Hide()
         {
-            _root.SetActive(false);
+            _motion.Hide();
         }
 
         private void ShowSeason(int seasonNumber, IList<JellyfinItem> episodes, CancellationToken cancellationToken)
@@ -222,6 +227,7 @@ namespace JellyfinForRayNeo
             horizontalScroll.decelerationRate = 0.13f;
             horizontalScroll.ConfigureParent(_verticalScroll);
 
+            int cardIndex = 0;
             foreach (JellyfinItem episode in items)
             {
                 PosterCardView card = PosterCardView.Create(row, true);
@@ -234,6 +240,8 @@ namespace JellyfinForRayNeo
                     cancellationToken,
                     640,
                     true);
+                UiFactory.AddItemReveal(card.gameObject, Mathf.Min(0.20f, cardIndex * 0.025f));
+                cardIndex++;
             }
         }
 

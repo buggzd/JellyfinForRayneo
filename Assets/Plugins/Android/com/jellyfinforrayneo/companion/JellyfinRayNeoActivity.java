@@ -10,6 +10,8 @@ import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -29,9 +31,12 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -93,15 +98,15 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private static final String DISPLAY_MODE_MIRROR_2D = "mirror_2d";
     private static final String DISPLAY_MODE_STEREO_SCREEN = "stereo_screen";
 
-    private static final int COLOR_BACKGROUND_TOP = Color.rgb(17, 17, 20);
-    private static final int COLOR_BACKGROUND_BOTTOM = Color.rgb(9, 10, 12);
-    private static final int COLOR_SURFACE = Color.rgb(28, 29, 33);
-    private static final int COLOR_SURFACE_SOFT = Color.rgb(35, 36, 41);
-    private static final int COLOR_FIELD = Color.rgb(20, 21, 24);
-    private static final int COLOR_BORDER = Color.rgb(55, 57, 64);
+    private static final int COLOR_BACKGROUND_TOP = Color.rgb(8, 13, 24);
+    private static final int COLOR_BACKGROUND_BOTTOM = Color.rgb(4, 7, 13);
+    private static final int COLOR_SURFACE = Color.rgb(20, 27, 39);
+    private static final int COLOR_SURFACE_SOFT = Color.rgb(29, 38, 52);
+    private static final int COLOR_FIELD = Color.rgb(12, 18, 29);
+    private static final int COLOR_BORDER = Color.rgb(58, 74, 94);
     private static final int COLOR_PRIMARY = Color.rgb(248, 248, 250);
-    private static final int COLOR_SECONDARY = Color.rgb(183, 184, 191);
-    private static final int COLOR_TERTIARY = Color.rgb(128, 130, 139);
+    private static final int COLOR_SECONDARY = Color.rgb(190, 201, 215);
+    private static final int COLOR_TERTIARY = Color.rgb(128, 144, 163);
     private static final int COLOR_ACCENT = Color.rgb(93, 224, 210);
     private static final int COLOR_ACCENT_END = Color.rgb(171, 143, 255);
     private static final int COLOR_ACCENT_BRIGHT = Color.rgb(115, 232, 220);
@@ -109,6 +114,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private static final int COLOR_ERROR = Color.rgb(255, 126, 151);
 
     private FrameLayout companionOverlay;
+    private AmbientBackdropView ambientBackdropView;
     private ScrollView configurationScrollView;
     private TouchpadView touchpadView;
     private EditText serverInput;
@@ -136,6 +142,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private GlassesIconView glassesIconView;
     private TextView sessionTitleText;
     private TextView sessionDetailText;
+    private boolean companionModeInitialized;
+    private boolean showingTouchpad;
+    private int companionModeAnimationGeneration;
+    private int lastConnectionVisualState = -1;
 
     private String latestState = "login_required";
     private String latestMessage = "Jellyfin 配置可先完成；浏览和播放需要连接 RayNeo Air。";
@@ -209,6 +219,14 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         refreshGlassesConnectionState();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && showingTouchpad) {
+            applyOledRemoteSurface(true);
+        }
     }
 
     @Override
@@ -325,12 +343,18 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         companionOverlay.setFocusable(true);
         companionOverlay.setElevation(dp(24));
 
+        ambientBackdropView = new AmbientBackdropView(this);
+        ambientBackdropView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        companionOverlay.addView(ambientBackdropView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
         configurationScrollView = new ScrollView(this);
         configurationScrollView.setFillViewport(true);
         configurationScrollView.setClipToPadding(false);
         configurationScrollView.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
-        LinearLayout page = new LinearLayout(this);
+        final LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setGravity(Gravity.START);
         page.setPadding(dp(22), dp(24), dp(22), dp(40));
@@ -391,9 +415,17 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         connectionBadge.setBackground(statusChipBackground(COLOR_SURFACE_SOFT, COLOR_BORDER));
         brandRow.addView(connectionBadge, wrapWrap());
 
+        View accentRule = new View(this);
+        accentRule.setBackground(accentGradient(2));
+        LinearLayout.LayoutParams accentRuleParams = new LinearLayout.LayoutParams(
+                dp(72),
+                dp(4));
+        accentRuleParams.bottomMargin = dp(18);
+        page.addView(accentRule, accentRuleParams);
+
         TextView title = createText(
-                "连接与配置",
-                30,
+                "连接你的私人影院",
+                32,
                 COLOR_PRIMARY,
                 Typeface.BOLD,
                 Gravity.START);
@@ -401,7 +433,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         page.addView(title, matchWrap(dp(8)));
 
         TextView subtitle = createText(
-                "在手机上发现并登录 Jellyfin。海报墙和视频播放会在眼镜中自动打开。",
+                "发现并登录 Jellyfin，连接眼镜后自动进入沉浸式海报墙。",
                 14,
                 COLOR_SECONDARY,
                 Typeface.NORMAL,
@@ -410,12 +442,16 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         page.addView(subtitle, matchWrap(dp(22)));
 
         glassesConnectionCard = createGlassesConnectionCard();
+        glassesConnectionCard.setElevation(dp(7));
+        glassesConnectionCard.setClipToOutline(true);
         page.addView(glassesConnectionCard, matchWrap(dp(16)));
 
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(20), dp(18), dp(18));
         card.setBackground(roundedWithStroke(COLOR_SURFACE, COLOR_BORDER, 22));
+        card.setElevation(dp(5));
+        card.setClipToOutline(true);
         page.addView(card, matchWrap(dp(16)));
 
         TextView configurationEyebrow = createText(
@@ -603,6 +639,215 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         }
         usernameInput.setText(latestUsername);
         applyCompanionState();
+        page.post(new Runnable() {
+            @Override
+            public void run() {
+                animateCompanionEntrance(page);
+            }
+        });
+    }
+
+    private void animateCompanionEntrance(ViewGroup page) {
+        if (page == null || page.getChildCount() == 0) {
+            return;
+        }
+
+        DecelerateInterpolator interpolator = new DecelerateInterpolator(1.6f);
+        for (int index = 0; index < page.getChildCount(); index++) {
+            View child = page.getChildAt(index);
+            child.animate().cancel();
+            child.setAlpha(0f);
+            child.setTranslationY(dp(18));
+            child.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setStartDelay(55L + index * 48L)
+                    .setDuration(380L)
+                    .setInterpolator(interpolator)
+                    .withLayer()
+                    .start();
+        }
+    }
+
+    private void applyCompanionMode(boolean touchpadActive) {
+        if (configurationScrollView == null || touchpadView == null) {
+            return;
+        }
+
+        if (!companionModeInitialized) {
+            companionModeInitialized = true;
+            showingTouchpad = touchpadActive;
+            applyOledRemoteSurface(touchpadActive);
+            configurationScrollView.setVisibility(touchpadActive ? View.GONE : View.VISIBLE);
+            configurationScrollView.setAlpha(1f);
+            configurationScrollView.setScaleX(1f);
+            configurationScrollView.setScaleY(1f);
+            configurationScrollView.setTranslationY(0f);
+            touchpadView.setVisibility(touchpadActive ? View.VISIBLE : View.GONE);
+            touchpadView.setAlpha(1f);
+            touchpadView.setScaleX(1f);
+            touchpadView.setScaleY(1f);
+            touchpadView.setTranslationY(0f);
+            touchpadView.setTouchpadActive(touchpadActive);
+            return;
+        }
+
+        if (showingTouchpad == touchpadActive) {
+            applyOledRemoteSurface(touchpadActive);
+            touchpadView.setTouchpadActive(touchpadActive);
+            return;
+        }
+
+        showingTouchpad = touchpadActive;
+        applyOledRemoteSurface(touchpadActive);
+        final int generation = ++companionModeAnimationGeneration;
+        final View outgoing = touchpadActive ? configurationScrollView : touchpadView;
+        final View incoming = touchpadActive ? touchpadView : configurationScrollView;
+        outgoing.animate().cancel();
+        incoming.animate().cancel();
+
+        if (touchpadActive) {
+            touchpadView.setTouchpadActive(true);
+        }
+        incoming.setVisibility(View.VISIBLE);
+        incoming.setAlpha(0f);
+        incoming.setScaleX(0.985f);
+        incoming.setScaleY(0.985f);
+        incoming.setTranslationY(dp(16));
+        incoming.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .translationY(0f)
+                .setStartDelay(70L)
+                .setDuration(330L)
+                .setInterpolator(new DecelerateInterpolator(1.7f))
+                .withLayer()
+                .start();
+
+        outgoing.animate()
+                .alpha(0f)
+                .scaleX(0.99f)
+                .scaleY(0.99f)
+                .translationY(-dp(10))
+                .setDuration(180L)
+                .setInterpolator(new DecelerateInterpolator())
+                .withEndAction(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (generation != companionModeAnimationGeneration) {
+                            return;
+                        }
+                        outgoing.setVisibility(View.GONE);
+                        outgoing.setAlpha(1f);
+                        outgoing.setScaleX(1f);
+                        outgoing.setScaleY(1f);
+                        outgoing.setTranslationY(0f);
+                        if (outgoing == touchpadView) {
+                            touchpadView.setTouchpadActive(false);
+                        }
+                    }
+                })
+                .start();
+    }
+
+    private void applyOledRemoteSurface(boolean active) {
+        if (companionOverlay == null) {
+            return;
+        }
+
+        View decorView = getWindow().getDecorView();
+        if (active) {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            companionOverlay.setBackgroundColor(Color.BLACK);
+            decorView.setBackgroundColor(Color.BLACK);
+            if (ambientBackdropView != null) {
+                ambientBackdropView.setVisibility(View.GONE);
+            }
+            getWindow().setStatusBarColor(Color.BLACK);
+            getWindow().setNavigationBarColor(Color.BLACK);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                getWindow().setNavigationBarDividerColor(Color.BLACK);
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                getWindow().setStatusBarContrastEnforced(false);
+                getWindow().setNavigationBarContrastEnforced(false);
+            }
+            decorView.setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                            | View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                WindowInsetsController controller = decorView.getWindowInsetsController();
+                if (controller != null) {
+                    controller.hide(
+                            WindowInsets.Type.statusBars()
+                                    | WindowInsets.Type.navigationBars());
+                    controller.setSystemBarsBehavior(
+                            WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                }
+            }
+        } else {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            companionOverlay.setBackground(backgroundGradient());
+            if (ambientBackdropView != null) {
+                ambientBackdropView.setVisibility(View.VISIBLE);
+            }
+            getWindow().setStatusBarColor(COLOR_BACKGROUND_TOP);
+            getWindow().setNavigationBarColor(COLOR_BACKGROUND_BOTTOM);
+            decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                WindowInsetsController controller = decorView.getWindowInsetsController();
+                if (controller != null) {
+                    controller.show(
+                            WindowInsets.Type.statusBars()
+                                    | WindowInsets.Type.navigationBars());
+                }
+            }
+        }
+    }
+
+    private void animateConnectionState(int visualState) {
+        if (visualState == lastConnectionVisualState) {
+            return;
+        }
+
+        boolean initial = lastConnectionVisualState < 0;
+        lastConnectionVisualState = visualState;
+        if (glassesIconView != null) {
+            glassesIconView.pulse();
+        }
+        if (initial || glassesConnectionCard == null) {
+            return;
+        }
+
+        glassesConnectionCard.animate().cancel();
+        glassesConnectionCard.setAlpha(0.72f);
+        glassesConnectionCard.setScaleX(0.985f);
+        glassesConnectionCard.setScaleY(0.985f);
+        glassesConnectionCard.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(320L)
+                .setInterpolator(new DecelerateInterpolator(1.8f))
+                .withLayer()
+                .start();
+
+        if (connectionBadge != null) {
+            connectionBadge.animate().cancel();
+            connectionBadge.setAlpha(0.25f);
+            connectionBadge.setTranslationY(-dp(4));
+            connectionBadge.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(260L)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
     }
 
     private LinearLayout createGlassesConnectionCard() {
@@ -1794,9 +2039,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         boolean touchpadActive = glassesPresentationReady && libraryReady;
 
         companionOverlay.setVisibility(View.VISIBLE);
-        configurationScrollView.setVisibility(touchpadActive ? View.GONE : View.VISIBLE);
-        touchpadView.setVisibility(touchpadActive ? View.VISIBLE : View.GONE);
-        touchpadView.setTouchpadActive(touchpadActive);
+        applyCompanionMode(touchpadActive);
         loginForm.setVisibility(sessionAvailable ? View.GONE : View.VISIBLE);
         sessionPanel.setVisibility(sessionAvailable ? View.VISIBLE : View.GONE);
         updateDisplayModeUi();
@@ -1851,6 +2094,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             glassesConnectionCard.setBackground(connectionCardBackground(false, false));
             glassesIconView.setConnectionState(false, false);
         }
+        animateConnectionState(
+                glassesPresentationReady ? 2 : (glassesConnected ? 1 : 0));
 
         if (sessionAvailable) {
             cancelDiscovery();
@@ -2182,7 +2427,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     }
 
     private EditText createInput(String hint) {
-        EditText input = new EditText(this);
+        final EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setFocusable(true);
         input.setFocusableInTouchMode(true);
@@ -2196,6 +2441,21 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         input.setTextSize(15);
         input.setPadding(dp(16), 0, dp(16), 0);
         input.setBackground(roundedWithStroke(COLOR_FIELD, COLOR_BORDER, 14));
+        input.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View view, boolean hasFocus) {
+                input.setBackground(roundedWithStroke(
+                        COLOR_FIELD,
+                        hasFocus ? COLOR_ACCENT : COLOR_BORDER,
+                        14));
+                input.animate()
+                        .scaleX(hasFocus ? 1.008f : 1f)
+                        .scaleY(hasFocus ? 1.008f : 1f)
+                        .setDuration(160L)
+                        .setInterpolator(new DecelerateInterpolator())
+                        .start();
+            }
+        });
         return input;
     }
 
@@ -2214,7 +2474,40 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         button.setBackgroundTintList(null);
         button.setPadding(dp(10), 0, dp(10), 0);
         button.setBackground(rippleBackground(rounded(color, 14), Color.WHITE));
+        installPressMotion(button);
         return button;
+    }
+
+    private void installPressMotion(final View view) {
+        view.setOnTouchListener(new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View touched, MotionEvent event) {
+                if (event == null || !touched.isEnabled()) {
+                    return false;
+                }
+                switch (event.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        touched.animate()
+                                .scaleX(0.975f)
+                                .scaleY(0.975f)
+                                .setDuration(80L)
+                                .start();
+                        break;
+                    case MotionEvent.ACTION_UP:
+                    case MotionEvent.ACTION_CANCEL:
+                        touched.animate()
+                                .scaleX(1f)
+                                .scaleY(1f)
+                                .setDuration(150L)
+                                .setInterpolator(new DecelerateInterpolator(1.8f))
+                                .start();
+                        break;
+                    default:
+                        break;
+                }
+                return false;
+            }
+        });
     }
 
     private TextView createLabel(String text) {
@@ -2354,6 +2647,74 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         focused.clearFocus();
     }
 
+    private final class AmbientBackdropView extends View {
+        private final Paint tealPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint violetPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private float tealRadius;
+        private float violetRadius;
+
+        AmbientBackdropView(Context context) {
+            super(context);
+            setWillNotDraw(false);
+            setClickable(false);
+            setFocusable(false);
+        }
+
+        @Override
+        protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
+            super.onSizeChanged(width, height, oldWidth, oldHeight);
+            tealRadius = Math.max(width, height) * 0.78f;
+            violetRadius = Math.max(width, height) * 0.64f;
+            tealPaint.setShader(new RadialGradient(
+                    0f,
+                    0f,
+                    tealRadius,
+                    new int[] {
+                            Color.argb(54, 45, 210, 196),
+                            Color.argb(18, 45, 210, 196),
+                            Color.TRANSPARENT
+                    },
+                    new float[] { 0f, 0.42f, 1f },
+                    Shader.TileMode.CLAMP));
+            violetPaint.setShader(new RadialGradient(
+                    0f,
+                    0f,
+                    violetRadius,
+                    new int[] {
+                            Color.argb(46, 134, 93, 255),
+                            Color.argb(14, 134, 93, 255),
+                            Color.TRANSPARENT
+                    },
+                    new float[] { 0f, 0.44f, 1f },
+                    Shader.TileMode.CLAMP));
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            if (getWidth() <= 0 || getHeight() <= 0) {
+                return;
+            }
+
+            float phase = (SystemClock.uptimeMillis() % 18000L) / 18000f
+                    * (float) (Math.PI * 2d);
+            canvas.save();
+            canvas.translate(
+                    getWidth() * 0.08f + (float) Math.sin(phase) * dp(24),
+                    getHeight() * 0.18f + (float) Math.cos(phase * 0.72f) * dp(18));
+            canvas.drawCircle(0f, 0f, tealRadius, tealPaint);
+            canvas.restore();
+
+            canvas.save();
+            canvas.translate(
+                    getWidth() * 0.94f + (float) Math.cos(phase * 0.81f) * dp(20),
+                    getHeight() * 0.74f + (float) Math.sin(phase * 0.65f) * dp(22));
+            canvas.drawCircle(0f, 0f, violetRadius, violetPaint);
+            canvas.restore();
+            postInvalidateOnAnimation();
+        }
+    }
+
     private final class TouchpadView extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Runnable pendingSubmit = new Runnable() {
@@ -2367,15 +2728,11 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         private boolean tracking;
         private float downX;
         private float downY;
-        private float touchX;
-        private float touchY;
-        private long downAtMs;
         private long lastTapAtMs;
-        private boolean modeChipGesture;
 
         TouchpadView(Context context) {
             super(context);
-            setBackground(backgroundGradient());
+            setBackgroundColor(Color.BLACK);
             setClickable(true);
             setFocusable(true);
             setFocusableInTouchMode(true);
@@ -2391,7 +2748,6 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             }
             touchpadActive = active;
             tracking = false;
-            modeChipGesture = false;
             removeCallbacks(pendingSubmit);
             lastTapAtMs = 0L;
             if (active) {
@@ -2413,62 +2769,21 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                     tracking = true;
                     downX = event.getX();
                     downY = event.getY();
-                    touchX = downX;
-                    touchY = downY;
-                    downAtMs = SystemClock.uptimeMillis();
-                    modeChipGesture = isInsideModeChip(downX, downY);
-                    if (modeChipGesture) {
-                        removeCallbacks(pendingSubmit);
-                        lastTapAtMs = 0L;
-                    }
                     setPressed(true);
-                    invalidate();
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    if (tracking) {
-                        touchX = event.getX();
-                        touchY = event.getY();
-                        if (modeChipGesture
-                                && Math.max(
-                                        Math.abs(touchX - downX),
-                                        Math.abs(touchY - downY)) > dp(16)) {
-                            modeChipGesture = false;
-                        }
-                        invalidate();
-                    }
                     return true;
                 case MotionEvent.ACTION_UP:
-                    if (tracking && modeChipGesture) {
-                        boolean longPress = SystemClock.uptimeMillis() - downAtMs
-                                >= DISPLAY_MODE_LONG_PRESS_MS;
-                        modeChipGesture = false;
-                        tracking = false;
-                        setPressed(false);
-                        if (longPress) {
-                            toggleDisplayMode();
-                            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-                        } else {
-                            Toast.makeText(
-                                    JellyfinRayNeoActivity.this,
-                                    "长按此处切换眼镜显示模式",
-                                    Toast.LENGTH_SHORT).show();
-                        }
-                        invalidate();
-                        return true;
-                    }
                     if (tracking) {
                         handleGesture(event.getX(), event.getY());
                     }
                     tracking = false;
                     setPressed(false);
                     performClick();
-                    invalidate();
                     return true;
                 case MotionEvent.ACTION_CANCEL:
                     tracking = false;
-                    modeChipGesture = false;
                     setPressed(false);
-                    invalidate();
                     return true;
                 default:
                     return true;
@@ -2484,90 +2799,15 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
+            canvas.drawColor(Color.BLACK);
             float width = getWidth();
             float height = getHeight();
             float centerX = width * 0.5f;
-            float centerY = height * 0.47f;
-            float padRadius = Math.min(width, height) * 0.27f;
+            float centerY = height * 0.5f;
 
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.argb(36, 255, 255, 255));
-            canvas.drawRoundRect(
-                    dp(22),
-                    dp(22),
-                    width - dp(22),
-                    height - dp(22),
-                    dp(30),
-                    dp(30),
-                    paint);
-
-            paint.setColor(Color.argb(30, 93, 224, 210));
-            canvas.drawCircle(centerX, centerY, padRadius, paint);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(dp(2));
-            paint.setColor(Color.argb(82, 115, 232, 220));
-            canvas.drawCircle(centerX, centerY, padRadius, paint);
-            canvas.drawLine(centerX - padRadius * 0.52f, centerY, centerX + padRadius * 0.52f, centerY, paint);
-            canvas.drawLine(centerX, centerY - padRadius * 0.52f, centerX, centerY + padRadius * 0.52f, paint);
-
-            paint.setStyle(Paint.Style.FILL);
-            paint.setTextAlign(Paint.Align.LEFT);
-            paint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-            paint.setTextSize(sp(13));
-            paint.setColor(COLOR_ACCENT_BRIGHT);
-            canvas.drawText("JELLYFIN  ·  RAYNEO AIR 3S", dp(34), dp(58), paint);
-
-            float modeChipRight = width - dp(34);
-            float modeChipLeft = modeChipRight - dp(150);
-            float modeChipTop = dp(34);
-            float modeChipBottom = dp(76);
-            paint.setStyle(Paint.Style.FILL);
-            paint.setColor(modeChipGesture
-                    ? Color.argb(66, 115, 232, 220)
-                    : Color.argb(38, 255, 255, 255));
-            canvas.drawRoundRect(
-                    modeChipLeft,
-                    modeChipTop,
-                    modeChipRight,
-                    modeChipBottom,
-                    dp(18),
-                    dp(18),
-                    paint);
-            paint.setTextAlign(Paint.Align.CENTER);
-            paint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-            paint.setTextSize(sp(11));
-            paint.setColor(requestedDisplayModeApplied ? COLOR_SUCCESS : COLOR_ACCENT_BRIGHT);
-            canvas.drawText(
-                    displayModeLabel(requestedDisplayMode) + "  ·  长按切换",
-                    (modeChipLeft + modeChipRight) * 0.5f,
-                    modeChipTop + dp(26),
-                    paint);
-
-            paint.setTextAlign(Paint.Align.CENTER);
-            paint.setTextSize(sp(28));
-            paint.setColor(COLOR_PRIMARY);
-            canvas.drawText("盲操触控板", centerX, centerY - dp(12), paint);
-            paint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
-            paint.setTextSize(sp(15));
-            paint.setColor(COLOR_SECONDARY);
-            canvas.drawText("在任意位置滑动", centerX, centerY + dp(24), paint);
-
-            paint.setTextSize(sp(14));
-            paint.setColor(COLOR_PRIMARY);
-            canvas.drawText("上下左右滑动  移动焦点", centerX, height - dp(112), paint);
-            paint.setTextSize(sp(13));
-            paint.setColor(COLOR_TERTIARY);
-            canvas.drawText("单击确认  ·  双击返回", centerX, height - dp(78), paint);
-
-            if (tracking) {
-                paint.setStyle(Paint.Style.FILL);
-                paint.setColor(Color.argb(76, 255, 255, 255));
-                canvas.drawCircle(touchX, touchY, dp(34), paint);
-                paint.setStyle(Paint.Style.STROKE);
-                paint.setStrokeWidth(dp(2));
-                paint.setColor(COLOR_ACCENT_BRIGHT);
-                canvas.drawCircle(touchX, touchY, dp(34), paint);
-            }
+            paint.setColor(Color.argb(62, 115, 232, 220));
+            canvas.drawCircle(centerX, centerY, dp(4), paint);
         }
 
         private void handleGesture(float upX, float upY) {
@@ -2607,12 +2847,6 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             performHapticFeedback(hapticConstant);
         }
 
-        private boolean isInsideModeChip(float x, float y) {
-            float right = getWidth() - dp(34);
-            float left = right - dp(150);
-            return x >= left && x <= right && y >= dp(34) && y <= dp(76);
-        }
-
         private float sp(int value) {
             return value * getResources().getDisplayMetrics().scaledDensity;
         }
@@ -2622,6 +2856,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private boolean connected;
         private boolean ready;
+        private long pulseStartedAtMs;
 
         GlassesIconView(Context context) {
             super(context);
@@ -2633,6 +2868,11 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         void setConnectionState(boolean isConnected, boolean isReady) {
             connected = isConnected;
             ready = isReady;
+            invalidate();
+        }
+
+        void pulse() {
+            pulseStartedAtMs = SystemClock.uptimeMillis();
             invalidate();
         }
 
@@ -2651,6 +2891,25 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             int color = ready
                     ? COLOR_SUCCESS
                     : (connected ? COLOR_ACCENT_BRIGHT : COLOR_SECONDARY);
+
+            long pulseAge = SystemClock.uptimeMillis() - pulseStartedAtMs;
+            if (pulseAge >= 0L && pulseAge < 720L) {
+                float progress = pulseAge / 720f;
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(Math.max(1f, dp(1)));
+                paint.setColor(Color.argb(
+                        Math.max(0, (int) (100 * (1f - progress))),
+                        Color.red(color),
+                        Color.green(color),
+                        Color.blue(color)));
+                float inset = dp(5) - progress * dp(3);
+                canvas.drawCircle(
+                        width * 0.5f,
+                        height * 0.5f,
+                        width * 0.42f - inset,
+                        paint);
+                postInvalidateOnAnimation();
+            }
 
             paint.setColor(color);
             paint.setStyle(Paint.Style.STROKE);

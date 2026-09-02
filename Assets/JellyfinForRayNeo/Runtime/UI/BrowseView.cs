@@ -11,6 +11,7 @@ namespace JellyfinForRayNeo
         private const float HeaderSideMargin = 44f;
 
         private readonly GameObject _root;
+        private readonly UiViewMotion _motion;
         private readonly JellyfinApiClient _api;
         private readonly JellyfinImageCache _imageCache;
         private readonly Text _title;
@@ -42,6 +43,8 @@ namespace JellyfinForRayNeo
         public event Action NextPageRequested;
         public event Action<JellyfinItem> ItemSelected;
 
+        public Transform FocusRoot => _root.transform;
+
         public BrowseView(
             Transform parent,
             JellyfinApiClient api,
@@ -53,6 +56,8 @@ namespace JellyfinForRayNeo
             Image rootImage = UiFactory.CreatePanel("Browse Screen", parent, UiTheme.Background);
             UiFactory.Stretch(rootImage.rectTransform);
             _root = rootImage.gameObject;
+            _motion = UiFactory.AddViewMotion(_root, 24f, 0.99f);
+            UiFactory.CreateAmbientBackdrop(rootImage.transform);
 
             Image glow = UiFactory.CreateGradientPanel(
                 "Browse Ambient Glow",
@@ -283,12 +288,12 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, -30f),
                 new Vector2(1180f, 180f));
 
-            _root.SetActive(false);
+            _motion.SetVisibleImmediately(false);
         }
 
         public bool IsVisible
         {
-            get { return _root.activeSelf; }
+            get { return _motion.IsVisible; }
         }
 
         public JellyfinBrowseState CurrentState
@@ -298,13 +303,13 @@ namespace JellyfinForRayNeo
 
         public void Show()
         {
-            _root.SetActive(true);
             _root.transform.SetAsLastSibling();
+            _motion.Show();
         }
 
         public void Hide()
         {
-            _root.SetActive(false);
+            _motion.Hide();
         }
 
         public void SetPage(
@@ -341,6 +346,7 @@ namespace JellyfinForRayNeo
 
             ConfigureGrid(_state.PreferLandscape);
             UiFactory.DestroyChildren(_grid);
+            int cardIndex = 0;
             foreach (JellyfinItem item in items)
             {
                 if (item == null)
@@ -358,6 +364,8 @@ namespace JellyfinForRayNeo
                     cancellationToken,
                     _state.PreferLandscape ? 760 : 480,
                     _state.PreferLandscape || item.IsBrowsableContainer);
+                UiFactory.AddItemReveal(card.gameObject, Mathf.Min(0.22f, cardIndex * 0.018f));
+                cardIndex++;
             }
 
             bool empty = items.Count == 0;

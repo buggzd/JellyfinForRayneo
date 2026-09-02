@@ -13,6 +13,7 @@ namespace JellyfinForRayNeo
         private const float ContentSideMargin = 48f;
 
         private readonly GameObject _root;
+        private readonly UiViewMotion _motion;
         private readonly Text _serverLabel;
         private readonly Text _emptyLabel;
         private readonly ScrollRect _verticalScroll;
@@ -35,6 +36,8 @@ namespace JellyfinForRayNeo
         public event Action RefreshRequested;
         public event Action LogoutRequested;
 
+        public Transform FocusRoot => _root.transform;
+
         public HomeView(Transform parent, JellyfinApiClient api, JellyfinImageCache imageCache)
         {
             _api = api;
@@ -43,6 +46,8 @@ namespace JellyfinForRayNeo
             RectTransform rootRect = UiFactory.CreateRect("Home Screen", parent);
             UiFactory.Stretch(rootRect);
             _root = rootRect.gameObject;
+            _motion = UiFactory.AddViewMotion(_root, 24f, 0.99f);
+            UiFactory.CreateAmbientBackdrop(rootRect);
 
             RectTransform viewport = UiFactory.CreateRect("Home Viewport", rootRect);
             viewport.gameObject.AddComponent<RectMask2D>();
@@ -268,11 +273,20 @@ namespace JellyfinForRayNeo
                 new Vector2(-16f, 0f),
                 new Vector2(80f, 46f));
             logoutButton.onClick.AddListener(() => LogoutRequested?.Invoke());
+            _motion.SetVisibleImmediately(false);
         }
 
         public void Show(bool visible)
         {
-            _root.SetActive(visible);
+            if (visible)
+            {
+                _root.transform.SetAsLastSibling();
+                _motion.Show();
+            }
+            else
+            {
+                _motion.Hide();
+            }
         }
 
         public void SetHeader(JellyfinSession session)
@@ -318,9 +332,11 @@ namespace JellyfinForRayNeo
                 CreateHero(heroItem, cancellationToken);
             }
 
+            int shelfIndex = 0;
             foreach (JellyfinHomeSection section in populatedSections)
             {
-                CreateShelf(section, cancellationToken);
+                CreateShelf(section, cancellationToken, 0.04f + shelfIndex * 0.035f);
+                shelfIndex++;
             }
 
             Canvas.ForceUpdateCanvases();
@@ -476,6 +492,7 @@ namespace JellyfinForRayNeo
                 heroFocus.ConfigureScrollRects(null, _verticalScroll);
             }
 
+            UiFactory.AddItemReveal(hero.gameObject, 0f);
             BindHero(item, cancellationToken);
         }
 
@@ -545,13 +562,17 @@ namespace JellyfinForRayNeo
 
             _heroBackdrop.sprite = sprite;
             _heroBackdrop.color = Color.white;
+            UiFactory.RevealGraphic(_heroBackdrop, 0.38f);
             if (sprite.rect.height > 0f)
             {
                 _heroAspect.aspectRatio = sprite.rect.width / sprite.rect.height;
             }
         }
 
-        private void CreateShelf(JellyfinHomeSection section, CancellationToken cancellationToken)
+        private void CreateShelf(
+            JellyfinHomeSection section,
+            CancellationToken cancellationToken,
+            float revealDelay)
         {
             bool landscape = IsLandscapeSection(section.Key);
             bool libraryCards = string.Equals(
@@ -565,6 +586,7 @@ namespace JellyfinForRayNeo
             shelfLayout.minHeight = shelfHeight;
             shelfLayout.preferredHeight = shelfHeight;
             shelfLayout.flexibleHeight = 0f;
+            UiFactory.AddItemReveal(shelf.gameObject, revealDelay);
 
             Text title = UiFactory.CreateText(
                 "Shelf Title",

@@ -101,6 +101,9 @@ namespace JellyfinForRayNeo.Tests
             BaseRaycaster raycaster = canvas.GetComponent<BaseRaycaster>();
             Assert.NotNull(raycaster);
             Assert.IsInstanceOf<GraphicRaycaster>(raycaster);
+            Assert.IsFalse(
+                EventSystem.current.sendNavigationEvents,
+                "Built-in axis navigation must stay disabled so one remote gesture moves focus once.");
             Air3SDisplayController display = Object.FindObjectOfType<Air3SDisplayController>();
             Assert.NotNull(display);
             Assert.AreSame(display.MonoCamera, canvas.worldCamera);
@@ -700,6 +703,52 @@ namespace JellyfinForRayNeo.Tests
             Assert.IsFalse(HasHeadTrackingComponent(display.RightEyeCamera));
 
             display.SetMode(Air3SDisplayMode.Mirror2D);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator PlayerRemoteNavigation_IsScopedAndConsumesHorizontalSeek()
+        {
+            GameObject host = new GameObject("Player Navigation Test Host", typeof(RectTransform));
+            host.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
+            GameObject underlying = new GameObject(
+                "Underlying Details Button",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Button));
+            underlying.transform.SetParent(host.transform, false);
+
+            PlayerView player = new PlayerView(host.transform);
+            Transform playerRoot = FindDescendant(host.transform, "Player Screen");
+            Assert.NotNull(playerRoot);
+            playerRoot.GetComponent<UiViewMotion>().SetVisibleImmediately(true);
+            yield return null;
+
+            DirectionalFocusNavigator navigator = new DirectionalFocusNavigator();
+            navigator.SetScope(player.FocusRoot);
+            Assert.IsTrue(navigator.SelectPreferred("Play Pause"));
+            Assert.AreEqual(
+                "Play Pause",
+                EventSystem.current.currentSelectedGameObject.name);
+
+            Assert.IsTrue(navigator.Handle(CompanionRemoteCommand.Up));
+            Assert.AreEqual("Back", EventSystem.current.currentSelectedGameObject.name);
+            Assert.IsTrue(navigator.Handle(CompanionRemoteCommand.Down));
+            Assert.AreEqual("Play Pause", EventSystem.current.currentSelectedGameObject.name);
+
+            Assert.IsTrue(player.HandleRemoteCommand(
+                CompanionRemoteCommand.Left,
+                navigator));
+            Assert.IsTrue(
+                FindDescendant(playerRoot, "Seek Feedback").gameObject.activeInHierarchy,
+                "Horizontal remote input must be consumed by player seek feedback instead of moving focus.");
+            Assert.AreNotSame(
+                underlying,
+                EventSystem.current.currentSelectedGameObject,
+                "Playback focus must never escape into the page behind the video.");
+
+            player.Dispose();
+            Object.Destroy(host);
             yield return null;
         }
 

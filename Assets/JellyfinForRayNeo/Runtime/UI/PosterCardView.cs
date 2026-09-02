@@ -253,6 +253,9 @@ namespace JellyfinForRayNeo
             focus.AnimationSpeed = 15f;
             focus.LocalDepthOffset = -22f;
             focus.ConfigureFocusGraphic(focusRing, UiTheme.Focus);
+            focus.ConfigureShadowGraphic(
+                shadow,
+                new Color(UiTheme.Accent.r, UiTheme.Accent.g, UiTheme.Accent.b, 0.34f));
 
             PosterCardView view = rootRect.gameObject.AddComponent<PosterCardView>();
             view._artwork = artwork;
@@ -524,6 +527,7 @@ namespace JellyfinForRayNeo
 
             _artwork.sprite = sprite;
             _artwork.color = Color.white;
+            UiFactory.RevealGraphic(_artwork, 0.30f);
             if (sprite.rect.height > 0f)
             {
                 _artworkAspect.aspectRatio = sprite.rect.width / sprite.rect.height;

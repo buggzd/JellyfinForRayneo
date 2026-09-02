@@ -12,6 +12,7 @@ namespace JellyfinForRayNeo
     public sealed class DetailView
     {
         private readonly GameObject _root;
+        private readonly UiViewMotion _motion;
         private readonly Image _backdrop;
         private readonly Image _poster;
         private readonly Text _posterPlaceholder;
@@ -59,11 +60,15 @@ namespace JellyfinForRayNeo
         public event Action<JellyfinItem> RelatedItemSelected;
         public event Action CloseRequested;
 
+        public Transform FocusRoot => _root.transform;
+
         public DetailView(Transform parent)
         {
             Image rootImage = UiFactory.CreatePanel("Detail Screen", parent, UiTheme.Background);
             UiFactory.Stretch(rootImage.rectTransform);
             _root = rootImage.gameObject;
+            _motion = UiFactory.AddViewMotion(_root, 20f, 0.992f);
+            UiFactory.CreateAmbientBackdrop(rootImage.transform);
 
             _backdrop = UiFactory.CreatePanel(
                 "Backdrop",
@@ -452,12 +457,12 @@ namespace JellyfinForRayNeo
                 new Vector2(126f, 58f));
             close.onClick.AddListener(() => CloseRequested?.Invoke());
 
-            _root.SetActive(false);
+            _motion.SetVisibleImmediately(false);
         }
 
         public bool IsVisible
         {
-            get { return _root.activeSelf; }
+            get { return _motion.IsVisible; }
         }
 
         public JellyfinItem CurrentItem
@@ -483,8 +488,8 @@ namespace JellyfinForRayNeo
                 ? EpisodePlaybackResolver.Select(episodes)
                 : item != null && item.IsPlayable ? item : null;
             _userActionBusy = false;
-            _root.SetActive(true);
             _root.transform.SetAsLastSibling();
+            _motion.Show();
 
             _kindLabel.text = BuildKindLabel(item);
             _title.text = item != null
@@ -593,7 +598,7 @@ namespace JellyfinForRayNeo
             _similarShelf.Hide();
             _overviewExpanded = false;
             _expandedOverviewCard.gameObject.SetActive(false);
-            _root.SetActive(false);
+            _motion.Hide();
         }
 
         private void ToggleOverview()
@@ -641,6 +646,7 @@ namespace JellyfinForRayNeo
                 }
                 target.sprite = sprite;
                 target.color = Color.white;
+                UiFactory.RevealGraphic(target, target == _backdrop ? 0.40f : 0.30f);
                 if (placeholder != null)
                 {
                     placeholder.SetActive(false);

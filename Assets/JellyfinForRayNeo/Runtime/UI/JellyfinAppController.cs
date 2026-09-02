@@ -44,8 +44,10 @@ namespace JellyfinForRayNeo
         private DetailView _detailView;
         private PlayerView _playerView;
         private GameObject _loadingOverlay;
+        private UiViewMotion _loadingMotion;
         private Text _loadingLabel;
         private GameObject _toast;
+        private UiViewMotion _toastMotion;
         private Text _toastLabel;
         private float _toastHideAt;
         private float _nextProgressCheck;
@@ -123,6 +125,7 @@ namespace JellyfinForRayNeo
             _browseView.Hide();
             _detailView.Hide();
             _loginView.Show(true);
+            _focusNavigator.SetScope(_loginView.FocusRoot);
 
             JellyfinSession saved;
             if (!_sessionStore.TryLoad(out saved))
@@ -211,7 +214,24 @@ namespace JellyfinForRayNeo
                 return;
             }
 
+            if (_playerView != null && _playerView.IsVisible)
+            {
+                _playerView.HandleRemoteCommand(command, _focusNavigator);
+                return;
+            }
+
             _focusNavigator?.Handle(command);
+        }
+
+        private void SelectInScope(Transform scope, params string[] preferredNames)
+        {
+            if (_focusNavigator == null)
+            {
+                return;
+            }
+
+            _focusNavigator.SetScope(scope);
+            _focusNavigator.SelectPreferred(preferredNames);
         }
 
         private void HandleRemoteBack()
@@ -220,7 +240,11 @@ namespace JellyfinForRayNeo
             {
                 if (_playerView.CloseTransientUi())
                 {
-                    _focusNavigator?.SelectPreferred("Audio Tracks", "Subtitle Tracks", "Play Pause");
+                    SelectInScope(
+                        _playerView.FocusRoot,
+                        "Audio Tracks",
+                        "Subtitle Tracks",
+                        "Play Pause");
                     return;
                 }
 
@@ -255,12 +279,20 @@ namespace JellyfinForRayNeo
             if (_detailReturnsToBrowse && _browseView != null)
             {
                 _browseView.Show();
-                _focusNavigator?.SelectPreferred("Poster Card", "Search Input", "Browse Back");
+                SelectInScope(
+                    _browseView.FocusRoot,
+                    "Poster Card",
+                    "Search Input",
+                    "Browse Back");
             }
             else
             {
                 _homeView?.Show(true);
-                _focusNavigator?.SelectPreferred("Hero Action", "Poster Card", "Home Search");
+                SelectInScope(
+                    _homeView.FocusRoot,
+                    "Hero Action",
+                    "Poster Card",
+                    "Home Search");
             }
         }
 
@@ -314,7 +346,7 @@ namespace JellyfinForRayNeo
                 : null;
             if (_browseView != null && _browseView.IsVisible && current != null && current.IsSearch)
             {
-                _focusNavigator?.SelectPreferred("Search Input", "Submit Search");
+                SelectInScope(_browseView.FocusRoot, "Search Input", "Submit Search");
                 return;
             }
 
@@ -358,7 +390,7 @@ namespace JellyfinForRayNeo
             _detailView?.Hide();
             _homeView?.Show(true);
             _detailReturnsToBrowse = false;
-            _focusNavigator?.SelectPreferred("Hero Action", "Poster Card", "Home Search");
+            SelectInScope(_homeView.FocusRoot, "Hero Action", "Poster Card", "Home Search");
         }
 
         private async Task SubmitSearchAsync(string query)
@@ -452,7 +484,8 @@ namespace JellyfinForRayNeo
                 _detailView.Hide();
                 _browseView.SetPage(state, result, _browseImages.Token);
                 _detailReturnsToBrowse = false;
-                _focusNavigator?.SelectPreferred(
+                SelectInScope(
+                    _browseView.FocusRoot,
                     state.IsSearch && string.IsNullOrWhiteSpace(state.SearchTerm)
                         ? "Search Input"
                         : "Poster Card",
@@ -859,7 +892,7 @@ namespace JellyfinForRayNeo
             _browseHistory.Clear();
             _detailHistory.Clear();
             _detailReturnsToBrowse = false;
-            _focusNavigator?.SelectPreferred("Hero Action", "Poster Card", "Refresh");
+            SelectInScope(_homeView.FocusRoot, "Hero Action", "Poster Card", "Refresh");
             _pendingServerUrl = session.ServerUrl;
             _pendingUserName = session.UserName;
             _companionBridge.PublishState(
@@ -934,7 +967,7 @@ namespace JellyfinForRayNeo
                     episodesTask.Result,
                     seasonsTask.Result,
                     similarTask.Result);
-                _focusNavigator?.SelectPreferred("Continue", "From Start", "Close");
+                SelectInScope(_detailView.FocusRoot, "Continue", "From Start", "Close");
             }
             catch (OperationCanceledException)
             {
@@ -1248,7 +1281,11 @@ namespace JellyfinForRayNeo
                     _playbackReporter.Reset();
                     _playerView.SetSubtitleTrack(null);
                     await _playerView.PrepareAndPlayAsync(plan, cancellationToken);
-                    _focusNavigator?.SelectPreferred("Play Pause", "Audio Tracks", "Subtitle Tracks");
+                    SelectInScope(
+                        _playerView.FocusRoot,
+                        "Play Pause",
+                        "Audio Tracks",
+                        "Subtitle Tracks");
                     try
                     {
                         await _playbackReporter.StartAsync(
@@ -1500,7 +1537,7 @@ namespace JellyfinForRayNeo
                 _playbackSelection = null;
                 _playbackReporter.Reset();
                 _stoppingPlayback = false;
-                _focusNavigator?.SelectPreferred("Continue", "From Start", "Close");
+                SelectInScope(_detailView.FocusRoot, "Continue", "From Start", "Close");
             }
 
             if (!string.IsNullOrWhiteSpace(errorMessage))
@@ -1575,6 +1612,7 @@ namespace JellyfinForRayNeo
             _browseHistory.Clear();
             _detailHistory.Clear();
             _loginView.Show(true);
+            _focusNavigator?.SetScope(_loginView.FocusRoot);
             _focusNavigator?.ClearSelection();
             _loginView.SetMessage(message, isError);
             _companionBridge.PublishState(
@@ -1605,9 +1643,9 @@ namespace JellyfinForRayNeo
                     _lifetime.Token).Forget(HandleNonFatalError);
             }
 
-            if (_toast != null && _toast.activeSelf && Time.unscaledTime >= _toastHideAt)
+            if (_toastMotion != null && _toastMotion.IsVisible && Time.unscaledTime >= _toastHideAt)
             {
-                _toast.SetActive(false);
+                _toastMotion.Hide();
             }
         }
 
@@ -1702,19 +1740,83 @@ namespace JellyfinForRayNeo
 
         private void CreateOverlays(Transform parent)
         {
-            Image loading = UiFactory.CreatePanel("Loading Overlay", parent, new Color(0.01f, 0.012f, 0.02f, 0.78f));
+            Image loading = UiFactory.CreatePanel(
+                "Loading Overlay",
+                parent,
+                new Color(0.004f, 0.007f, 0.014f, 0.74f));
             UiFactory.Stretch(loading.rectTransform);
             _loadingOverlay = loading.gameObject;
-            _loadingLabel = UiFactory.CreateText("Loading Label", loading.transform, "正在加载…", 34, UiTheme.TextPrimary, TextAnchor.MiddleCenter, FontStyle.Bold);
-            UiFactory.SetRect(_loadingLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1000f, 120f));
-            _loadingOverlay.SetActive(false);
+            Image loadingCard = UiFactory.CreateRoundedPanel(
+                "Loading Card",
+                loading.transform,
+                UiTheme.SurfaceGlass);
+            UiFactory.SetRect(
+                loadingCard.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                new Vector2(760f, 190f));
+            Outline loadingOutline = loadingCard.gameObject.AddComponent<Outline>();
+            loadingOutline.effectColor = UiTheme.Border;
+            loadingOutline.effectDistance = new Vector2(1f, -1f);
 
-            Image toast = UiFactory.CreatePanel("Toast", parent, new Color(0.08f, 0.09f, 0.13f, 0.98f));
-            UiFactory.SetRect(toast.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 42f), new Vector2(1160f, 74f));
+            _loadingLabel = UiFactory.CreateText(
+                "Loading Label",
+                loadingCard.transform,
+                "正在加载…",
+                31,
+                UiTheme.TextPrimary,
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            UiFactory.SetRect(
+                _loadingLabel.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, 30f),
+                new Vector2(680f, 64f));
+
+            RectTransform pulse = UiFactory.CreateRect("Loading Pulse", loadingCard.transform);
+            UiFactory.SetRect(
+                pulse,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -38f),
+                new Vector2(112f, 28f));
+            for (int index = 0; index < 3; index++)
+            {
+                Image dot = UiFactory.CreateRoundedPanel(
+                    "Pulse Dot " + (index + 1),
+                    pulse,
+                    index == 1 ? UiTheme.AccentSecondary : UiTheme.AccentBright);
+                UiFactory.SetRect(
+                    dot.rectTransform,
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2(0.5f, 0.5f),
+                    new Vector2((index - 1) * 38f, 0f),
+                    new Vector2(16f, 16f));
+                dot.raycastTarget = false;
+            }
+            pulse.gameObject.AddComponent<UiLoadingPulse>();
+            _loadingMotion = UiFactory.AddViewMotion(_loadingOverlay, 0f, 1f);
+            _loadingMotion.SetVisibleImmediately(false);
+
+            Image toast = UiFactory.CreateRoundedPanel(
+                "Toast",
+                parent,
+                new Color(0.055f, 0.066f, 0.089f, 0.98f));
+            UiFactory.SetRect(toast.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 46f), new Vector2(1080f, 82f));
             _toast = toast.gameObject;
             _toastLabel = UiFactory.CreateText("Toast Label", toast.transform, string.Empty, 24, UiTheme.TextPrimary, TextAnchor.MiddleCenter, FontStyle.Bold);
             UiFactory.Stretch(_toastLabel.rectTransform, 20f, 20f, 8f, 8f);
-            _toast.SetActive(false);
+            Outline toastOutline = toast.gameObject.AddComponent<Outline>();
+            toastOutline.effectColor = UiTheme.Border;
+            toastOutline.effectDistance = new Vector2(1f, -1f);
+            _toastMotion = UiFactory.AddViewMotion(_toast, 24f, 0.98f);
+            _toastMotion.SetVisibleImmediately(false);
         }
 
         private void ShowLoading(bool visible, string message = null)
@@ -1727,10 +1829,14 @@ namespace JellyfinForRayNeo
             {
                 _loadingLabel.text = message;
             }
-            _loadingOverlay.SetActive(visible);
             if (visible)
             {
                 _loadingOverlay.transform.SetAsLastSibling();
+                _loadingMotion.Show();
+            }
+            else
+            {
+                _loadingMotion.Hide();
             }
         }
 
@@ -1745,8 +1851,8 @@ namespace JellyfinForRayNeo
             _toast.GetComponent<Image>().color = isError
                 ? new Color(0.32f, 0.06f, 0.10f, 0.98f)
                 : new Color(0.08f, 0.09f, 0.13f, 0.98f);
-            _toast.SetActive(true);
             _toast.transform.SetAsLastSibling();
+            _toastMotion.Show();
             _toastHideAt = Time.unscaledTime + 5f;
         }
 

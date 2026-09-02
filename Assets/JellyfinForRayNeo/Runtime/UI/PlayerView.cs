@@ -4,13 +4,18 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace JellyfinForRayNeo
 {
     public sealed class PlayerView : IDisposable
     {
+        private const float ControlsAutoHideSeconds = 3.2f;
+        private const double RemoteSeekSeconds = 10d;
+
         private readonly GameObject _root;
+        private readonly UiViewMotion _motion;
         private readonly RawImage _videoSurface;
         private readonly IPlaybackEngine _unityEngine;
         private readonly IPlaybackEngine _libVlcHardwareEngine;
@@ -22,8 +27,20 @@ namespace JellyfinForRayNeo
         private readonly Text _playPauseLabel;
         private readonly Text _audioLabel;
         private readonly Text _subtitleButtonLabel;
+        private readonly Button _backButton;
+        private readonly Button _audioButton;
+        private readonly Button _subtitleButton;
+        private readonly Button _playPauseButton;
         private readonly Slider _progress;
+        private readonly CanvasGroup _topControlsGroup;
+        private readonly CanvasGroup _bottomControlsGroup;
+        private readonly Transform _topControlsRoot;
+        private readonly Transform _bottomControlsRoot;
+        private readonly GameObject _seekFeedbackRoot;
+        private readonly CanvasGroup _seekFeedbackGroup;
+        private readonly Text _seekFeedbackLabel;
         private readonly GameObject _trackPanel;
+        private UiViewMotion _trackMotion;
         private readonly GameObject _subtitleRoot;
         private readonly Text _subtitleText;
         private IPlaybackEngine _activeEngine;
@@ -32,6 +49,9 @@ namespace JellyfinForRayNeo
         private long _lastPositionTicks;
         private bool _updatingSlider;
         private bool _disposed;
+        private bool _controlsVisible;
+        private float _hideControlsAt;
+        private float _hideSeekFeedbackAt;
 
         public event Action BackRequested;
         public event Action<bool> PauseStateChanged;
@@ -39,11 +59,14 @@ namespace JellyfinForRayNeo
         public event Action PlaybackCompleted;
         public event Action<int?, int?> TrackSelectionRequested;
 
+        public Transform FocusRoot => _root.transform;
+
         public PlayerView(Transform parent)
         {
             Image rootImage = UiFactory.CreatePanel("Player Screen", parent, Color.black);
             UiFactory.Stretch(rootImage.rectTransform);
             _root = rootImage.gameObject;
+            _motion = UiFactory.AddViewMotion(_root, 0f, 1f);
 
             _videoSurface = UiFactory.CreateRect("Video Surface", rootImage.transform)
                 .gameObject.AddComponent<RawImage>();
@@ -80,8 +103,10 @@ namespace JellyfinForRayNeo
                 new Vector2(0.5f, 1f),
                 Vector2.zero,
                 new Vector2(0f, 104f));
+            _topControlsRoot = topBar.transform;
+            _topControlsGroup = topBar.gameObject.AddComponent<CanvasGroup>();
 
-            Button back = UiFactory.CreateButton(
+            _backButton = UiFactory.CreateButton(
                 "Back",
                 topBar.transform,
                 "返回",
@@ -89,13 +114,13 @@ namespace JellyfinForRayNeo
                 UiTheme.TextPrimary,
                 23);
             UiFactory.SetRect(
-                back.GetComponent<RectTransform>(),
+                _backButton.GetComponent<RectTransform>(),
                 new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f),
                 new Vector2(40f, 0f),
                 new Vector2(128f, 58f));
-            back.onClick.AddListener(() => BackRequested?.Invoke());
+            _backButton.onClick.AddListener(() => BackRequested?.Invoke());
 
             _title = UiFactory.CreateText(
                 "Now Playing",
@@ -129,7 +154,7 @@ namespace JellyfinForRayNeo
                 new Vector2(-474f, 0f),
                 new Vector2(190f, 50f));
 
-            Button audio = UiFactory.CreateButton(
+            _audioButton = UiFactory.CreateButton(
                 "Audio Tracks",
                 topBar.transform,
                 "音轨",
@@ -137,16 +162,16 @@ namespace JellyfinForRayNeo
                 UiTheme.TextPrimary,
                 20);
             UiFactory.SetRect(
-                audio.GetComponent<RectTransform>(),
+                _audioButton.GetComponent<RectTransform>(),
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
                 new Vector2(-276f, 0f),
                 new Vector2(184f, 58f));
-            _audioLabel = audio.GetComponentInChildren<Text>();
-            audio.onClick.AddListener(() => ShowTrackMenu(true));
+            _audioLabel = _audioButton.GetComponentInChildren<Text>();
+            _audioButton.onClick.AddListener(() => ShowTrackMenu(true));
 
-            Button subtitles = UiFactory.CreateButton(
+            _subtitleButton = UiFactory.CreateButton(
                 "Subtitle Tracks",
                 topBar.transform,
                 "字幕",
@@ -154,14 +179,14 @@ namespace JellyfinForRayNeo
                 UiTheme.TextPrimary,
                 20);
             UiFactory.SetRect(
-                subtitles.GetComponent<RectTransform>(),
+                _subtitleButton.GetComponent<RectTransform>(),
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
                 new Vector2(-78f, 0f),
                 new Vector2(184f, 58f));
-            _subtitleButtonLabel = subtitles.GetComponentInChildren<Text>();
-            subtitles.onClick.AddListener(() => ShowTrackMenu(false));
+            _subtitleButtonLabel = _subtitleButton.GetComponentInChildren<Text>();
+            _subtitleButton.onClick.AddListener(() => ShowTrackMenu(false));
 
             _status = UiFactory.CreateText(
                 "Status",
@@ -178,6 +203,33 @@ namespace JellyfinForRayNeo
                 new Vector2(0.5f, 0.5f),
                 Vector2.zero,
                 new Vector2(1100f, 90f));
+
+            Image seekFeedback = UiFactory.CreateRoundedPanel(
+                "Seek Feedback",
+                rootImage.transform,
+                new Color(0.015f, 0.022f, 0.035f, 0.88f));
+            UiFactory.SetRect(
+                seekFeedback.rectTransform,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                new Vector2(250f, 92f));
+            Outline seekOutline = seekFeedback.gameObject.AddComponent<Outline>();
+            seekOutline.effectColor = UiTheme.Border;
+            seekOutline.effectDistance = new Vector2(1f, -1f);
+            _seekFeedbackRoot = seekFeedback.gameObject;
+            _seekFeedbackGroup = seekFeedback.gameObject.AddComponent<CanvasGroup>();
+            _seekFeedbackLabel = UiFactory.CreateText(
+                "Seek Feedback Label",
+                seekFeedback.transform,
+                string.Empty,
+                29,
+                UiTheme.TextPrimary,
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            UiFactory.Stretch(_seekFeedbackLabel.rectTransform, 18f, 18f, 8f, 8f);
+            _seekFeedbackRoot.SetActive(false);
 
             Image subtitleBackdrop = UiFactory.CreateRoundedPanel(
                 "Subtitle Overlay",
@@ -215,8 +267,10 @@ namespace JellyfinForRayNeo
                 new Vector2(0.5f, 0f),
                 Vector2.zero,
                 new Vector2(0f, 126f));
+            _bottomControlsRoot = controlBar.transform;
+            _bottomControlsGroup = controlBar.gameObject.AddComponent<CanvasGroup>();
 
-            Button playPause = UiFactory.CreateButton(
+            _playPauseButton = UiFactory.CreateButton(
                 "Play Pause",
                 controlBar.transform,
                 "暂停",
@@ -224,14 +278,14 @@ namespace JellyfinForRayNeo
                 UiTheme.TextPrimary,
                 23);
             UiFactory.SetRect(
-                playPause.GetComponent<RectTransform>(),
+                _playPauseButton.GetComponent<RectTransform>(),
                 new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f),
                 new Vector2(44f, 0f),
                 new Vector2(130f, 58f));
-            _playPauseLabel = playPause.GetComponentInChildren<Text>();
-            playPause.onClick.AddListener(TogglePlayPause);
+            _playPauseLabel = _playPauseButton.GetComponentInChildren<Text>();
+            _playPauseButton.onClick.AddListener(TogglePlayPause);
 
             Image sliderBackground = UiFactory.CreatePanel(
                 "Progress",
@@ -288,18 +342,21 @@ namespace JellyfinForRayNeo
                 new Vector2(-42f, 0f),
                 new Vector2(360f, 52f));
 
+            ConfigurePlayerNavigation();
+
             Image trackPanel = UiFactory.CreateRoundedPanel(
                 "Track Menu",
                 rootImage.transform,
                 new Color(0.055f, 0.061f, 0.086f, 0.985f));
             _trackPanel = trackPanel.gameObject;
-            _trackPanel.SetActive(false);
-            _root.SetActive(false);
+            _trackMotion = UiFactory.AddViewMotion(_trackPanel, 18f, 0.98f);
+            _trackMotion.SetVisibleImmediately(false);
+            _motion.SetVisibleImmediately(false);
         }
 
         public bool IsVisible
         {
-            get { return _root.activeSelf; }
+            get { return _motion.IsVisible; }
         }
 
         public bool IsPaused
@@ -345,8 +402,8 @@ namespace JellyfinForRayNeo
                     _activeEngine = _unityEngine;
                     break;
             }
-            _root.SetActive(true);
             _root.transform.SetAsLastSibling();
+            _motion.Show();
             _title.text = plan.Item != null ? plan.Item.Name : "正在播放";
             _modeLabel.text = plan.TierLabel;
             _status.text = PreparationMessage(plan.Tier);
@@ -356,12 +413,15 @@ namespace JellyfinForRayNeo
                 ? new Rect(0f, 1f, 1f, -1f)
                 : new Rect(0f, 0f, 1f, 1f);
             UpdateTrackLabels();
+            _seekFeedbackRoot.SetActive(false);
+            ShowControls();
 
             try
             {
                 await _activeEngine.PrepareAndPlayAsync(plan, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 _status.text = string.Empty;
+                ShowControls();
             }
             catch
             {
@@ -377,14 +437,70 @@ namespace JellyfinForRayNeo
             _subtitleRoot.SetActive(false);
         }
 
-        public bool CloseTransientUi()
+        public bool HandleRemoteCommand(
+            CompanionRemoteCommand command,
+            DirectionalFocusNavigator navigator)
         {
-            if (!_trackPanel.activeSelf)
+            if (!IsVisible || navigator == null)
             {
                 return false;
             }
 
-            _trackPanel.SetActive(false);
+            navigator.SetScope(FocusRoot);
+            if (_trackMotion != null && _trackMotion.IsVisible)
+            {
+                ShowControls();
+                return navigator.Handle(command);
+            }
+
+            switch (command)
+            {
+                case CompanionRemoteCommand.Left:
+                    SeekRelative(-RemoteSeekSeconds);
+                    ShowControls();
+                    return true;
+                case CompanionRemoteCommand.Right:
+                    SeekRelative(RemoteSeekSeconds);
+                    ShowControls();
+                    return true;
+                case CompanionRemoteCommand.Up:
+                case CompanionRemoteCommand.Down:
+                {
+                    bool wasVisible = _controlsVisible;
+                    ShowControls();
+                    if (!wasVisible || !HasPlayerSelection())
+                    {
+                        navigator.SelectPreferred(
+                            command == CompanionRemoteCommand.Up
+                                ? "Audio Tracks"
+                                : "Play Pause");
+                        return true;
+                    }
+                    return navigator.Handle(command);
+                }
+                case CompanionRemoteCommand.Submit:
+                    if (!_controlsVisible || !HasPlayerSelection())
+                    {
+                        ShowControls();
+                        navigator.SelectPreferred("Play Pause");
+                        return true;
+                    }
+                    ShowControls();
+                    return navigator.Handle(command);
+                default:
+                    return false;
+            }
+        }
+
+        public bool CloseTransientUi()
+        {
+            if (_trackMotion == null || !_trackMotion.IsVisible)
+            {
+                return false;
+            }
+
+            _trackMotion.Hide();
+            ShowControls();
             return true;
         }
 
@@ -393,8 +509,23 @@ namespace JellyfinForRayNeo
             StopVideoOnly();
             _plan = null;
             _activeEngine = null;
-            _trackPanel.SetActive(false);
-            _root.SetActive(false);
+            _controlsVisible = false;
+            _topControlsGroup.alpha = 0f;
+            _bottomControlsGroup.alpha = 0f;
+            _topControlsGroup.interactable = false;
+            _bottomControlsGroup.interactable = false;
+            _topControlsGroup.blocksRaycasts = false;
+            _bottomControlsGroup.blocksRaycasts = false;
+            _seekFeedbackRoot.SetActive(false);
+            if (_trackMotion != null)
+            {
+                _trackMotion.SetVisibleImmediately(false);
+            }
+            else
+            {
+                _trackPanel.SetActive(false);
+            }
+            _motion.Hide();
         }
 
         public void Dispose()
@@ -425,6 +556,7 @@ namespace JellyfinForRayNeo
             }
             if (!_activeEngine.IsPrepared)
             {
+                UpdateTransientUi();
                 return;
             }
 
@@ -445,6 +577,186 @@ namespace JellyfinForRayNeo
                 _timeLabel.text = FormatTime(position);
             }
             UpdateSubtitle(position);
+            UpdateTransientUi();
+        }
+
+        private void ConfigurePlayerNavigation()
+        {
+            SetExplicitNavigation(
+                _backButton,
+                null,
+                _playPauseButton,
+                null,
+                _audioButton);
+            SetExplicitNavigation(
+                _audioButton,
+                null,
+                _progress,
+                _backButton,
+                _subtitleButton);
+            SetExplicitNavigation(
+                _subtitleButton,
+                null,
+                _progress,
+                _audioButton,
+                null);
+            SetExplicitNavigation(
+                _playPauseButton,
+                _backButton,
+                null,
+                null,
+                _progress);
+            SetExplicitNavigation(
+                _progress,
+                _audioButton,
+                null,
+                _playPauseButton,
+                null);
+        }
+
+        private bool HasPlayerSelection()
+        {
+            if (EventSystem.current == null)
+            {
+                return false;
+            }
+
+            GameObject selected = EventSystem.current.currentSelectedGameObject;
+            return selected != null
+                && selected.activeInHierarchy
+                && selected.transform.IsChildOf(FocusRoot);
+        }
+
+        private static void SetExplicitNavigation(
+            Selectable selectable,
+            Selectable up,
+            Selectable down,
+            Selectable left,
+            Selectable right)
+        {
+            if (selectable == null)
+            {
+                return;
+            }
+
+            Navigation navigation = selectable.navigation;
+            navigation.mode = Navigation.Mode.Explicit;
+            navigation.selectOnUp = up;
+            navigation.selectOnDown = down;
+            navigation.selectOnLeft = left;
+            navigation.selectOnRight = right;
+            selectable.navigation = navigation;
+        }
+
+        private void ShowControls(bool keepVisible = false)
+        {
+            _controlsVisible = true;
+            _topControlsGroup.interactable = true;
+            _bottomControlsGroup.interactable = true;
+            _topControlsGroup.blocksRaycasts = true;
+            _bottomControlsGroup.blocksRaycasts = true;
+            _hideControlsAt = keepVisible || IsPaused
+                ? float.PositiveInfinity
+                : Time.unscaledTime + ControlsAutoHideSeconds;
+        }
+
+        private void HideControls()
+        {
+            if (!_controlsVisible)
+            {
+                return;
+            }
+
+            _controlsVisible = false;
+            _topControlsGroup.interactable = false;
+            _bottomControlsGroup.interactable = false;
+            _topControlsGroup.blocksRaycasts = false;
+            _bottomControlsGroup.blocksRaycasts = false;
+            if (EventSystem.current != null)
+            {
+                GameObject selected = EventSystem.current.currentSelectedGameObject;
+                if (selected != null
+                    && (selected.transform.IsChildOf(_topControlsRoot)
+                        || selected.transform.IsChildOf(_bottomControlsRoot)))
+                {
+                    EventSystem.current.SetSelectedGameObject(null);
+                }
+            }
+        }
+
+        private void UpdateTransientUi()
+        {
+            bool trackMenuVisible = _trackMotion != null && _trackMotion.IsVisible;
+            if (_controlsVisible
+                && !trackMenuVisible
+                && !IsPaused
+                && Time.unscaledTime >= _hideControlsAt)
+            {
+                HideControls();
+            }
+
+            float targetAlpha = _controlsVisible ? 1f : 0f;
+            float step = Time.unscaledDeltaTime * 6.8f;
+            _topControlsGroup.alpha = Mathf.MoveTowards(
+                _topControlsGroup.alpha,
+                targetAlpha,
+                step);
+            _bottomControlsGroup.alpha = Mathf.MoveTowards(
+                _bottomControlsGroup.alpha,
+                targetAlpha,
+                step);
+
+            if (!_seekFeedbackRoot.activeSelf)
+            {
+                return;
+            }
+
+            if (Time.unscaledTime < _hideSeekFeedbackAt)
+            {
+                _seekFeedbackGroup.alpha = Mathf.MoveTowards(
+                    _seekFeedbackGroup.alpha,
+                    1f,
+                    Time.unscaledDeltaTime * 9f);
+                return;
+            }
+
+            _seekFeedbackGroup.alpha = Mathf.MoveTowards(
+                _seekFeedbackGroup.alpha,
+                0f,
+                Time.unscaledDeltaTime * 5f);
+            if (_seekFeedbackGroup.alpha <= 0.01f)
+            {
+                _seekFeedbackRoot.SetActive(false);
+            }
+        }
+
+        private void SeekRelative(double deltaSeconds)
+        {
+            if (_activeEngine == null || !_activeEngine.IsPrepared || !_activeEngine.CanSeek)
+            {
+                ShowSeekFeedback("当前视频不可跳转");
+                return;
+            }
+
+            double duration = _activeEngine.DurationSeconds;
+            double target = Math.Max(0d, _activeEngine.PositionSeconds + deltaSeconds);
+            if (duration > 0.01d && !double.IsInfinity(duration) && !double.IsNaN(duration))
+            {
+                target = Math.Min(duration, target);
+            }
+
+            _activeEngine.Seek(target);
+            _lastPositionTicks = (long)(target * AppConstants.TicksPerSecond);
+            ShowSeekFeedback(deltaSeconds < 0d ? "‹‹  10 秒" : "10 秒  ››");
+        }
+
+        private void ShowSeekFeedback(string message)
+        {
+            _seekFeedbackLabel.text = message ?? string.Empty;
+            _seekFeedbackGroup.alpha = 0f;
+            _seekFeedbackRoot.SetActive(true);
+            _seekFeedbackRoot.transform.SetAsLastSibling();
+            _hideSeekFeedbackAt = Time.unscaledTime + 0.72f;
         }
 
         private void TogglePlayPause()
@@ -458,12 +770,14 @@ namespace JellyfinForRayNeo
             {
                 _activeEngine.Pause();
                 _playPauseLabel.text = "播放";
+                ShowControls(true);
                 PauseStateChanged?.Invoke(true);
             }
             else
             {
                 _activeEngine.Play();
                 _playPauseLabel.text = "暂停";
+                ShowControls();
                 PauseStateChanged?.Invoke(false);
             }
         }
@@ -488,6 +802,8 @@ namespace JellyfinForRayNeo
             {
                 return;
             }
+
+            ShowControls(true);
 
             List<JellyfinMediaStream> streams = PlaybackCapabilities.StreamsOfType(
                 _plan.MediaSource,
@@ -545,8 +861,19 @@ namespace JellyfinForRayNeo
                         audio ? _plan.SubtitleStreamIndex : selectedStream.Index));
             }
 
-            _trackPanel.SetActive(true);
             _trackPanel.transform.SetAsLastSibling();
+            _trackMotion.RefreshRestState();
+            _trackMotion.Show();
+            if (EventSystem.current != null)
+            {
+                Selectable firstOption = _trackPanel
+                    .GetComponentsInChildren<Selectable>(true)
+                    .FirstOrDefault(option => option != null && option.IsInteractable());
+                if (firstOption != null)
+                {
+                    EventSystem.current.SetSelectedGameObject(firstOption.gameObject);
+                }
+            }
         }
 
         private void AddTrackOption(string name, string label, int row, Action selected)
@@ -571,8 +898,16 @@ namespace JellyfinForRayNeo
 
         private void RequestTrackSelection(int? audioStreamIndex, int? subtitleStreamIndex)
         {
-            _trackPanel.SetActive(false);
+            if (_trackMotion != null)
+            {
+                _trackMotion.Hide();
+            }
+            else
+            {
+                _trackPanel.SetActive(false);
+            }
             _status.text = "正在切换音轨与字幕…";
+            ShowControls();
             TrackSelectionRequested?.Invoke(audioStreamIndex, subtitleStreamIndex);
         }
 

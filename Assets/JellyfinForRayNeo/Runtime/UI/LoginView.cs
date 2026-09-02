@@ -6,16 +6,21 @@ namespace JellyfinForRayNeo
     public sealed class LoginView
     {
         private readonly GameObject _root;
+        private readonly UiViewMotion _motion;
         private readonly Text _stateLabel;
         private readonly Text _message;
+
+        public Transform FocusRoot => _root.transform;
 
         public LoginView(Transform parent)
         {
             RectTransform rootRect = UiFactory.CreateRect("Login Screen", parent);
             UiFactory.Stretch(rootRect);
             _root = rootRect.gameObject;
+            _motion = UiFactory.AddViewMotion(_root, 18f, 0.992f);
+            UiFactory.CreateAmbientBackdrop(rootRect);
 
-            Image card = UiFactory.CreatePanel("Phone Connection Card", rootRect, UiTheme.Surface);
+            Image card = UiFactory.CreateRoundedPanel("Phone Connection Card", rootRect, UiTheme.SurfaceGlass);
             UiFactory.SetRect(
                 card.rectTransform,
                 new Vector2(0.5f, 0.5f),
@@ -23,6 +28,9 @@ namespace JellyfinForRayNeo
                 new Vector2(0.5f, 0.5f),
                 Vector2.zero,
                 new Vector2(1040f, 700f));
+            Outline cardOutline = card.gameObject.AddComponent<Outline>();
+            cardOutline.effectColor = UiTheme.Border;
+            cardOutline.effectDistance = new Vector2(1f, -1f);
 
             Text eyebrow = UiFactory.CreateText(
                 "Eyebrow",
@@ -75,7 +83,7 @@ namespace JellyfinForRayNeo
             CreateStep(card.transform, "2", "输入 Jellyfin 地址与帐号并点击连接", -362f);
             CreateStep(card.transform, "3", "连接成功后回到眼镜浏览海报墙", -454f);
 
-            Image statusPanel = UiFactory.CreatePanel(
+            Image statusPanel = UiFactory.CreateRoundedPanel(
                 "Companion Status",
                 card.transform,
                 new Color(0.06f, 0.07f, 0.11f, 0.98f));
@@ -121,13 +129,22 @@ namespace JellyfinForRayNeo
 
         public void Show(bool visible)
         {
-            _root.SetActive(visible);
+            if (visible)
+            {
+                _root.transform.SetAsLastSibling();
+                _motion.Show();
+            }
+            else
+            {
+                _motion.Hide();
+            }
         }
 
         public void SetBusy(bool busy)
         {
             _stateLabel.text = busy ? "正在连接 Jellyfin…" : "等待手机操作";
             _stateLabel.color = busy ? UiTheme.AccentBright : UiTheme.TextSecondary;
+            UiFactory.RevealGraphic(_stateLabel, 0.20f);
         }
 
         public void SetMessage(string message, bool isError)
@@ -138,7 +155,7 @@ namespace JellyfinForRayNeo
 
         private static void CreateStep(Transform parent, string number, string description, float y)
         {
-            Image row = UiFactory.CreatePanel(
+            Image row = UiFactory.CreateRoundedPanel(
                 "Phone Step " + number,
                 parent,
                 new Color(0.08f, 0.09f, 0.14f, 0.96f));

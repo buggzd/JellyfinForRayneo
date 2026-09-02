@@ -7,7 +7,14 @@ using UnityEngine.UI;
 namespace JellyfinForRayNeo
 {
     [RequireComponent(typeof(Selectable))]
-    public sealed class FocusScale : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, ISelectHandler, IDeselectHandler
+    public sealed class FocusScale : MonoBehaviour,
+        IPointerEnterHandler,
+        IPointerExitHandler,
+        IPointerDownHandler,
+        IPointerUpHandler,
+        ISelectHandler,
+        IDeselectHandler,
+        ISubmitHandler
     {
         public float FocusedScale = 1.07f;
         public float AnimationSpeed = 13f;
@@ -22,8 +29,17 @@ namespace JellyfinForRayNeo
         private Graphic _focusGraphic;
         private Color _focusColor;
         private Color _restFocusColor;
+        private Graphic _shadowGraphic;
+        private Color _restShadowColor;
+        private Color _focusShadowColor;
         private ScrollRect _horizontalScroll;
         private ScrollRect _verticalScroll;
+        private Vector3 _scaleVelocity;
+        private float _depthVelocity;
+        private float _pressAmount;
+        private float _pressVelocity;
+        private float _submitPulse;
+        private bool _pressed;
 
         private void Awake()
         {
@@ -47,6 +63,16 @@ namespace JellyfinForRayNeo
             }
         }
 
+        public void ConfigureShadowGraphic(Graphic graphic, Color focusedColor)
+        {
+            _shadowGraphic = graphic;
+            _focusShadowColor = focusedColor;
+            if (_shadowGraphic != null)
+            {
+                _restShadowColor = _shadowGraphic.color;
+            }
+        }
+
         public void ConfigureScrollRects(ScrollRect horizontalScroll, ScrollRect verticalScroll)
         {
             _horizontalScroll = horizontalScroll;
@@ -55,12 +81,37 @@ namespace JellyfinForRayNeo
 
         private void Update()
         {
-            Vector3 targetScale = _focused ? _restScale * FocusedScale : _restScale;
-            transform.localScale = Vector3.Lerp(transform.localScale, targetScale, Time.unscaledDeltaTime * AnimationSpeed);
+            float deltaTime = Mathf.Max(0.0001f, Time.unscaledDeltaTime);
+            _pressAmount = Mathf.SmoothDamp(
+                _pressAmount,
+                _pressed ? 1f : 0f,
+                ref _pressVelocity,
+                _pressed ? 0.045f : 0.085f,
+                Mathf.Infinity,
+                deltaTime);
+            _submitPulse = Mathf.MoveTowards(_submitPulse, 0f, deltaTime * 5.5f);
+
+            float focusScale = _focused ? FocusedScale : 1f;
+            float pressedScale = Mathf.Lerp(1f, 0.965f, _pressAmount);
+            pressedScale *= 1f - _submitPulse * 0.025f;
+            Vector3 targetScale = _restScale * focusScale * pressedScale;
+            transform.localScale = Vector3.SmoothDamp(
+                transform.localScale,
+                targetScale,
+                ref _scaleVelocity,
+                1f / Mathf.Max(1f, AnimationSpeed),
+                Mathf.Infinity,
+                deltaTime);
 
             Vector3 position = transform.localPosition;
             float targetDepth = _focused ? _restDepth + LocalDepthOffset : _restDepth;
-            position.z = Mathf.Lerp(position.z, targetDepth, Time.unscaledDeltaTime * AnimationSpeed);
+            position.z = Mathf.SmoothDamp(
+                position.z,
+                targetDepth,
+                ref _depthVelocity,
+                1f / Mathf.Max(1f, AnimationSpeed),
+                Mathf.Infinity,
+                deltaTime);
             transform.localPosition = position;
 
             if (_targetGraphic != null)
@@ -68,7 +119,10 @@ namespace JellyfinForRayNeo
                 Color targetColor = _focused
                     ? Color.Lerp(_restColor, Color.white, 0.16f)
                     : _restColor;
-                _targetGraphic.color = Color.Lerp(_targetGraphic.color, targetColor, Time.unscaledDeltaTime * AnimationSpeed);
+                _targetGraphic.color = Color.Lerp(
+                    _targetGraphic.color,
+                    targetColor,
+                    1f - Mathf.Exp(-AnimationSpeed * deltaTime));
             }
 
             if (_focusGraphic != null)
@@ -77,7 +131,16 @@ namespace JellyfinForRayNeo
                 _focusGraphic.color = Color.Lerp(
                     _focusGraphic.color,
                     targetFocusColor,
-                    Time.unscaledDeltaTime * AnimationSpeed);
+                    1f - Mathf.Exp(-AnimationSpeed * deltaTime));
+            }
+
+            if (_shadowGraphic != null)
+            {
+                Color targetShadowColor = _focused ? _focusShadowColor : _restShadowColor;
+                _shadowGraphic.color = Color.Lerp(
+                    _shadowGraphic.color,
+                    targetShadowColor,
+                    1f - Mathf.Exp(-AnimationSpeed * deltaTime));
             }
         }
 
@@ -92,7 +155,18 @@ namespace JellyfinForRayNeo
 
         public void OnPointerExit(PointerEventData eventData)
         {
+            _pressed = false;
             SetFocused(false);
+        }
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            _pressed = true;
+        }
+
+        public void OnPointerUp(PointerEventData eventData)
+        {
+            _pressed = false;
         }
 
         public void OnSelect(BaseEventData eventData)
@@ -102,7 +176,13 @@ namespace JellyfinForRayNeo
 
         public void OnDeselect(BaseEventData eventData)
         {
+            _pressed = false;
             SetFocused(false);
+        }
+
+        public void OnSubmit(BaseEventData eventData)
+        {
+            _submitPulse = 1f;
         }
 
         private void SetFocused(bool focused)
@@ -157,13 +237,42 @@ namespace JellyfinForRayNeo
             }
 
             scrollRect.StopMovement();
-            scrollRect.content.anchoredPosition = position;
+            SmoothScrollMotion motion = scrollRect.GetComponent<SmoothScrollMotion>();
+            if (motion == null)
+            {
+                motion = scrollRect.gameObject.AddComponent<SmoothScrollMotion>();
+            }
+            motion.ScrollTo(position);
         }
     }
 
     public sealed class DirectionalFocusNavigator
     {
         private const float DirectionEpsilon = 0.5f;
+        private Transform _scope;
+
+        public Transform Scope => _scope;
+
+        public void SetScope(Transform scope)
+        {
+            if (_scope == scope)
+            {
+                return;
+            }
+
+            _scope = scope;
+            if (EventSystem.current == null)
+            {
+                return;
+            }
+
+            GameObject selected = EventSystem.current.currentSelectedGameObject;
+            if (selected != null
+                && (_scope == null || !selected.transform.IsChildOf(_scope)))
+            {
+                EventSystem.current.SetSelectedGameObject(null);
+            }
+        }
 
         public bool Handle(CompanionRemoteCommand command)
         {
@@ -310,13 +419,17 @@ namespace JellyfinForRayNeo
             return selected;
         }
 
-        private static List<Selectable> GetCandidates()
+        private List<Selectable> GetCandidates()
         {
             Selectable[] all = Object.FindObjectsOfType<Selectable>(true);
             Transform modal = all
                 .Select(candidate => candidate != null ? candidate.transform : null)
                 .Select(transform => FindAncestor(transform, "Track Menu"))
-                .FirstOrDefault(transform => transform != null && transform.gameObject.activeInHierarchy);
+                .FirstOrDefault(transform =>
+                    transform != null
+                    && transform.gameObject.activeInHierarchy
+                    && (_scope == null || transform.IsChildOf(_scope))
+                    && AllowsInteraction(transform, _scope));
 
             return all.Where(candidate =>
                     candidate != null
@@ -324,8 +437,33 @@ namespace JellyfinForRayNeo
                     && candidate.IsInteractable()
                     && candidate.navigation.mode != Navigation.Mode.None
                     && candidate.transform is RectTransform
+                    && (_scope == null || candidate.transform.IsChildOf(_scope))
+                    && AllowsInteraction(candidate.transform, _scope)
                     && (modal == null || candidate.transform.IsChildOf(modal)))
                 .ToList();
+        }
+
+        private static bool AllowsInteraction(Transform transform, Transform scope)
+        {
+            Transform current = transform;
+            while (current != null)
+            {
+                CanvasGroup[] groups = current.GetComponents<CanvasGroup>();
+                foreach (CanvasGroup group in groups)
+                {
+                    if (group != null && !group.interactable)
+                    {
+                        return false;
+                    }
+                }
+
+                if (current == scope)
+                {
+                    break;
+                }
+                current = current.parent;
+            }
+            return true;
         }
 
         private static Transform FindAncestor(Transform transform, string name)

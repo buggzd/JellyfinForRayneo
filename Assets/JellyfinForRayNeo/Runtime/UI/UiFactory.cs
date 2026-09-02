@@ -7,6 +7,7 @@ namespace JellyfinForRayNeo
     internal static class UiFactory
     {
         private static Sprite _roundedSprite;
+        private static Sprite _radialGlowSprite;
 
         public static RectTransform CreateRect(string name, Transform parent)
         {
@@ -88,9 +89,9 @@ namespace JellyfinForRayNeo
             button.transition = Selectable.Transition.ColorTint;
             ColorBlock colors = button.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.12f, 1.12f, 1.12f, 1f);
-            colors.selectedColor = new Color(1.12f, 1.12f, 1.12f, 1f);
-            colors.pressedColor = new Color(0.82f, 0.82f, 0.86f, 1f);
+            colors.highlightedColor = new Color(1.10f, 1.10f, 1.10f, 1f);
+            colors.selectedColor = new Color(1.10f, 1.10f, 1.10f, 1f);
+            colors.pressedColor = new Color(0.78f, 0.82f, 0.86f, 1f);
             colors.disabledColor = new Color(0.48f, 0.48f, 0.52f, 0.55f);
             colors.colorMultiplier = 1f;
             button.colors = colors;
@@ -99,6 +100,81 @@ namespace JellyfinForRayNeo
             Stretch(text.rectTransform, 12f, 12f, 8f, 8f);
             image.gameObject.AddComponent<FocusScale>();
             return button;
+        }
+
+        public static UiViewMotion AddViewMotion(
+            GameObject target,
+            float enterOffset = 28f,
+            float enterScale = 0.985f)
+        {
+            UiViewMotion motion = target.GetComponent<UiViewMotion>();
+            if (motion == null)
+            {
+                motion = target.AddComponent<UiViewMotion>();
+            }
+            motion.EnterOffset = enterOffset;
+            motion.EnterScale = enterScale;
+            return motion;
+        }
+
+        public static void AddItemReveal(GameObject target, float delay)
+        {
+            UiItemReveal reveal = target.GetComponent<UiItemReveal>();
+            if (reveal == null)
+            {
+                reveal = target.AddComponent<UiItemReveal>();
+            }
+            reveal.Configure(delay);
+        }
+
+        public static void RevealGraphic(Graphic graphic, float duration = 0.28f)
+        {
+            if (graphic == null)
+            {
+                return;
+            }
+
+            graphic.canvasRenderer.SetAlpha(0f);
+            graphic.CrossFadeAlpha(1f, Mathf.Max(0.01f, duration), true);
+        }
+
+        public static RectTransform CreateAmbientBackdrop(Transform parent)
+        {
+            RectTransform ambient = CreateRect("Ambient Backdrop", parent);
+            Stretch(ambient);
+            ambient.SetAsFirstSibling();
+
+            Image teal = CreatePanel("Teal Glow", ambient, UiTheme.GlowTeal);
+            teal.sprite = RadialGlowSprite;
+            teal.raycastTarget = false;
+            SetRect(
+                teal.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(240f, -160f),
+                new Vector2(1160f, 760f));
+            UiAmbientFloat tealMotion = teal.gameObject.AddComponent<UiAmbientFloat>();
+            tealMotion.Amplitude = new Vector2(46f, 22f);
+            tealMotion.Speed = 0.055f;
+            tealMotion.Phase = 0.4f;
+
+            Image violet = CreatePanel("Violet Glow", ambient, UiTheme.GlowViolet);
+            violet.sprite = RadialGlowSprite;
+            violet.raycastTarget = false;
+            SetRect(
+                violet.rectTransform,
+                new Vector2(1f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(-170f, 100f),
+                new Vector2(980f, 700f));
+            UiAmbientFloat violetMotion = violet.gameObject.AddComponent<UiAmbientFloat>();
+            violetMotion.Amplitude = new Vector2(34f, 28f);
+            violetMotion.Speed = 0.045f;
+            violetMotion.Phase = 2.1f;
+
+            return ambient;
         }
 
         public static InputField CreateInputField(
@@ -222,8 +298,14 @@ namespace JellyfinForRayNeo
                     typeof(EventSystem),
                     typeof(StandaloneInputModule));
                 eventSystemObject.transform.SetParent(null);
-                return;
+                current = eventSystemObject.GetComponent<EventSystem>();
             }
+
+            // Navigation is routed through DirectionalFocusNavigator so every
+            // command is constrained to the visible page. Leaving Unity's
+            // built-in axis navigation enabled can process the same gesture a
+            // second time and move focus into stale or underlying controls.
+            current.sendNavigationEvents = false;
 
             StandaloneInputModule standardModule = current.GetComponent<StandaloneInputModule>();
             if (standardModule == null)
@@ -326,6 +408,52 @@ namespace JellyfinForRayNeo
                 _roundedSprite.name = "Runtime Rounded Rectangle";
                 _roundedSprite.hideFlags = HideFlags.HideAndDontSave;
                 return _roundedSprite;
+            }
+        }
+
+        private static Sprite RadialGlowSprite
+        {
+            get
+            {
+                if (_radialGlowSprite != null)
+                {
+                    return _radialGlowSprite;
+                }
+
+                const int size = 128;
+                float half = size * 0.5f;
+                Color[] pixels = new Color[size * size];
+                for (int y = 0; y < size; y++)
+                {
+                    for (int x = 0; x < size; x++)
+                    {
+                        float normalized = Vector2.Distance(
+                            new Vector2(x + 0.5f, y + 0.5f),
+                            new Vector2(half, half)) / half;
+                        float alpha = Mathf.Clamp01(1f - normalized);
+                        alpha = alpha * alpha * (3f - 2f * alpha);
+                        pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+                    }
+                }
+
+                Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false, true)
+                {
+                    name = "Runtime Radial Glow",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp,
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                texture.SetPixels(pixels);
+                texture.Apply(false, true);
+
+                _radialGlowSprite = Sprite.Create(
+                    texture,
+                    new Rect(0f, 0f, size, size),
+                    new Vector2(0.5f, 0.5f),
+                    100f);
+                _radialGlowSprite.name = "Runtime Radial Glow";
+                _radialGlowSprite.hideFlags = HideFlags.HideAndDontSave;
+                return _radialGlowSprite;
             }
         }
     }
