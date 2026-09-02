@@ -25,6 +25,8 @@ namespace JellyfinForRayNeo.Tests
         };
 
         private readonly Dictionary<string, string> _savedSession = new Dictionary<string, string>();
+        private bool _hadDisplayModePreference;
+        private string _savedDisplayModePreference;
 
         [UnitySetUp]
         public IEnumerator SetUp()
@@ -37,6 +39,15 @@ namespace JellyfinForRayNeo.Tests
                     _savedSession[key] = PlayerPrefs.GetString(key);
                 }
             }
+
+            _hadDisplayModePreference = PlayerPrefs.HasKey(
+                Air3SDisplayController.EditorPreferenceKey);
+            _savedDisplayModePreference = PlayerPrefs.GetString(
+                Air3SDisplayController.EditorPreferenceKey,
+                string.Empty);
+            PlayerPrefs.SetString(
+                Air3SDisplayController.EditorPreferenceKey,
+                Air3SDisplayController.Mirror2DPreference);
 
             new JellyfinSessionStore().ClearSession();
             AsyncOperation load = SceneManager.LoadSceneAsync("Main", LoadSceneMode.Single);
@@ -55,6 +66,16 @@ namespace JellyfinForRayNeo.Tests
             foreach (KeyValuePair<string, string> pair in _savedSession)
             {
                 PlayerPrefs.SetString(pair.Key, pair.Value);
+            }
+            if (_hadDisplayModePreference)
+            {
+                PlayerPrefs.SetString(
+                    Air3SDisplayController.EditorPreferenceKey,
+                    _savedDisplayModePreference);
+            }
+            else
+            {
+                PlayerPrefs.DeleteKey(Air3SDisplayController.EditorPreferenceKey);
             }
             PlayerPrefs.Save();
             yield return null;
@@ -79,13 +100,11 @@ namespace JellyfinForRayNeo.Tests
             Assert.AreEqual(RenderMode.WorldSpace, canvas.renderMode);
             BaseRaycaster raycaster = canvas.GetComponent<BaseRaycaster>();
             Assert.NotNull(raycaster);
-            Assert.AreEqual(
-                "FfalconXR.InputModule.XRGraphicRaycaster",
-                raycaster.GetType().FullName,
-                "RayNeo's custom ray input requires XRGraphicRaycaster instead of Unity's screen-point raycaster.");
-            Assert.IsNull(
-                canvas.GetComponent<GraphicRaycaster>(),
-                "A standard GraphicRaycaster would make the Editor mouse and RayNeo laser target different UI positions.");
+            Assert.IsInstanceOf<GraphicRaycaster>(raycaster);
+            Air3SDisplayController display = Object.FindObjectOfType<Air3SDisplayController>();
+            Assert.NotNull(display);
+            Assert.AreSame(display.MonoCamera, canvas.worldCamera);
+            Assert.AreEqual(display.CanvasWorldScale, canvas.transform.localScale.x, 0.000001f);
 
             Transform login = FindDescendant(canvas.transform, "Login Screen");
             Transform home = FindDescendant(canvas.transform, "Home Screen");
@@ -450,40 +469,73 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [UnityTest]
-        public IEnumerator MainScene_ContainsRayNeoHeadRayRig()
+        public IEnumerator MainScene_ConfiguresSelectableAir3SDisplayModes()
         {
-            GameObject rig = GameObject.Find("RayNeo Air XR Rig");
-            Assert.NotNull(rig, "Install the official RayNeo Air SDK before running PlayMode tests.");
+            Air3SDisplayController display = Object.FindObjectOfType<Air3SDisplayController>();
+            Assert.NotNull(display);
+            Assert.AreSame(display.MonoCamera, Camera.main);
+            Assert.AreEqual(Air3SDisplayMode.Mirror2D, display.ActiveMode);
+            Assert.IsTrue(display.MonoCamera.enabled);
+            Assert.IsFalse(display.LeftEyeCamera.enabled);
+            Assert.IsFalse(display.RightEyeCamera.enabled);
+            Assert.AreEqual(new Rect(0f, 0f, 1f, 1f), display.MonoCamera.rect);
+            Assert.AreEqual(Air3SDisplayController.PerEyeAspect, display.MonoCamera.aspect, 0.001f);
+            Canvas displayCanvas = Object.FindObjectOfType<Canvas>();
+            AssertPerEyeCanvasFillsViewport(display.MonoCamera, displayCanvas);
 
-            Transform head = FindDescendant(rig.transform, "Head");
-            Transform laser = FindDescendant(rig.transform, "LaserBeam");
-            Assert.NotNull(head);
-            Assert.NotNull(laser);
-            Assert.AreEqual("MainCamera", head.tag);
-            Assert.AreSame(head.GetComponent<Camera>(), Camera.main);
             Assert.NotNull(EventSystem.current);
             BaseInputModule[] inputModules = EventSystem.current.GetComponents<BaseInputModule>();
             Assert.IsTrue(
-                inputModules.Any(module =>
-                    module.GetType().FullName == "JellyfinForRayNeo.RayNeoEditorInputModule"
-                    && module.enabled),
-                "Editor play mode must use the input module that supports dragging while the mouse is captured.");
+                inputModules.Any(module => module is StandaloneInputModule && module.enabled));
             Assert.IsFalse(
                 inputModules.Any(module =>
                     module.GetType().FullName == "FfalconXR.InputModule.XRInputModule"
-                    && module.enabled),
-                "The official module ignores drag events while the Editor cursor is locked.");
+                    && module.enabled));
 
             RayNeoEditorInputSimulator simulator =
                 Object.FindObjectOfType<RayNeoEditorInputSimulator>();
             Assert.NotNull(simulator);
             Assert.IsTrue(simulator.enabled);
-            Assert.IsTrue(
-                simulator.GetComponents<Component>().Any(component =>
-                    component != null
-                    && component.GetType().FullName
-                        == "FfalconXR.InputModule.UnityInputKeyHandler"),
-                "The Editor simulator must forward the left mouse button through the same input chain as the ray module.");
+
+            display.SetMode(Air3SDisplayMode.StereoVirtualScreen);
+            yield return null;
+
+            Assert.AreEqual(Air3SDisplayMode.StereoVirtualScreen, display.ActiveMode);
+            Assert.IsFalse(display.MonoCamera.enabled);
+            Assert.IsTrue(display.LeftEyeCamera.enabled);
+            Assert.IsTrue(display.RightEyeCamera.enabled);
+            Assert.AreEqual(new Rect(0f, 0f, 0.5f, 1f), display.LeftEyeCamera.rect);
+            Assert.AreEqual(new Rect(0.5f, 0f, 0.5f, 1f), display.RightEyeCamera.rect);
+            Assert.AreEqual(
+                Air3SDisplayController.PerEyeAspect,
+                display.LeftEyeCamera.aspect,
+                0.001f,
+                "Each squeezed SBS half must retain a 16:9 projection to avoid horizontal cropping.");
+            Assert.AreEqual(
+                Air3SDisplayController.PerEyeAspect,
+                display.RightEyeCamera.aspect,
+                0.001f);
+            Assert.AreEqual(
+                -display.InterpupillaryDistance * 0.5f,
+                display.LeftEyeCamera.transform.localPosition.x,
+                0.0001f);
+            Assert.AreEqual(
+                display.InterpupillaryDistance * 0.5f,
+                display.RightEyeCamera.transform.localPosition.x,
+                0.0001f);
+            Assert.AreEqual(
+                -display.LeftEyeCamera.projectionMatrix.m02,
+                display.RightEyeCamera.projectionMatrix.m02,
+                0.0001f,
+                "The off-axis frustums must converge on the full-size virtual screen.");
+            Assert.AreNotEqual(0f, display.LeftEyeCamera.projectionMatrix.m02);
+            AssertPerEyeCanvasFillsViewport(display.LeftEyeCamera, displayCanvas);
+            AssertPerEyeCanvasFillsViewport(display.RightEyeCamera, displayCanvas);
+            Assert.IsFalse(HasHeadTrackingComponent(display.MonoCamera));
+            Assert.IsFalse(HasHeadTrackingComponent(display.LeftEyeCamera));
+            Assert.IsFalse(HasHeadTrackingComponent(display.RightEyeCamera));
+
+            display.SetMode(Air3SDisplayMode.Mirror2D);
             yield return null;
         }
 
@@ -510,6 +562,30 @@ namespace JellyfinForRayNeo.Tests
         {
             return root.GetComponentsInChildren<Transform>(true)
                 .FirstOrDefault(candidate => candidate.name == objectName);
+        }
+
+        private static bool HasHeadTrackingComponent(Camera camera)
+        {
+            return camera.GetComponents<Component>().Any(component =>
+                component != null
+                && (component.GetType().Name.Contains("TrackedPose")
+                    || component.GetType().Name.Contains("HeadTracked")));
+        }
+
+        private static void AssertPerEyeCanvasFillsViewport(Camera camera, Canvas canvas)
+        {
+            Assert.NotNull(camera);
+            Assert.NotNull(canvas);
+            RectTransform rect = canvas.transform as RectTransform;
+            Assert.NotNull(rect);
+            Vector3[] corners = new Vector3[4];
+            rect.GetWorldCorners(corners);
+            Vector3 bottomLeft = camera.WorldToViewportPoint(corners[0]);
+            Vector3 topRight = camera.WorldToViewportPoint(corners[2]);
+            Assert.AreEqual(0f, bottomLeft.x, 0.001f);
+            Assert.AreEqual(0f, bottomLeft.y, 0.001f);
+            Assert.AreEqual(1f, topRight.x, 0.001f);
+            Assert.AreEqual(1f, topRight.y, 0.001f);
         }
 
         private static JellyfinItem CreateEpisode(int index, string name)

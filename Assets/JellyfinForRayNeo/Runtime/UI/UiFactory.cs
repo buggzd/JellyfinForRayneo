@@ -1,4 +1,3 @@
-using Type = System.Type;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -142,15 +141,27 @@ namespace JellyfinForRayNeo
 
             RectTransform rect = canvasObject.GetComponent<RectTransform>();
             rect.sizeDelta = new Vector2(1920f, 1080f);
-            rect.localScale = Vector3.one * 0.0016f;
+            Air3SDisplayController display = camera != null
+                ? camera.GetComponent<Air3SDisplayController>()
+                : null;
+            float screenDistance = display != null
+                ? display.ScreenDistance
+                : Air3SDisplayController.DefaultScreenDistance;
+            float worldScale = display != null
+                ? display.CanvasWorldScale
+                : Air3SDisplayController.CalculateCanvasWorldScale(
+                    screenDistance,
+                    27f);
+            rect.localScale = Vector3.one * worldScale;
             if (camera != null)
             {
-                rect.position = camera.transform.position + camera.transform.forward * 4.5f;
+                rect.position = camera.transform.position
+                    + camera.transform.forward * screenDistance;
                 rect.rotation = camera.transform.rotation;
             }
             else
             {
-                rect.position = new Vector3(0f, 0f, 4.5f);
+                rect.position = new Vector3(0f, 0f, screenDistance);
             }
 
             CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
@@ -162,27 +173,33 @@ namespace JellyfinForRayNeo
 
         private static void AddSpatialRaycaster(GameObject canvasObject)
         {
-            Type rayNeoRaycaster = Type.GetType(
-                "FfalconXR.InputModule.XRGraphicRaycaster, UnityXRSDKCore",
-                false);
-            if (rayNeoRaycaster != null && typeof(BaseRaycaster).IsAssignableFrom(rayNeoRaycaster))
-            {
-                canvasObject.AddComponent(rayNeoRaycaster);
-                return;
-            }
-
             canvasObject.AddComponent<GraphicRaycaster>();
         }
 
         public static Camera EnsureMainCamera()
         {
+            Air3SDisplayController displayController =
+                Object.FindObjectOfType<Air3SDisplayController>(true);
+            if (displayController != null)
+            {
+                return displayController.MonoCamera;
+            }
+
             Camera camera = Camera.main;
             if (camera != null)
             {
+                camera.stereoTargetEye = StereoTargetEyeMask.None;
+                if (camera.GetComponent<Air3SDisplayController>() == null)
+                {
+                    camera.gameObject.AddComponent<Air3SDisplayController>();
+                }
                 return camera;
             }
 
-            GameObject cameraObject = new GameObject("Editor Preview Camera", typeof(Camera), typeof(AudioListener));
+            GameObject cameraObject = new GameObject(
+                "RayNeo Air 3S Display Camera",
+                typeof(Camera),
+                typeof(AudioListener));
             cameraObject.tag = "MainCamera";
             camera = cameraObject.GetComponent<Camera>();
             camera.clearFlags = CameraClearFlags.SolidColor;
@@ -190,18 +207,38 @@ namespace JellyfinForRayNeo
             camera.fieldOfView = 27f;
             camera.nearClipPlane = 0.1f;
             camera.farClipPlane = 100f;
+            camera.stereoTargetEye = StereoTargetEyeMask.None;
+            cameraObject.AddComponent<Air3SDisplayController>();
             return camera;
         }
 
         public static void EnsureEventSystem()
         {
-            if (EventSystem.current != null)
+            EventSystem current = EventSystem.current;
+            if (current == null)
             {
+                GameObject eventSystemObject = new GameObject(
+                    "EventSystem",
+                    typeof(EventSystem),
+                    typeof(StandaloneInputModule));
+                eventSystemObject.transform.SetParent(null);
                 return;
             }
 
-            GameObject eventSystem = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
-            eventSystem.transform.SetParent(null);
+            StandaloneInputModule standardModule = current.GetComponent<StandaloneInputModule>();
+            if (standardModule == null)
+            {
+                standardModule = current.gameObject.AddComponent<StandaloneInputModule>();
+            }
+            standardModule.enabled = true;
+
+            foreach (BaseInputModule module in current.GetComponents<BaseInputModule>())
+            {
+                if (module != standardModule)
+                {
+                    module.enabled = false;
+                }
+            }
         }
 
         public static void Stretch(RectTransform rect, float left = 0f, float right = 0f, float top = 0f, float bottom = 0f)

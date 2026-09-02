@@ -24,6 +24,8 @@ import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Display;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -58,6 +60,7 @@ import java.net.URI;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
@@ -75,6 +78,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private static final int QUICK_CONNECT_TIMEOUT_MS = 300000;
     private static final int QUICK_CONNECT_POLL_MS = 1500;
     private static final long PRESENTATION_FALLBACK_DELAY_MS = 2600L;
+    private static final int MAX_REMOTE_COMMANDS = 32;
+    private static final long DOUBLE_TAP_WINDOW_MS = 280L;
+    private static final long DISPLAY_MODE_LONG_PRESS_MS = 550L;
     private static final byte[] DISCOVERY_MESSAGE =
             "who is JellyfinServer?".getBytes(StandardCharsets.UTF_8);
 
@@ -83,6 +89,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private static final String PREF_SERVER_URL = "server_url";
     private static final String PREF_USERNAME = "username";
     private static final String PREF_SESSION_JSON = "session_json";
+    private static final String PREF_DISPLAY_MODE = "display_mode";
+    private static final String DISPLAY_MODE_MIRROR_2D = "mirror_2d";
+    private static final String DISPLAY_MODE_STEREO_SCREEN = "stereo_screen";
 
     private static final int COLOR_BACKGROUND_TOP = Color.rgb(17, 17, 20);
     private static final int COLOR_BACKGROUND_BOTTOM = Color.rgb(9, 10, 12);
@@ -100,6 +109,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private static final int COLOR_ERROR = Color.rgb(255, 126, 151);
 
     private FrameLayout companionOverlay;
+    private ScrollView configurationScrollView;
+    private TouchpadView touchpadView;
     private EditText serverInput;
     private EditText usernameInput;
     private EditText passwordInput;
@@ -119,6 +130,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private TextView glassesStatusText;
     private TextView glassesDescriptionText;
     private TextView glassesActionHint;
+    private Button mirror2DModeButton;
+    private Button stereoScreenModeButton;
+    private TextView displayModeDescriptionText;
     private GlassesIconView glassesIconView;
     private TextView sessionTitleText;
     private TextView sessionDetailText;
@@ -129,6 +143,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private String latestServerUrl = "";
     private String latestUsername = "";
     private String latestQuickConnectCode = "";
+    private String requestedDisplayMode = DISPLAY_MODE_MIRROR_2D;
+    private String activeDisplayMode = DISPLAY_MODE_MIRROR_2D;
+    private boolean requestedDisplayModeApplied;
+    private String displayModeMessage = "默认使用镜像 2D，连接眼镜后自动应用。";
     private boolean automaticDiscoveryStarted;
     private volatile boolean nativeOperationRunning;
     private volatile int authenticationGeneration;
@@ -140,6 +158,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private long glassesDetectedAtMs;
     private long fallbackPresentationStartedAtMs;
     private CompanionUnityPresentation fallbackPresentation;
+    private final ArrayDeque<String> remoteCommands = new ArrayDeque<>();
     private final DisplayManager.DisplayListener companionDisplayListener =
             new DisplayManager.DisplayListener() {
                 @Override
@@ -206,6 +225,16 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         }
         dismissFallbackPresentation();
         super.onDestroy();
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (touchpadView != null && touchpadView.getVisibility() == View.VISIBLE) {
+            enqueueRemoteCommand("back");
+            touchpadView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            return;
+        }
+        super.onBackPressed();
     }
 
     public void setGlassesPresentationState(final boolean ready) {
@@ -296,10 +325,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         companionOverlay.setFocusable(true);
         companionOverlay.setElevation(dp(24));
 
-        ScrollView scrollView = new ScrollView(this);
-        scrollView.setFillViewport(true);
-        scrollView.setClipToPadding(false);
-        scrollView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        configurationScrollView = new ScrollView(this);
+        configurationScrollView.setFillViewport(true);
+        configurationScrollView.setClipToPadding(false);
+        configurationScrollView.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -555,8 +584,14 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 pageWidth,
                 ViewGroup.LayoutParams.WRAP_CONTENT);
         pageParams.gravity = Gravity.CENTER_HORIZONTAL;
-        scrollView.addView(page, pageParams);
-        companionOverlay.addView(scrollView, new FrameLayout.LayoutParams(
+        configurationScrollView.addView(page, pageParams);
+        companionOverlay.addView(configurationScrollView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
+        touchpadView = new TouchpadView(this);
+        touchpadView.setVisibility(View.GONE);
+        companionOverlay.addView(touchpadView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         content.addView(companionOverlay, new ViewGroup.LayoutParams(
@@ -619,6 +654,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         glassesDescriptionText.setLineSpacing(dp(2), 1f);
         panel.addView(glassesDescriptionText, matchWrap(dp(12)));
 
+        panel.addView(createDisplayModeSelector(), matchWrap(dp(12)));
+
         glassesActionHint = createText(
                 "插入手机接口即可  ·  无需点击任何按钮",
                 12,
@@ -628,6 +665,142 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         glassesActionHint.setCompoundDrawablePadding(dp(7));
         panel.addView(glassesActionHint, matchWrap(0));
         return panel;
+    }
+
+    private LinearLayout createDisplayModeSelector() {
+        LinearLayout selector = new LinearLayout(this);
+        selector.setOrientation(LinearLayout.VERTICAL);
+        selector.setPadding(dp(12), dp(12), dp(12), dp(11));
+        selector.setBackground(roundedWithStroke(COLOR_FIELD, COLOR_BORDER, 16));
+
+        TextView label = createText(
+                "眼镜显示模式",
+                12,
+                COLOR_SECONDARY,
+                Typeface.BOLD,
+                Gravity.START);
+        selector.addView(label, matchWrap(dp(9)));
+
+        LinearLayout choices = new LinearLayout(this);
+        choices.setOrientation(LinearLayout.HORIZONTAL);
+        choices.setGravity(Gravity.CENTER_VERTICAL);
+        selector.addView(choices, matchHeight(44, 9));
+
+        mirror2DModeButton = createButton("镜像 2D", COLOR_SURFACE_SOFT);
+        mirror2DModeButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                selectDisplayMode(DISPLAY_MODE_MIRROR_2D);
+            }
+        });
+        LinearLayout.LayoutParams mirrorParams = new LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                1f);
+        mirrorParams.rightMargin = dp(7);
+        choices.addView(mirror2DModeButton, mirrorParams);
+
+        stereoScreenModeButton = createButton("立体屏幕", COLOR_SURFACE_SOFT);
+        stereoScreenModeButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                selectDisplayMode(DISPLAY_MODE_STEREO_SCREEN);
+            }
+        });
+        choices.addView(stereoScreenModeButton, new LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                1f));
+
+        displayModeDescriptionText = createText(
+                "",
+                12,
+                COLOR_TERTIARY,
+                Typeface.NORMAL,
+                Gravity.START);
+        displayModeDescriptionText.setLineSpacing(dp(1), 1f);
+        selector.addView(displayModeDescriptionText, matchWrap(0));
+        updateDisplayModeUi();
+        return selector;
+    }
+
+    private void selectDisplayMode(String mode) {
+        String normalized = normalizeDisplayMode(mode);
+        if (normalized.equals(requestedDisplayMode) && requestedDisplayModeApplied) {
+            return;
+        }
+
+        requestedDisplayMode = normalized;
+        requestedDisplayModeApplied = false;
+        displayModeMessage = glassesConnected
+                ? "正在同步 Unity 双相机与眼镜硬件模式…"
+                : (isStereoDisplayMode(normalized)
+                        ? "已保存。连接眼镜后启用固定立体虚拟屏幕。"
+                        : "已保存。连接眼镜后双眼显示同一幅完整画面。");
+        getCompanionPreferences()
+                .edit()
+                .putString(PREF_DISPLAY_MODE, requestedDisplayMode)
+                .apply();
+        updateDisplayModeUi();
+        if (touchpadView != null) {
+            touchpadView.invalidate();
+        }
+    }
+
+    private void toggleDisplayMode() {
+        selectDisplayMode(isStereoDisplayMode(requestedDisplayMode)
+                ? DISPLAY_MODE_MIRROR_2D
+                : DISPLAY_MODE_STEREO_SCREEN);
+    }
+
+    private String normalizeDisplayMode(String mode) {
+        if (DISPLAY_MODE_STEREO_SCREEN.equals(mode)
+                || "stereo".equalsIgnoreCase(mode)
+                || "3d".equalsIgnoreCase(mode)) {
+            return DISPLAY_MODE_STEREO_SCREEN;
+        }
+        return DISPLAY_MODE_MIRROR_2D;
+    }
+
+    private boolean isStereoDisplayMode(String mode) {
+        return DISPLAY_MODE_STEREO_SCREEN.equals(normalizeDisplayMode(mode));
+    }
+
+    private String displayModeLabel(String mode) {
+        return isStereoDisplayMode(mode) ? "立体屏幕" : "镜像 2D";
+    }
+
+    private void updateDisplayModeUi() {
+        boolean stereoSelected = isStereoDisplayMode(requestedDisplayMode);
+        if (mirror2DModeButton != null) {
+            mirror2DModeButton.setTextColor(stereoSelected
+                    ? COLOR_SECONDARY
+                    : Color.rgb(11, 22, 23));
+            mirror2DModeButton.setBackground(stereoSelected
+                    ? outlineButtonBackground(13)
+                    : accentButtonBackground(13));
+        }
+        if (stereoScreenModeButton != null) {
+            stereoScreenModeButton.setTextColor(stereoSelected
+                    ? Color.rgb(11, 22, 23)
+                    : COLOR_SECONDARY);
+            stereoScreenModeButton.setBackground(stereoSelected
+                    ? accentButtonBackground(13)
+                    : outlineButtonBackground(13));
+        }
+        if (displayModeDescriptionText != null) {
+            String explanation;
+            if (!TextUtils.isEmpty(displayModeMessage)) {
+                explanation = displayModeMessage;
+            } else if (stereoSelected) {
+                explanation = "左右眼各自渲染一个 16:9 视图，64 mm 固定视差；Air 3S 不使用头部追踪。";
+            } else {
+                explanation = "双眼接收同一幅完整 1920×1080 画面，不生成左右视差。";
+            }
+            displayModeDescriptionText.setText(explanation);
+            displayModeDescriptionText.setTextColor(
+                    requestedDisplayModeApplied ? COLOR_SUCCESS : COLOR_TERTIARY);
+        }
     }
 
     private LinearLayout createSessionPanel() {
@@ -1212,6 +1385,66 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         return getCompanionPreferences().getString(PREF_SESSION_JSON, "");
     }
 
+    public String getRayNeoDisplayMode() {
+        return normalizeDisplayMode(getCompanionPreferences().getString(
+                PREF_DISPLAY_MODE,
+                DISPLAY_MODE_MIRROR_2D));
+    }
+
+    public boolean isRayNeoDisplayConnected() {
+        return hasConnectedRayNeoDisplay();
+    }
+
+    public void setRayNeoDisplayModeState(
+            final String requestedMode,
+            final String activeMode,
+            final boolean requestedModeApplied,
+            final String message) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                JellyfinRayNeoActivity.this.requestedDisplayMode =
+                        normalizeDisplayMode(requestedMode);
+                JellyfinRayNeoActivity.this.activeDisplayMode =
+                        normalizeDisplayMode(activeMode);
+                JellyfinRayNeoActivity.this.requestedDisplayModeApplied =
+                        requestedModeApplied;
+                displayModeMessage = message == null ? "" : message.trim();
+                updateDisplayModeUi();
+                if (touchpadView != null) {
+                    touchpadView.invalidate();
+                }
+                if (companionOverlay != null && !isFinishing()) {
+                    applyCompanionState();
+                }
+            }
+        });
+    }
+
+    public String pollRemoteCommand() {
+        synchronized (remoteCommands) {
+            return remoteCommands.isEmpty() ? "" : remoteCommands.removeFirst();
+        }
+    }
+
+    private void enqueueRemoteCommand(String command) {
+        if (TextUtils.isEmpty(command)) {
+            return;
+        }
+        synchronized (remoteCommands) {
+            while (remoteCommands.size() >= MAX_REMOTE_COMMANDS) {
+                remoteCommands.removeFirst();
+            }
+            remoteCommands.addLast(command);
+        }
+    }
+
+    private void clearRemoteCommands() {
+        synchronized (remoteCommands) {
+            remoteCommands.clear();
+        }
+    }
+
     public void clearNativeSession() {
         authenticationGeneration++;
         nativeOperationRunning = false;
@@ -1233,6 +1466,14 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
 
     private void restoreNativeState() {
         SharedPreferences preferences = getCompanionPreferences();
+        requestedDisplayMode = normalizeDisplayMode(preferences.getString(
+                PREF_DISPLAY_MODE,
+                DISPLAY_MODE_MIRROR_2D));
+        activeDisplayMode = DISPLAY_MODE_MIRROR_2D;
+        requestedDisplayModeApplied = false;
+        displayModeMessage = isStereoDisplayMode(requestedDisplayMode)
+                ? "立体屏幕已保存，连接眼镜后自动启用。"
+                : "镜像 2D 已保存，连接眼镜后自动启用。";
         latestServerUrl = preferences.getString(PREF_SERVER_URL, "");
         latestUsername = preferences.getString(PREF_USERNAME, "");
         String sessionText = preferences.getString(PREF_SESSION_JSON, "");
@@ -1550,10 +1791,15 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         boolean busy = nativeOperationRunning
                 || "native_connecting".equals(latestState)
                 || "connecting".equals(latestState);
+        boolean touchpadActive = glassesPresentationReady && libraryReady;
 
         companionOverlay.setVisibility(View.VISIBLE);
+        configurationScrollView.setVisibility(touchpadActive ? View.GONE : View.VISIBLE);
+        touchpadView.setVisibility(touchpadActive ? View.VISIBLE : View.GONE);
+        touchpadView.setTouchpadActive(touchpadActive);
         loginForm.setVisibility(sessionAvailable ? View.GONE : View.VISIBLE);
         sessionPanel.setVisibility(sessionAvailable ? View.VISIBLE : View.GONE);
+        updateDisplayModeUi();
 
         if (glassesPresentationReady) {
             connectionBadge.setText("眼镜显示中");
@@ -1563,10 +1809,14 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                     Color.rgb(54, 105, 83)));
             glassesStatusText.setText("画面已在眼镜中显示");
             glassesStatusText.setTextColor(COLOR_SUCCESS);
-            glassesDescriptionText.setText(
-                    "RayNeo Air 已接管媒体界面，浏览与播放都在眼镜端完成。");
-            glassesActionHint.setText("手机仅保留服务器与账户配置");
-            glassesActionHint.setTextColor(COLOR_SUCCESS);
+            glassesDescriptionText.setText(isStereoDisplayMode(activeDisplayMode)
+                    ? "立体屏幕：左眼仅显示左视图，右眼仅显示右视图；画面固定，不启用头部追踪。"
+                    : "镜像 2D：双眼显示同一幅完整 1920×1080 媒体界面。");
+            glassesActionHint.setText(requestedDisplayModeApplied
+                    ? "手机已切换为全屏盲操触控板"
+                    : displayModeMessage);
+            glassesActionHint.setTextColor(
+                    requestedDisplayModeApplied ? COLOR_SUCCESS : COLOR_ACCENT_BRIGHT);
             glassesConnectionCard.setBackground(connectionCardBackground(true, true));
             glassesIconView.setConnectionState(true, true);
         } else if (glassesConnected) {
@@ -1578,8 +1828,12 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             glassesStatusText.setText("已连接 · 正在准备显示");
             glassesStatusText.setTextColor(COLOR_ACCENT_BRIGHT);
             glassesDescriptionText.setText(
-                    "已检测到外接眼镜，正在协商 3D 模式并创建眼镜画面。");
-            glassesActionHint.setText("连接已识别，画面会自动出现");
+                    "已检测到外接眼镜，正在应用“"
+                            + displayModeLabel(requestedDisplayMode)
+                            + "”并创建眼镜画面。");
+            glassesActionHint.setText(TextUtils.isEmpty(displayModeMessage)
+                    ? "连接已识别，画面会自动出现"
+                    : displayModeMessage);
             glassesActionHint.setTextColor(COLOR_ACCENT_BRIGHT);
             glassesConnectionCard.setBackground(connectionCardBackground(true, false));
             glassesIconView.setConnectionState(true, false);
@@ -1591,7 +1845,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             glassesStatusText.setTextColor(COLOR_ERROR);
             glassesDescriptionText.setText(
                     "将 RayNeo Air 插入手机。检测到外接显示后，应用会自动把画面送到眼镜。");
-            glassesActionHint.setText("插入手机接口即可  ·  无需点击任何按钮");
+            glassesActionHint.setText(
+                    "已选择 " + displayModeLabel(requestedDisplayMode) + "  ·  插入手机接口即可");
             glassesActionHint.setTextColor(COLOR_TERTIARY);
             glassesConnectionCard.setBackground(connectionCardBackground(false, false));
             glassesIconView.setConnectionState(false, false);
@@ -2097,6 +2352,270 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             manager.hideSoftInputFromWindow(focused.getWindowToken(), 0);
         }
         focused.clearFocus();
+    }
+
+    private final class TouchpadView extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Runnable pendingSubmit = new Runnable() {
+            @Override
+            public void run() {
+                lastTapAtMs = 0L;
+                emit("submit", HapticFeedbackConstants.KEYBOARD_TAP);
+            }
+        };
+        private boolean touchpadActive;
+        private boolean tracking;
+        private float downX;
+        private float downY;
+        private float touchX;
+        private float touchY;
+        private long downAtMs;
+        private long lastTapAtMs;
+        private boolean modeChipGesture;
+
+        TouchpadView(Context context) {
+            super(context);
+            setBackground(backgroundGradient());
+            setClickable(true);
+            setFocusable(true);
+            setFocusableInTouchMode(true);
+            setContentDescription(
+                    "RayNeo 盲操触控板。上下左右滑动移动焦点，单击确认，双击返回。");
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeJoin(Paint.Join.ROUND);
+        }
+
+        void setTouchpadActive(boolean active) {
+            if (touchpadActive == active) {
+                return;
+            }
+            touchpadActive = active;
+            tracking = false;
+            modeChipGesture = false;
+            removeCallbacks(pendingSubmit);
+            lastTapAtMs = 0L;
+            if (active) {
+                requestFocus();
+            } else {
+                clearRemoteCommands();
+            }
+            invalidate();
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            if (!touchpadActive || event == null) {
+                return false;
+            }
+
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    tracking = true;
+                    downX = event.getX();
+                    downY = event.getY();
+                    touchX = downX;
+                    touchY = downY;
+                    downAtMs = SystemClock.uptimeMillis();
+                    modeChipGesture = isInsideModeChip(downX, downY);
+                    if (modeChipGesture) {
+                        removeCallbacks(pendingSubmit);
+                        lastTapAtMs = 0L;
+                    }
+                    setPressed(true);
+                    invalidate();
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (tracking) {
+                        touchX = event.getX();
+                        touchY = event.getY();
+                        if (modeChipGesture
+                                && Math.max(
+                                        Math.abs(touchX - downX),
+                                        Math.abs(touchY - downY)) > dp(16)) {
+                            modeChipGesture = false;
+                        }
+                        invalidate();
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if (tracking && modeChipGesture) {
+                        boolean longPress = SystemClock.uptimeMillis() - downAtMs
+                                >= DISPLAY_MODE_LONG_PRESS_MS;
+                        modeChipGesture = false;
+                        tracking = false;
+                        setPressed(false);
+                        if (longPress) {
+                            toggleDisplayMode();
+                            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                        } else {
+                            Toast.makeText(
+                                    JellyfinRayNeoActivity.this,
+                                    "长按此处切换眼镜显示模式",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                        invalidate();
+                        return true;
+                    }
+                    if (tracking) {
+                        handleGesture(event.getX(), event.getY());
+                    }
+                    tracking = false;
+                    setPressed(false);
+                    performClick();
+                    invalidate();
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    tracking = false;
+                    modeChipGesture = false;
+                    setPressed(false);
+                    invalidate();
+                    return true;
+                default:
+                    return true;
+            }
+        }
+
+        @Override
+        public boolean performClick() {
+            super.performClick();
+            return true;
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float width = getWidth();
+            float height = getHeight();
+            float centerX = width * 0.5f;
+            float centerY = height * 0.47f;
+            float padRadius = Math.min(width, height) * 0.27f;
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(Color.argb(36, 255, 255, 255));
+            canvas.drawRoundRect(
+                    dp(22),
+                    dp(22),
+                    width - dp(22),
+                    height - dp(22),
+                    dp(30),
+                    dp(30),
+                    paint);
+
+            paint.setColor(Color.argb(30, 93, 224, 210));
+            canvas.drawCircle(centerX, centerY, padRadius, paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(2));
+            paint.setColor(Color.argb(82, 115, 232, 220));
+            canvas.drawCircle(centerX, centerY, padRadius, paint);
+            canvas.drawLine(centerX - padRadius * 0.52f, centerY, centerX + padRadius * 0.52f, centerY, paint);
+            canvas.drawLine(centerX, centerY - padRadius * 0.52f, centerX, centerY + padRadius * 0.52f, paint);
+
+            paint.setStyle(Paint.Style.FILL);
+            paint.setTextAlign(Paint.Align.LEFT);
+            paint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+            paint.setTextSize(sp(13));
+            paint.setColor(COLOR_ACCENT_BRIGHT);
+            canvas.drawText("JELLYFIN  ·  RAYNEO AIR 3S", dp(34), dp(58), paint);
+
+            float modeChipRight = width - dp(34);
+            float modeChipLeft = modeChipRight - dp(150);
+            float modeChipTop = dp(34);
+            float modeChipBottom = dp(76);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(modeChipGesture
+                    ? Color.argb(66, 115, 232, 220)
+                    : Color.argb(38, 255, 255, 255));
+            canvas.drawRoundRect(
+                    modeChipLeft,
+                    modeChipTop,
+                    modeChipRight,
+                    modeChipBottom,
+                    dp(18),
+                    dp(18),
+                    paint);
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+            paint.setTextSize(sp(11));
+            paint.setColor(requestedDisplayModeApplied ? COLOR_SUCCESS : COLOR_ACCENT_BRIGHT);
+            canvas.drawText(
+                    displayModeLabel(requestedDisplayMode) + "  ·  长按切换",
+                    (modeChipLeft + modeChipRight) * 0.5f,
+                    modeChipTop + dp(26),
+                    paint);
+
+            paint.setTextAlign(Paint.Align.CENTER);
+            paint.setTextSize(sp(28));
+            paint.setColor(COLOR_PRIMARY);
+            canvas.drawText("盲操触控板", centerX, centerY - dp(12), paint);
+            paint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.NORMAL));
+            paint.setTextSize(sp(15));
+            paint.setColor(COLOR_SECONDARY);
+            canvas.drawText("在任意位置滑动", centerX, centerY + dp(24), paint);
+
+            paint.setTextSize(sp(14));
+            paint.setColor(COLOR_PRIMARY);
+            canvas.drawText("上下左右滑动  移动焦点", centerX, height - dp(112), paint);
+            paint.setTextSize(sp(13));
+            paint.setColor(COLOR_TERTIARY);
+            canvas.drawText("单击确认  ·  双击返回", centerX, height - dp(78), paint);
+
+            if (tracking) {
+                paint.setStyle(Paint.Style.FILL);
+                paint.setColor(Color.argb(76, 255, 255, 255));
+                canvas.drawCircle(touchX, touchY, dp(34), paint);
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(dp(2));
+                paint.setColor(COLOR_ACCENT_BRIGHT);
+                canvas.drawCircle(touchX, touchY, dp(34), paint);
+            }
+        }
+
+        private void handleGesture(float upX, float upY) {
+            float deltaX = upX - downX;
+            float deltaY = upY - downY;
+            float absoluteX = Math.abs(deltaX);
+            float absoluteY = Math.abs(deltaY);
+            float swipeThreshold = dp(44);
+            if (Math.max(absoluteX, absoluteY) >= swipeThreshold) {
+                if (absoluteX > absoluteY) {
+                    emit(deltaX > 0f ? "right" : "left", HapticFeedbackConstants.KEYBOARD_TAP);
+                } else {
+                    emit(deltaY > 0f ? "down" : "up", HapticFeedbackConstants.KEYBOARD_TAP);
+                }
+                return;
+            }
+
+            if (Math.max(absoluteX, absoluteY) > dp(16)) {
+                return;
+            }
+
+            long now = SystemClock.uptimeMillis();
+            if (lastTapAtMs > 0L && now - lastTapAtMs <= DOUBLE_TAP_WINDOW_MS) {
+                removeCallbacks(pendingSubmit);
+                lastTapAtMs = 0L;
+                emit("back", HapticFeedbackConstants.LONG_PRESS);
+                return;
+            }
+
+            lastTapAtMs = now;
+            removeCallbacks(pendingSubmit);
+            postDelayed(pendingSubmit, DOUBLE_TAP_WINDOW_MS);
+        }
+
+        private void emit(String command, int hapticConstant) {
+            enqueueRemoteCommand(command);
+            performHapticFeedback(hapticConstant);
+        }
+
+        private boolean isInsideModeChip(float x, float y) {
+            float right = getWidth() - dp(34);
+            float left = right - dp(150);
+            return x >= left && x <= right && y >= dp(34) && y <= dp(76);
+        }
+
+        private float sp(int value) {
+            return value * getResources().getDisplayMetrics().scaledDensity;
+        }
     }
 
     private final class GlassesIconView extends View {

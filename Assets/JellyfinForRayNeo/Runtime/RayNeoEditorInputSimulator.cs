@@ -1,6 +1,4 @@
 #if UNITY_EDITOR
-using FfalconXR.InputModule;
-using FfalconXR.Native;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -9,281 +7,115 @@ namespace JellyfinForRayNeo
     [DefaultExecutionOrder(-1000)]
     public sealed class RayNeoEditorInputSimulator : MonoBehaviour
     {
-        private const float MouseSensitivity = 2.25f;
-        private const float MaximumPitch = 42f;
-        private const float MaximumYaw = 65f;
-        private const string OfficialDebugTypeName = "FfalconXR.Editor.DebugMono";
-
-        private WindowsMessager _messenger;
-        private Transform _laser;
-        private RayNeoEditorInputModule _inputModule;
-        private UnityInputKeyHandler _legacyKeyHandler;
-        private bool _captured;
-        private float _pitch;
-        private float _yaw;
-        private Quaternion _rayRotation = Quaternion.identity;
-
-        public bool IsCaptured
-        {
-            get { return _captured; }
-        }
+        private bool _previousSendNavigationEvents = true;
+        private Air3SDisplayController _displayController;
+        private EventSystem _eventSystem;
 
         private void Awake()
         {
-            ResolveRayTargets();
-            ConfigureInput();
-            DisableOfficialDebugController();
+            ConfigureEventSystem();
         }
 
         private void Update()
         {
-            if (_inputModule == null || _legacyKeyHandler == null)
+            if (_eventSystem == null)
             {
-                ConfigureInput();
+                ConfigureEventSystem();
             }
 
-            if (_laser == null || _messenger == null)
+            if (Pressed(KeyCode.UpArrow, KeyCode.W))
             {
-                ResolveRayTargets();
+                CompanionRemoteInputRuntime.Submit(CompanionRemoteCommand.Up);
+            }
+            else if (Pressed(KeyCode.DownArrow, KeyCode.S))
+            {
+                CompanionRemoteInputRuntime.Submit(CompanionRemoteCommand.Down);
+            }
+            else if (Pressed(KeyCode.LeftArrow, KeyCode.A))
+            {
+                CompanionRemoteInputRuntime.Submit(CompanionRemoteCommand.Left);
+            }
+            else if (Pressed(KeyCode.RightArrow, KeyCode.D))
+            {
+                CompanionRemoteInputRuntime.Submit(CompanionRemoteCommand.Right);
             }
 
-            if (Input.GetKeyDown(KeyCode.LeftControl))
+            if (Pressed(KeyCode.Return, KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.Space))
             {
-                SetCaptured(!_captured);
+                CompanionRemoteInputRuntime.Submit(CompanionRemoteCommand.Submit);
+            }
+            if (Pressed(KeyCode.Escape, KeyCode.Backspace))
+            {
+                CompanionRemoteInputRuntime.Submit(CompanionRemoteCommand.Back);
             }
 
-            if (_captured && Input.GetKeyDown(KeyCode.Escape))
+            if (Input.GetKeyDown(KeyCode.Alpha1))
             {
-                SetCaptured(false);
+                FindDisplayController()?.SetMode(Air3SDisplayMode.Mirror2D);
             }
-
-            if (!_captured)
+            if (Input.GetKeyDown(KeyCode.Alpha2))
             {
-                return;
-            }
-
-            KeepCursorCaptured();
-            _yaw = Mathf.Clamp(
-                _yaw + Input.GetAxisRaw("Mouse X") * MouseSensitivity,
-                -MaximumYaw,
-                MaximumYaw);
-            _pitch = Mathf.Clamp(
-                _pitch - Input.GetAxisRaw("Mouse Y") * MouseSensitivity,
-                -MaximumPitch,
-                MaximumPitch);
-            _rayRotation = Quaternion.Euler(_pitch, _yaw, 0f);
-            ApplyRayRotation();
-        }
-
-        private void LateUpdate()
-        {
-            if (_captured && _laser != null)
-            {
-                _laser.rotation = _rayRotation;
-            }
-        }
-
-        private void OnApplicationFocus(bool hasFocus)
-        {
-            if (!hasFocus && _captured)
-            {
-                SetCaptured(false);
+                FindDisplayController()?.SetMode(Air3SDisplayMode.StereoVirtualScreen);
             }
         }
 
         private void OnDisable()
         {
-            ReleaseCursor();
+            RestoreEventSystem();
         }
 
         private void OnDestroy()
         {
-            ReleaseCursor();
+            RestoreEventSystem();
         }
 
         private void OnGUI()
         {
-            string message = _captured
-                ? "RayNeo Editor：移动鼠标瞄准，左键点击/拖拽，左 Ctrl 或 Esc 释放鼠标"
-                : "RayNeo Editor：点击 Game View 后按左 Ctrl 捕获鼠标";
-            GUI.Label(new Rect(18f, 14f, 720f, 28f), message);
+            Air3SDisplayController display = FindDisplayController();
+            string displayMode = display != null
+                && display.ActiveMode == Air3SDisplayMode.StereoVirtualScreen
+                    ? "立体屏幕（SBS 预览）"
+                    : "镜像 2D";
+            GUI.Label(
+                new Rect(18f, 14f, 880f, 28f),
+                "Air 3S 盲操调试：方向键/WASD 移动，Enter/Space 确认，Esc/Backspace 返回；1=镜像 2D，2=立体屏幕");
+            GUI.Label(
+                new Rect(18f, 40f, 420f, 24f),
+                "当前显示模式：" + displayMode);
         }
 
-        private void ConfigureInput()
+        private void ConfigureEventSystem()
         {
-            EventSystem currentEventSystem = EventSystem.current;
-            if (currentEventSystem != null && _inputModule == null)
-            {
-                XRInputModule[] modules = currentEventSystem.GetComponents<XRInputModule>();
-                foreach (XRInputModule module in modules)
-                {
-                    if (!(module is RayNeoEditorInputModule))
-                    {
-                        module.enabled = false;
-                    }
-                }
-
-                _inputModule = currentEventSystem.GetComponent<RayNeoEditorInputModule>();
-                if (_inputModule == null)
-                {
-                    _inputModule = currentEventSystem.gameObject.AddComponent<RayNeoEditorInputModule>();
-                }
-                _inputModule.useCustomRay = true;
-                _inputModule.enabled = true;
-            }
-
-            if (_legacyKeyHandler == null)
-            {
-                _legacyKeyHandler = GetComponent<UnityInputKeyHandler>();
-                if (_legacyKeyHandler == null)
-                {
-                    _legacyKeyHandler = gameObject.AddComponent<UnityInputKeyHandler>();
-                }
-            }
-        }
-
-        private void DisableOfficialDebugController()
-        {
-            MonoBehaviour[] behaviours = FindObjectsOfType<MonoBehaviour>(true);
-            foreach (MonoBehaviour behaviour in behaviours)
-            {
-                if (behaviour != null && behaviour.GetType().FullName == OfficialDebugTypeName)
-                {
-                    behaviour.enabled = false;
-                }
-            }
-        }
-
-        private void ResolveRayTargets()
-        {
-            if (_laser == null)
-            {
-                GameObject laserObject = GameObject.Find("LaserBeam");
-                _laser = laserObject != null ? laserObject.transform : null;
-            }
-
-            if (_messenger == null)
-            {
-                _messenger = NativeModule.Instance.GetMsger() as WindowsMessager;
-            }
-        }
-
-        private void SetCaptured(bool captured)
-        {
-            _captured = captured;
-            if (!_captured)
-            {
-                ReleaseCursor();
-                return;
-            }
-
-            ResolveRayTargets();
-            Vector3 initialEuler = Vector3.zero;
-            if (_laser != null)
-            {
-                initialEuler = _laser.rotation.eulerAngles;
-            }
-            else if (_messenger != null)
-            {
-                initialEuler = NativeModule.Instance.GetMobileQualternion().eulerAngles;
-            }
-            _pitch = Mathf.Clamp(NormalizeAngle(initialEuler.x), -MaximumPitch, MaximumPitch);
-            _yaw = Mathf.Clamp(NormalizeAngle(initialEuler.y), -MaximumYaw, MaximumYaw);
-            _rayRotation = Quaternion.Euler(_pitch, _yaw, 0f);
-            KeepCursorCaptured();
-            ApplyRayRotation();
-        }
-
-        private void KeepCursorCaptured()
-        {
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
-        }
-
-        private static void ReleaseCursor()
-        {
-            Cursor.lockState = CursorLockMode.None;
-            Cursor.visible = true;
-        }
-
-        private void ApplyRayRotation()
-        {
-            if (_messenger != null)
-            {
-                _messenger.m_windowsMouseQuaternion = _rayRotation;
-            }
-            if (_laser != null)
-            {
-                _laser.rotation = _rayRotation;
-            }
-        }
-
-        private static float NormalizeAngle(float angle)
-        {
-            return angle > 180f ? angle - 360f : angle;
-        }
-    }
-
-    public sealed class RayNeoEditorInputModule : XRInputModule
-    {
-        public override bool ShouldActivateModule()
-        {
-            return isActiveAndEnabled;
-        }
-
-        protected override void ProcessDrag(PointerEventData pointerEvent)
-        {
-            if (!pointerEvent.IsPointerMoving() || pointerEvent.pointerDrag == null)
+            _eventSystem = EventSystem.current;
+            if (_eventSystem == null)
             {
                 return;
             }
 
-            if (!pointerEvent.dragging
-                && ShouldStartDrag(
-                    pointerEvent.pressPosition,
-                    pointerEvent.position,
-                    eventSystem.pixelDragThreshold,
-                    pointerEvent.useDragThreshold))
-            {
-                ExecuteEvents.Execute(
-                    pointerEvent.pointerDrag,
-                    pointerEvent,
-                    ExecuteEvents.beginDragHandler);
-                pointerEvent.dragging = true;
-            }
+            _previousSendNavigationEvents = _eventSystem.sendNavigationEvents;
+            _eventSystem.sendNavigationEvents = false;
+        }
 
-            if (pointerEvent.dragging)
+        private void RestoreEventSystem()
+        {
+            if (_eventSystem != null)
             {
-                if (pointerEvent.pointerPress != pointerEvent.pointerDrag)
-                {
-                    ExecuteEvents.Execute(
-                        pointerEvent.pointerPress,
-                        pointerEvent,
-                        ExecuteEvents.pointerUpHandler);
-                    pointerEvent.eligibleForClick = false;
-                    pointerEvent.pointerPress = null;
-                    pointerEvent.rawPointerPress = null;
-                }
-
-                ExecuteEvents.Execute(
-                    pointerEvent.pointerDrag,
-                    pointerEvent,
-                    ExecuteEvents.dragHandler);
+                _eventSystem.sendNavigationEvents = _previousSendNavigationEvents;
             }
         }
 
-        private static bool ShouldStartDrag(
-            Vector2 pressPosition,
-            Vector2 currentPosition,
-            float threshold,
-            bool useDragThreshold)
+        private static bool Pressed(KeyCode first, KeyCode second)
         {
-            if (!useDragThreshold)
-            {
-                return true;
-            }
+            return Input.GetKeyDown(first) || Input.GetKeyDown(second);
+        }
 
-            return (pressPosition - currentPosition).sqrMagnitude >= threshold * threshold;
+        private Air3SDisplayController FindDisplayController()
+        {
+            if (_displayController == null)
+            {
+                _displayController = Object.FindObjectOfType<Air3SDisplayController>();
+            }
+            return _displayController;
         }
     }
 }

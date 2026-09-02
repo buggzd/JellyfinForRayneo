@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -156,6 +158,238 @@ namespace JellyfinForRayNeo
 
             scrollRect.StopMovement();
             scrollRect.content.anchoredPosition = position;
+        }
+    }
+
+    public sealed class DirectionalFocusNavigator
+    {
+        private const float DirectionEpsilon = 0.5f;
+
+        public bool Handle(CompanionRemoteCommand command)
+        {
+            switch (command)
+            {
+                case CompanionRemoteCommand.Up:
+                    return Move(Vector2.up);
+                case CompanionRemoteCommand.Down:
+                    return Move(Vector2.down);
+                case CompanionRemoteCommand.Left:
+                    return Move(Vector2.left);
+                case CompanionRemoteCommand.Right:
+                    return Move(Vector2.right);
+                case CompanionRemoteCommand.Submit:
+                    return Submit();
+                default:
+                    return false;
+            }
+        }
+
+        public bool SelectPreferred(params string[] objectNames)
+        {
+            List<Selectable> candidates = GetCandidates();
+            if (candidates.Count == 0)
+            {
+                ClearSelection();
+                return false;
+            }
+
+            foreach (string objectName in objectNames ?? new string[0])
+            {
+                Selectable match = candidates.FirstOrDefault(candidate =>
+                    candidate != null && candidate.gameObject.name == objectName);
+                if (match != null)
+                {
+                    Select(match);
+                    return true;
+                }
+            }
+
+            Select(TopLeft(candidates));
+            return true;
+        }
+
+        public void ClearSelection()
+        {
+            if (EventSystem.current != null)
+            {
+                EventSystem.current.SetSelectedGameObject(null);
+            }
+        }
+
+        private bool Move(Vector2 direction)
+        {
+            List<Selectable> candidates = GetCandidates();
+            Selectable current = EnsureSelection(candidates);
+            if (current == null)
+            {
+                return false;
+            }
+
+            Navigation navigation = current.navigation;
+            if (navigation.mode == Navigation.Mode.Explicit)
+            {
+                Selectable explicitTarget = ExplicitTarget(navigation, direction);
+                if (IsCandidate(explicitTarget, candidates))
+                {
+                    Select(explicitTarget);
+                    return true;
+                }
+            }
+
+            Vector2 origin = ScreenCenter(current);
+            Vector2 perpendicular = new Vector2(-direction.y, direction.x);
+            Selectable best = null;
+            float bestScore = float.PositiveInfinity;
+            foreach (Selectable candidate in candidates)
+            {
+                if (candidate == current)
+                {
+                    continue;
+                }
+
+                Vector2 delta = ScreenCenter(candidate) - origin;
+                float forward = Vector2.Dot(delta, direction);
+                if (forward <= DirectionEpsilon)
+                {
+                    continue;
+                }
+
+                float lateral = Mathf.Abs(Vector2.Dot(delta, perpendicular));
+                float score = forward
+                    + lateral * 2.8f
+                    + lateral * lateral / Mathf.Max(forward, 1f);
+                if (score < bestScore)
+                {
+                    best = candidate;
+                    bestScore = score;
+                }
+            }
+
+            if (best == null)
+            {
+                return false;
+            }
+
+            Select(best);
+            return true;
+        }
+
+        private bool Submit()
+        {
+            List<Selectable> candidates = GetCandidates();
+            Selectable current = EnsureSelection(candidates);
+            if (current == null || EventSystem.current == null)
+            {
+                return false;
+            }
+
+            BaseEventData eventData = new BaseEventData(EventSystem.current);
+            ExecuteEvents.Execute(current.gameObject, eventData, ExecuteEvents.submitHandler);
+            EnsureSelection(GetCandidates());
+            return true;
+        }
+
+        private static Selectable EnsureSelection(List<Selectable> candidates)
+        {
+            if (candidates == null || candidates.Count == 0 || EventSystem.current == null)
+            {
+                return null;
+            }
+
+            GameObject selectedObject = EventSystem.current.currentSelectedGameObject;
+            Selectable selected = selectedObject != null
+                ? selectedObject.GetComponent<Selectable>()
+                : null;
+            if (IsCandidate(selected, candidates))
+            {
+                return selected;
+            }
+
+            selected = TopLeft(candidates);
+            Select(selected);
+            return selected;
+        }
+
+        private static List<Selectable> GetCandidates()
+        {
+            Selectable[] all = Object.FindObjectsOfType<Selectable>(true);
+            Transform modal = all
+                .Select(candidate => candidate != null ? candidate.transform : null)
+                .Select(transform => FindAncestor(transform, "Track Menu"))
+                .FirstOrDefault(transform => transform != null && transform.gameObject.activeInHierarchy);
+
+            return all.Where(candidate =>
+                    candidate != null
+                    && candidate.gameObject.activeInHierarchy
+                    && candidate.IsInteractable()
+                    && candidate.navigation.mode != Navigation.Mode.None
+                    && candidate.transform is RectTransform
+                    && (modal == null || candidate.transform.IsChildOf(modal)))
+                .ToList();
+        }
+
+        private static Transform FindAncestor(Transform transform, string name)
+        {
+            while (transform != null)
+            {
+                if (transform.name == name)
+                {
+                    return transform;
+                }
+                transform = transform.parent;
+            }
+            return null;
+        }
+
+        private static Selectable TopLeft(IEnumerable<Selectable> candidates)
+        {
+            return candidates
+                .OrderByDescending(candidate => ScreenCenter(candidate).y)
+                .ThenBy(candidate => ScreenCenter(candidate).x)
+                .FirstOrDefault();
+        }
+
+        private static Vector2 ScreenCenter(Selectable selectable)
+        {
+            RectTransform rect = selectable.transform as RectTransform;
+            Vector3 world = rect != null
+                ? rect.TransformPoint(rect.rect.center)
+                : selectable.transform.position;
+            Canvas canvas = selectable.GetComponentInParent<Canvas>();
+            Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+                ? canvas.worldCamera
+                : null;
+            return RectTransformUtility.WorldToScreenPoint(camera, world);
+        }
+
+        private static Selectable ExplicitTarget(Navigation navigation, Vector2 direction)
+        {
+            if (direction == Vector2.up)
+            {
+                return navigation.selectOnUp;
+            }
+            if (direction == Vector2.down)
+            {
+                return navigation.selectOnDown;
+            }
+            if (direction == Vector2.left)
+            {
+                return navigation.selectOnLeft;
+            }
+            return navigation.selectOnRight;
+        }
+
+        private static bool IsCandidate(Selectable selectable, ICollection<Selectable> candidates)
+        {
+            return selectable != null && candidates != null && candidates.Contains(selectable);
+        }
+
+        private static void Select(Selectable selectable)
+        {
+            if (selectable != null && EventSystem.current != null)
+            {
+                EventSystem.current.SetSelectedGameObject(selectable.gameObject);
+            }
         }
     }
 }

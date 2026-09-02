@@ -20,6 +20,7 @@ namespace JellyfinForRayNeo
         private PlaybackReporter _playbackReporter;
         private PlaybackCapabilities _playbackCapabilities;
         private CompanionLoginBridge _companionBridge;
+        private DirectionalFocusNavigator _focusNavigator;
         private LoginView _loginView;
         private HomeView _homeView;
         private DetailView _detailView;
@@ -57,6 +58,7 @@ namespace JellyfinForRayNeo
             _companionBridge.QuickConnectRequested += HandleCompanionQuickConnectRequested;
             _companionBridge.QuickConnectCancelRequested += HandleCompanionQuickConnectCancelRequested;
             _companionBridge.SessionAvailable += HandleCompanionSessionAvailable;
+            _companionBridge.RemoteCommandReceived += HandleRemoteCommand;
             _companionBridge.PublishState(
                 CompanionLoginState.Initializing,
                 "正在启动 Jellyfin 客户端…",
@@ -87,6 +89,7 @@ namespace JellyfinForRayNeo
             _homeView = new HomeView(appBackground.transform, _api, _imageCache);
             _detailView = new DetailView(appBackground.transform);
             _playerView = new PlayerView(appBackground.transform);
+            _focusNavigator = new DirectionalFocusNavigator();
             CreateOverlays(appBackground.transform);
             WireEvents();
 
@@ -145,7 +148,7 @@ namespace JellyfinForRayNeo
             _homeView.ItemSelected += item => ShowDetailsAsync(item).Forget(HandleFatalError);
             _homeView.RefreshRequested += () => RefreshHomeAsync().Forget(HandleFatalError);
             _homeView.LogoutRequested += Logout;
-            _detailView.CloseRequested += _detailView.Hide;
+            _detailView.CloseRequested += CloseDetails;
             _detailView.PlayRequested += (item, position) => PlayAsync(item, position).Forget(HandleFatalError);
             _detailView.FavoriteStateChangeRequested += (item, isFavorite) =>
                 SetFavoriteStateAsync(item, isFavorite).Forget(HandleFatalError);
@@ -158,6 +161,43 @@ namespace JellyfinForRayNeo
             _playerView.PlaybackCompleted += () => StopPlaybackAsync(false, null, true).Forget(HandleFatalError);
             _playerView.TrackSelectionRequested += (audioIndex, subtitleIndex) =>
                 ChangeTracksAsync(audioIndex, subtitleIndex).Forget(HandleFatalError);
+        }
+
+        private void HandleRemoteCommand(CompanionRemoteCommand command)
+        {
+            if (command == CompanionRemoteCommand.Back)
+            {
+                HandleRemoteBack();
+                return;
+            }
+
+            _focusNavigator?.Handle(command);
+        }
+
+        private void HandleRemoteBack()
+        {
+            if (_playerView != null && _playerView.IsVisible)
+            {
+                if (_playerView.CloseTransientUi())
+                {
+                    _focusNavigator?.SelectPreferred("Audio Tracks", "Subtitle Tracks", "Play Pause");
+                    return;
+                }
+
+                StopPlaybackAsync(false, null).Forget(HandleFatalError);
+                return;
+            }
+
+            if (_detailView != null && _detailView.IsVisible)
+            {
+                CloseDetails();
+            }
+        }
+
+        private void CloseDetails()
+        {
+            _detailView?.Hide();
+            _focusNavigator?.SelectPreferred("Hero Action", "Poster Card", "Refresh");
         }
 
         private void HandleCompanionLoginRequested(CompanionLoginRequest request)
@@ -502,6 +542,7 @@ namespace JellyfinForRayNeo
             _loginView.Show(false);
             _detailView.Hide();
             _homeView.Show(true);
+            _focusNavigator?.SelectPreferred("Hero Action", "Poster Card", "Refresh");
             _pendingServerUrl = session.ServerUrl;
             _pendingUserName = session.UserName;
             _companionBridge.PublishState(
@@ -559,6 +600,7 @@ namespace JellyfinForRayNeo
                     _imageCache,
                     _detailImages.Token,
                     episodes);
+                _focusNavigator?.SelectPreferred("Continue", "From Start", "Close");
             }
             catch (OperationCanceledException)
             {
@@ -753,6 +795,7 @@ namespace JellyfinForRayNeo
                     _playbackReporter.Reset();
                     _playerView.SetSubtitleTrack(null);
                     await _playerView.PrepareAndPlayAsync(plan, cancellationToken);
+                    _focusNavigator?.SelectPreferred("Play Pause", "Audio Tracks", "Subtitle Tracks");
                     try
                     {
                         await _playbackReporter.StartAsync(
@@ -1004,6 +1047,7 @@ namespace JellyfinForRayNeo
                 _playbackSelection = null;
                 _playbackReporter.Reset();
                 _stoppingPlayback = false;
+                _focusNavigator?.SelectPreferred("Continue", "From Start", "Close");
             }
 
             if (!string.IsNullOrWhiteSpace(errorMessage))
@@ -1071,6 +1115,7 @@ namespace JellyfinForRayNeo
             _homeView.Show(false);
             _detailView.Hide();
             _loginView.Show(true);
+            _focusNavigator?.ClearSelection();
             _loginView.SetMessage(message, isError);
             _companionBridge.PublishState(
                 CompanionLoginState.LoginRequired,
@@ -1138,6 +1183,7 @@ namespace JellyfinForRayNeo
                 _companionBridge.QuickConnectRequested -= HandleCompanionQuickConnectRequested;
                 _companionBridge.QuickConnectCancelRequested -= HandleCompanionQuickConnectCancelRequested;
                 _companionBridge.SessionAvailable -= HandleCompanionSessionAvailable;
+                _companionBridge.RemoteCommandReceived -= HandleRemoteCommand;
                 _companionBridge.PublishState(
                     CompanionLoginState.Offline,
                     "Jellyfin 客户端已停止。",

@@ -8,6 +8,73 @@ using FfalconXR.Native;
 
 namespace JellyfinForRayNeo
 {
+    public enum CompanionRemoteCommand
+    {
+        Up,
+        Down,
+        Left,
+        Right,
+        Submit,
+        Back
+    }
+
+    public static class CompanionRemoteInputRuntime
+    {
+        private static readonly ConcurrentQueue<CompanionRemoteCommand> Pending =
+            new ConcurrentQueue<CompanionRemoteCommand>();
+
+        public static void Submit(CompanionRemoteCommand command)
+        {
+            Pending.Enqueue(command);
+        }
+
+        public static bool TryParse(string value, out CompanionRemoteCommand command)
+        {
+            command = CompanionRemoteCommand.Up;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            switch (value.Trim().ToLowerInvariant())
+            {
+                case "up":
+                    command = CompanionRemoteCommand.Up;
+                    return true;
+                case "down":
+                    command = CompanionRemoteCommand.Down;
+                    return true;
+                case "left":
+                    command = CompanionRemoteCommand.Left;
+                    return true;
+                case "right":
+                    command = CompanionRemoteCommand.Right;
+                    return true;
+                case "submit":
+                    command = CompanionRemoteCommand.Submit;
+                    return true;
+                case "back":
+                    command = CompanionRemoteCommand.Back;
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        internal static bool TryDequeue(out CompanionRemoteCommand command)
+        {
+            return Pending.TryDequeue(out command);
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void Reset()
+        {
+            while (Pending.TryDequeue(out _))
+            {
+            }
+        }
+    }
+
     public enum CompanionLoginState
     {
         Offline,
@@ -320,6 +387,7 @@ namespace JellyfinForRayNeo
 #if UNITY_ANDROID && !UNITY_EDITOR
         private string _lastNativeSessionPayload;
         private bool _nativeSessionReadErrorReported;
+        private bool _nativeRemoteReadErrorReported;
         private bool _nativeLoginListenerRegistered;
         private bool _nativeQuickConnectListenerRegistered;
         private bool _nativeCancelListenerRegistered;
@@ -361,6 +429,7 @@ namespace JellyfinForRayNeo
         public event Action<CompanionQuickConnectRequest> QuickConnectRequested;
         public event Action QuickConnectCancelRequested;
         public event Action<CompanionSessionRequest> SessionAvailable;
+        public event Action<CompanionRemoteCommand> RemoteCommandReceived;
 
         public static bool TryParsePayload(
             string payload,
@@ -497,7 +566,13 @@ namespace JellyfinForRayNeo
 
 #if UNITY_ANDROID && !UNITY_EDITOR
             PollNativeSession();
+            PollNativeRemoteCommands();
 #endif
+
+            while (CompanionRemoteInputRuntime.TryDequeue(out CompanionRemoteCommand command))
+            {
+                RemoteCommandReceived?.Invoke(command);
+            }
 
             while (_pendingValidationErrors.TryDequeue(out string validationMessage))
             {
@@ -754,6 +829,50 @@ namespace JellyfinForRayNeo
                 {
                     _nativeSessionReadErrorReported = true;
                     Debug.LogWarning("Android companion session could not be read: " + exception.Message);
+                }
+            }
+        }
+
+        private void PollNativeRemoteCommands()
+        {
+            try
+            {
+                using (AndroidJavaClass unityPlayer =
+                       new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (AndroidJavaObject activity =
+                       unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                {
+                    for (int index = 0; index < 12; index++)
+                    {
+                        string value = activity?.Call<string>("pollRemoteCommand");
+                        if (string.IsNullOrWhiteSpace(value))
+                        {
+                            break;
+                        }
+
+                        if (CompanionRemoteInputRuntime.TryParse(
+                                value,
+                                out CompanionRemoteCommand command))
+                        {
+                            _nativeRemoteReadErrorReported = false;
+                            RemoteCommandReceived?.Invoke(command);
+                        }
+                        else if (!_nativeRemoteReadErrorReported)
+                        {
+                            _nativeRemoteReadErrorReported = true;
+                            Debug.LogWarning("Android companion sent an unknown remote command.");
+                        }
+                    }
+                }
+            }
+            catch (Exception exception)
+            {
+                if (!_nativeRemoteReadErrorReported)
+                {
+                    _nativeRemoteReadErrorReported = true;
+                    Debug.LogWarning(
+                        "Android companion remote input could not be read: "
+                        + exception.Message);
                 }
             }
         }

@@ -377,6 +377,17 @@ namespace JellyfinForRayNeo
             _subtitleRoot.SetActive(false);
         }
 
+        public bool CloseTransientUi()
+        {
+            if (!_trackPanel.activeSelf)
+            {
+                return false;
+            }
+
+            _trackPanel.SetActive(false);
+            return true;
+        }
+
         public void Stop()
         {
             StopVideoOnly();

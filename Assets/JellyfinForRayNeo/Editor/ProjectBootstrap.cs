@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEditor.XR.Management;
-using UnityEditor.XR.Management.Metadata;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.XR.Management;
 
@@ -15,13 +14,12 @@ namespace JellyfinForRayNeo.Editor
     public static class ProjectBootstrap
     {
         private const string MainScenePath = "Assets/JellyfinForRayNeo/Scenes/Main.unity";
-        private const string RayNeoRigPath = "Packages/com.ffalcon.plugin.xr/Runtime/Prefab/XR Plugin.prefab";
 
         [MenuItem("Jellyfin for RayNeo/Configure Project and Scene")]
         public static void ConfigureProject()
         {
             ConfigurePlayerSettings();
-            ConfigureXrLoader();
+            ConfigureAir3SDisplay();
             CreateMainScene();
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -68,7 +66,7 @@ namespace JellyfinForRayNeo.Editor
             PlayerSettings.SetManagedStrippingLevel(BuildTargetGroup.Android, ManagedStrippingLevel.Low);
         }
 
-        private static void ConfigureXrLoader()
+        private static void ConfigureAir3SDisplay()
         {
             const string xrDirectory = "Assets/XR";
             const string xrSettingsPath = xrDirectory + "/XRGeneralSettings.asset";
@@ -101,32 +99,14 @@ namespace JellyfinForRayNeo.Editor
                 AssetDatabase.AddObjectToAsset(manager, AssetDatabase.GetAssetPath(perBuildTarget));
             }
 
-            bool assigned = XRPackageMetadataStore.AssignLoader(
-                generalSettings.AssignedSettings,
-                "Google.XR.Cardboard.XRLoader",
-                BuildTargetGroup.Android);
-            if (!assigned)
+            if (!generalSettings.AssignedSettings.TrySetLoaders(new List<XRLoader>()))
             {
-                Debug.LogWarning("Cardboard XR loader could not be assigned automatically. Check Project Settings > XR Plug-in Management > Android.");
+                Debug.LogWarning("Android XR loaders could not be cleared automatically.");
             }
 
-            if (!generalSettings.AssignedSettings.activeLoaders.Any(
-                    loader => loader != null && loader.GetType().FullName == "Google.XR.Cardboard.XRLoader"))
-            {
-                XRLoader cardboardLoader = AssetDatabase.FindAssets("t:XRLoader")
-                    .Select(AssetDatabase.GUIDToAssetPath)
-                    .Select(AssetDatabase.LoadAssetAtPath<XRLoader>)
-                    .FirstOrDefault(loader => loader != null && loader.GetType().FullName == "Google.XR.Cardboard.XRLoader");
-                if (cardboardLoader == null
-                    || !generalSettings.AssignedSettings.TrySetLoaders(new List<XRLoader> { cardboardLoader }))
-                {
-                    Debug.LogWarning("Cardboard XR loader asset exists but could not be persisted in Android XR settings.");
-                }
-            }
-
-            generalSettings.InitManagerOnStart = true;
-            generalSettings.AssignedSettings.automaticLoading = true;
-            generalSettings.AssignedSettings.automaticRunning = true;
+            generalSettings.InitManagerOnStart = false;
+            generalSettings.AssignedSettings.automaticLoading = false;
+            generalSettings.AssignedSettings.automaticRunning = false;
             EditorUtility.SetDirty(perBuildTarget);
             EditorUtility.SetDirty(generalSettings);
             EditorUtility.SetDirty(generalSettings.AssignedSettings);
@@ -138,25 +118,8 @@ namespace JellyfinForRayNeo.Editor
             Directory.CreateDirectory(Path.GetDirectoryName(MainScenePath) ?? "Assets/JellyfinForRayNeo/Scenes");
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
-            GameObject rigPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(RayNeoRigPath);
-            if (rigPrefab != null)
-            {
-                GameObject rig = PrefabUtility.InstantiatePrefab(rigPrefab, scene) as GameObject;
-                if (rig != null)
-                {
-                    rig.name = "RayNeo Air XR Rig";
-                }
-            }
-            else
-            {
-                CreatePreviewCamera();
-                Debug.LogWarning("RayNeo XR rig was not found. Run scripts/install-rayneo-sdk.sh and configure the project again.");
-            }
-
-            if (Camera.main == null)
-            {
-                CreatePreviewCamera();
-            }
+            CreateDisplayCamera();
+            new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
 
             GameObject application = new GameObject("Jellyfin for RayNeo Application");
             application.AddComponent<JellyfinAppController>();
@@ -169,9 +132,13 @@ namespace JellyfinForRayNeo.Editor
             Selection.activeGameObject = application;
         }
 
-        private static void CreatePreviewCamera()
+        private static void CreateDisplayCamera()
         {
-            GameObject cameraObject = new GameObject("Editor Preview Camera", typeof(Camera), typeof(AudioListener));
+            GameObject cameraObject = new GameObject(
+                "RayNeo Air 3S Display Camera",
+                typeof(Camera),
+                typeof(AudioListener),
+                typeof(Air3SDisplayController));
             cameraObject.tag = "MainCamera";
             Camera camera = cameraObject.GetComponent<Camera>();
             camera.clearFlags = CameraClearFlags.SolidColor;
@@ -179,6 +146,7 @@ namespace JellyfinForRayNeo.Editor
             camera.fieldOfView = 27f;
             camera.nearClipPlane = 0.1f;
             camera.farClipPlane = 100f;
+            camera.stereoTargetEye = StereoTargetEyeMask.None;
         }
     }
 }
