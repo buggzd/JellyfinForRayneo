@@ -825,6 +825,10 @@ namespace JellyfinForRayNeo.Tests
                 "Preferred Duplicate",
                 scope,
                 new Vector2(-300f, 4000f));
+            Button outsideScope = CreateNavigationButton(
+                "Underlying Page Control",
+                canvasObject.transform,
+                new Vector2(0f, 0f));
             Canvas.ForceUpdateCanvases();
             yield return null;
 
@@ -850,6 +854,12 @@ namespace JellyfinForRayNeo.Tests
                 visibleDuplicate.gameObject,
                 EventSystem.current.currentSelectedGameObject,
                 "Selection recovery must prefer an on-screen control over a clipped duplicate.");
+
+            EventSystem.current.SetSelectedGameObject(outsideScope.gameObject);
+            navigator.SetScope(scope);
+            Assert.IsNull(
+                EventSystem.current.currentSelectedGameObject,
+                "Reapplying the same scope must evict stale focus from an underlying page.");
 
             Object.Destroy(canvasObject);
             yield return null;

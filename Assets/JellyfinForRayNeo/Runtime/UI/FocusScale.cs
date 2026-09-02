@@ -256,11 +256,6 @@ namespace JellyfinForRayNeo
 
         public void SetScope(Transform scope)
         {
-            if (_scope == scope)
-            {
-                return;
-            }
-
             _scope = scope;
             if (EventSystem.current == null)
             {
