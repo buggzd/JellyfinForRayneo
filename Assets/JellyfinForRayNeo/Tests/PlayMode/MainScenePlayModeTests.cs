@@ -894,11 +894,35 @@ namespace JellyfinForRayNeo.Tests
             PlayerView player = new PlayerView(host.transform);
             yield return null;
 
+            Transform topGradient = FindDescendant(host.transform, "Top Edge Gradient");
+            Transform bottomGradient = FindDescendant(host.transform, "Bottom Edge Gradient");
+            RectTransform topControls = FindDescendant(host.transform, "Top Controls")
+                as RectTransform;
+            RectTransform bottomControls = FindDescendant(host.transform, "Playback Controls")
+                as RectTransform;
+            Transform seekFeedback = FindDescendant(host.transform, "Seek Feedback");
+            Transform trackMenu = FindDescendant(host.transform, "Track Menu");
+            Assert.NotNull(topGradient);
+            Assert.NotNull(topGradient.GetComponent<UiGradient>());
+            Assert.NotNull(bottomGradient);
+            Assert.NotNull(bottomGradient.GetComponent<UiGradient>());
+            Assert.NotNull(topControls);
+            Assert.NotNull(topControls.GetComponent<Outline>());
+            Assert.NotNull(topControls.GetComponent<Shadow>());
+            Assert.Less(topControls.rect.width, 1920f);
+            Assert.NotNull(bottomControls);
+            Assert.NotNull(bottomControls.GetComponent<Outline>());
+            Assert.NotNull(bottomControls.GetComponent<Shadow>());
+            Assert.Less(bottomControls.rect.width, 1920f);
+            Assert.NotNull(seekFeedback);
+            Assert.NotNull(seekFeedback.GetComponent<UiGradient>());
+            Assert.NotNull(trackMenu);
+            Assert.NotNull(trackMenu.GetComponent<Outline>());
             Assert.NotNull(FindDescendant(host.transform, "Decode Mode"));
+            Assert.NotNull(FindDescendant(host.transform, "Decode Status Capsule"));
             Assert.NotNull(FindDescendant(host.transform, "Audio Tracks"));
             Assert.NotNull(FindDescendant(host.transform, "Subtitle Tracks"));
             Assert.NotNull(FindDescendant(host.transform, "Subtitle Overlay"));
-            Assert.NotNull(FindDescendant(host.transform, "Track Menu"));
 
             player.Dispose();
             Object.Destroy(host);

@@ -35,10 +35,18 @@ namespace JellyfinForRayNeo
         private readonly Slider _progress;
         private readonly CanvasGroup _topControlsGroup;
         private readonly CanvasGroup _bottomControlsGroup;
+        private readonly CanvasGroup _topEdgeGroup;
+        private readonly CanvasGroup _bottomEdgeGroup;
         private readonly Transform _topControlsRoot;
         private readonly Transform _bottomControlsRoot;
+        private readonly RectTransform _topControlsRect;
+        private readonly RectTransform _bottomControlsRect;
+        private readonly Vector2 _topControlsRestPosition;
+        private readonly Vector2 _bottomControlsRestPosition;
         private readonly GameObject _seekFeedbackRoot;
         private readonly CanvasGroup _seekFeedbackGroup;
+        private readonly RectTransform _seekFeedbackRect;
+        private readonly Vector3 _seekFeedbackRestScale;
         private readonly Text _seekFeedbackLabel;
         private readonly GameObject _trackPanel;
         private UiViewMotion _trackMotion;
@@ -90,18 +98,55 @@ namespace JellyfinForRayNeo
                 HandleEngineCompleted(_libVlcHardwareEngine);
             _softwareEngine.Completed += () => HandleEngineCompleted(_softwareEngine);
 
-            Image topBar = UiFactory.CreatePanel(
+            Image topEdgeGradient = UiFactory.CreateGradientPanel(
+                "Top Edge Gradient",
+                rootImage.transform,
+                new Color(0f, 0f, 0f, 0f),
+                new Color(0.004f, 0.006f, 0.012f, 0.88f));
+            UiFactory.SetRect(
+                topEdgeGradient.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f),
+                Vector2.zero,
+                new Vector2(0f, 260f));
+            _topEdgeGroup = topEdgeGradient.gameObject.AddComponent<CanvasGroup>();
+            _topEdgeGroup.alpha = 0f;
+            _topEdgeGroup.interactable = false;
+            _topEdgeGroup.blocksRaycasts = false;
+
+            Image bottomEdgeGradient = UiFactory.CreateGradientPanel(
+                "Bottom Edge Gradient",
+                rootImage.transform,
+                new Color(0.004f, 0.006f, 0.012f, 0.94f),
+                new Color(0f, 0f, 0f, 0f));
+            UiFactory.SetRect(
+                bottomEdgeGradient.rectTransform,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.5f, 0f),
+                Vector2.zero,
+                new Vector2(0f, 330f));
+            _bottomEdgeGroup = bottomEdgeGradient.gameObject.AddComponent<CanvasGroup>();
+            _bottomEdgeGroup.alpha = 0f;
+            _bottomEdgeGroup.interactable = false;
+            _bottomEdgeGroup.blocksRaycasts = false;
+
+            Image topBar = UiFactory.CreateRoundedPanel(
                 "Top Controls",
                 rootImage.transform,
-                new Color(0.01f, 0.012f, 0.02f, 0.84f));
+                new Color(0.028f, 0.034f, 0.049f, 0.88f));
             UiFactory.SetRect(
                 topBar.rectTransform,
                 new Vector2(0f, 1f),
                 new Vector2(1f, 1f),
                 new Vector2(0.5f, 1f),
-                Vector2.zero,
-                new Vector2(0f, 104f));
+                new Vector2(0f, -28f),
+                new Vector2(-64f, 80f));
+            AddGlassTreatment(topBar, new Vector2(0f, -7f));
             _topControlsRoot = topBar.transform;
+            _topControlsRect = topBar.rectTransform;
+            _topControlsRestPosition = _topControlsRect.anchoredPosition;
             _topControlsGroup = topBar.gameObject.AddComponent<CanvasGroup>();
 
             _backButton = UiFactory.CreateButton(
@@ -116,8 +161,8 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f),
-                new Vector2(40f, 0f),
-                new Vector2(128f, 58f));
+                new Vector2(18f, 0f),
+                new Vector2(112f, 50f));
             _backButton.onClick.AddListener(() => BackRequested?.Invoke());
 
             _title = UiFactory.CreateText(
@@ -133,24 +178,31 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, 0.5f),
                 new Vector2(1f, 0.5f),
                 new Vector2(0f, 0.5f),
-                new Vector2(195f, 0f),
-                new Vector2(-760f, 62f));
+                new Vector2(150f, 0f),
+                new Vector2(-850f, 56f));
 
+            Image modeCapsule = UiFactory.CreateRoundedPanel(
+                "Decode Status Capsule",
+                topBar.transform,
+                new Color(0.18f, 0.43f, 0.41f, 0.62f));
+            UiFactory.SetRect(
+                modeCapsule.rectTransform,
+                new Vector2(1f, 0.5f),
+                new Vector2(1f, 0.5f),
+                new Vector2(1f, 0.5f),
+                new Vector2(-462f, 0f),
+                new Vector2(172f, 46f));
+            modeCapsule.raycastTarget = false;
+            AddGlassOutline(modeCapsule, new Color(0.48f, 0.94f, 0.88f, 0.26f));
             _modeLabel = UiFactory.CreateText(
                 "Decode Mode",
-                topBar.transform,
+                modeCapsule.transform,
                 string.Empty,
-                20,
+                17,
                 UiTheme.AccentBright,
                 TextAnchor.MiddleCenter,
                 FontStyle.Bold);
-            UiFactory.SetRect(
-                _modeLabel.rectTransform,
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(-474f, 0f),
-                new Vector2(190f, 50f));
+            UiFactory.Stretch(_modeLabel.rectTransform, 12f, 12f, 4f, 4f);
 
             _audioButton = UiFactory.CreateButton(
                 "Audio Tracks",
@@ -158,14 +210,14 @@ namespace JellyfinForRayNeo
                 "音轨",
                 UiTheme.SurfaceRaised,
                 UiTheme.TextPrimary,
-                20);
+                18);
             UiFactory.SetRect(
                 _audioButton.GetComponent<RectTransform>(),
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
-                new Vector2(-276f, 0f),
-                new Vector2(184f, 58f));
+                new Vector2(-270f, 0f),
+                new Vector2(174f, 50f));
             _audioLabel = _audioButton.GetComponentInChildren<Text>();
             _audioButton.onClick.AddListener(() => ShowTrackMenu(true));
 
@@ -175,14 +227,14 @@ namespace JellyfinForRayNeo
                 "字幕",
                 UiTheme.SurfaceRaised,
                 UiTheme.TextPrimary,
-                20);
+                18);
             UiFactory.SetRect(
                 _subtitleButton.GetComponent<RectTransform>(),
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
-                new Vector2(-78f, 0f),
-                new Vector2(184f, 58f));
+                new Vector2(-80f, 0f),
+                new Vector2(174f, 50f));
             _subtitleButtonLabel = _subtitleButton.GetComponentInChildren<Text>();
             _subtitleButton.onClick.AddListener(() => ShowTrackMenu(false));
 
@@ -205,19 +257,23 @@ namespace JellyfinForRayNeo
             Image seekFeedback = UiFactory.CreateRoundedPanel(
                 "Seek Feedback",
                 rootImage.transform,
-                new Color(0.015f, 0.022f, 0.035f, 0.88f));
+                Color.white);
+            UiGradient seekGradient = seekFeedback.gameObject.AddComponent<UiGradient>();
+            seekGradient.StartColor = new Color(0.035f, 0.16f, 0.17f, 0.94f);
+            seekGradient.EndColor = new Color(0.13f, 0.075f, 0.21f, 0.94f);
+            seekGradient.Horizontal = true;
             UiFactory.SetRect(
                 seekFeedback.rectTransform,
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
                 Vector2.zero,
-                new Vector2(250f, 92f));
-            Outline seekOutline = seekFeedback.gameObject.AddComponent<Outline>();
-            seekOutline.effectColor = UiTheme.Border;
-            seekOutline.effectDistance = new Vector2(1f, -1f);
+                new Vector2(268f, 96f));
+            AddGlassTreatment(seekFeedback, new Vector2(0f, -9f));
             _seekFeedbackRoot = seekFeedback.gameObject;
             _seekFeedbackGroup = seekFeedback.gameObject.AddComponent<CanvasGroup>();
+            _seekFeedbackRect = seekFeedback.rectTransform;
+            _seekFeedbackRestScale = _seekFeedbackRect.localScale;
             _seekFeedbackLabel = UiFactory.CreateText(
                 "Seek Feedback Label",
                 seekFeedback.transform,
@@ -254,18 +310,21 @@ namespace JellyfinForRayNeo
             UiFactory.Stretch(_subtitleText.rectTransform, 34f, 34f, 16f, 16f);
             _subtitleRoot.SetActive(false);
 
-            Image controlBar = UiFactory.CreatePanel(
+            Image controlBar = UiFactory.CreateRoundedPanel(
                 "Playback Controls",
                 rootImage.transform,
-                new Color(0.01f, 0.012f, 0.02f, 0.9f));
+                new Color(0.028f, 0.034f, 0.049f, 0.91f));
             UiFactory.SetRect(
                 controlBar.rectTransform,
                 new Vector2(0f, 0f),
                 new Vector2(1f, 0f),
                 new Vector2(0.5f, 0f),
-                Vector2.zero,
-                new Vector2(0f, 126f));
+                new Vector2(0f, 28f),
+                new Vector2(-64f, 112f));
+            AddGlassTreatment(controlBar, new Vector2(0f, 8f));
             _bottomControlsRoot = controlBar.transform;
+            _bottomControlsRect = controlBar.rectTransform;
+            _bottomControlsRestPosition = _bottomControlsRect.anchoredPosition;
             _bottomControlsGroup = controlBar.gameObject.AddComponent<CanvasGroup>();
 
             _playPauseButton = UiFactory.CreateButton(
@@ -280,12 +339,12 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f),
-                new Vector2(44f, 0f),
-                new Vector2(130f, 58f));
+                new Vector2(22f, 0f),
+                new Vector2(124f, 56f));
             _playPauseLabel = _playPauseButton.GetComponentInChildren<Text>();
             _playPauseButton.onClick.AddListener(TogglePlayPause);
 
-            Image sliderBackground = UiFactory.CreatePanel(
+            Image sliderBackground = UiFactory.CreateRoundedPanel(
                 "Progress",
                 controlBar.transform,
                 UiTheme.ProgressTrack);
@@ -294,14 +353,14 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, 0.5f),
                 new Vector2(1f, 0.5f),
                 new Vector2(0f, 0.5f),
-                new Vector2(205f, 0f),
-                new Vector2(-435f, 18f));
+                new Vector2(174f, 0f),
+                new Vector2(-410f, 10f));
             _progress = sliderBackground.gameObject.AddComponent<Slider>();
             _progress.minValue = 0f;
             _progress.maxValue = 1f;
             _progress.direction = Slider.Direction.LeftToRight;
 
-            Image fill = UiFactory.CreatePanel(
+            Image fill = UiFactory.CreateRoundedPanel(
                 "Fill",
                 sliderBackground.transform,
                 UiTheme.AccentBright);
@@ -309,7 +368,7 @@ namespace JellyfinForRayNeo
             UiFactory.Stretch(fill.rectTransform);
             _progress.fillRect = fill.rectTransform;
 
-            Image handle = UiFactory.CreatePanel(
+            Image handle = UiFactory.CreateRoundedPanel(
                 "Handle",
                 sliderBackground.transform,
                 UiTheme.TextPrimary);
@@ -319,7 +378,7 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, 0.5f),
                 new Vector2(0.5f, 0.5f),
                 Vector2.zero,
-                new Vector2(28f, 28f));
+                new Vector2(22f, 22f));
             _progress.handleRect = handle.rectTransform;
             _progress.targetGraphic = handle;
             _progress.onValueChanged.AddListener(SeekToNormalized);
@@ -337,25 +396,30 @@ namespace JellyfinForRayNeo
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
-                new Vector2(-42f, 0f),
-                new Vector2(360f, 52f));
+                new Vector2(-24f, 0f),
+                new Vector2(340f, 52f));
 
             ConfigurePlayerNavigation();
 
             Image trackPanel = UiFactory.CreateRoundedPanel(
                 "Track Menu",
                 rootImage.transform,
-                new Color(0.055f, 0.061f, 0.086f, 0.985f));
+                new Color(0.032f, 0.038f, 0.056f, 0.975f));
+            AddGlassTreatment(trackPanel, new Vector2(-8f, -10f));
             _trackPanel = trackPanel.gameObject;
             _trackMotion = UiFactory.AddViewMotion(_trackPanel, 18f, 0.98f);
             _trackMotion.SetVisibleImmediately(false);
             _controlsVisible = false;
             _topControlsGroup.alpha = 0f;
             _bottomControlsGroup.alpha = 0f;
+            _topEdgeGroup.alpha = 0f;
+            _bottomEdgeGroup.alpha = 0f;
             _topControlsGroup.interactable = false;
             _bottomControlsGroup.interactable = false;
             _topControlsGroup.blocksRaycasts = false;
             _bottomControlsGroup.blocksRaycasts = false;
+            _topControlsRect.anchoredPosition = HiddenTopControlsPosition;
+            _bottomControlsRect.anchoredPosition = HiddenBottomControlsPosition;
             _motion.SetVisibleImmediately(false);
         }
 
@@ -387,6 +451,12 @@ namespace JellyfinForRayNeo
                 return _lastPositionTicks;
             }
         }
+
+        private Vector2 HiddenTopControlsPosition =>
+            _topControlsRestPosition + Vector2.up * 24f;
+
+        private Vector2 HiddenBottomControlsPosition =>
+            _bottomControlsRestPosition + Vector2.down * 28f;
 
         public async Task PrepareAndPlayAsync(
             JellyfinPlaybackPlan plan,
@@ -456,6 +526,7 @@ namespace JellyfinForRayNeo
             navigator.SetScope(FocusRoot);
             if (_trackMotion != null && _trackMotion.IsVisible)
             {
+                navigator.SetScope(_trackPanel.transform);
                 ShowControls();
                 return navigator.Handle(command);
             }
@@ -519,11 +590,16 @@ namespace JellyfinForRayNeo
             _controlsVisible = false;
             _topControlsGroup.alpha = 0f;
             _bottomControlsGroup.alpha = 0f;
+            _topEdgeGroup.alpha = 0f;
+            _bottomEdgeGroup.alpha = 0f;
             _topControlsGroup.interactable = false;
             _bottomControlsGroup.interactable = false;
             _topControlsGroup.blocksRaycasts = false;
             _bottomControlsGroup.blocksRaycasts = false;
+            _topControlsRect.anchoredPosition = HiddenTopControlsPosition;
+            _bottomControlsRect.anchoredPosition = HiddenBottomControlsPosition;
             _seekFeedbackRoot.SetActive(false);
+            _seekFeedbackRect.localScale = _seekFeedbackRestScale;
             if (_trackMotion != null)
             {
                 _trackMotion.SetVisibleImmediately(false);
@@ -720,6 +796,27 @@ namespace JellyfinForRayNeo
                 _bottomControlsGroup.alpha,
                 targetAlpha,
                 step);
+            _topEdgeGroup.alpha = Mathf.MoveTowards(
+                _topEdgeGroup.alpha,
+                targetAlpha,
+                step * 0.82f);
+            _bottomEdgeGroup.alpha = Mathf.MoveTowards(
+                _bottomEdgeGroup.alpha,
+                targetAlpha,
+                step * 0.82f);
+            float motionStep = Time.unscaledDeltaTime * 250f;
+            _topControlsRect.anchoredPosition = Vector2.MoveTowards(
+                _topControlsRect.anchoredPosition,
+                _controlsVisible
+                    ? _topControlsRestPosition
+                    : HiddenTopControlsPosition,
+                motionStep);
+            _bottomControlsRect.anchoredPosition = Vector2.MoveTowards(
+                _bottomControlsRect.anchoredPosition,
+                _controlsVisible
+                    ? _bottomControlsRestPosition
+                    : HiddenBottomControlsPosition,
+                motionStep);
 
             if (!_seekFeedbackRoot.activeSelf)
             {
@@ -732,6 +829,10 @@ namespace JellyfinForRayNeo
                     _seekFeedbackGroup.alpha,
                     1f,
                     Time.unscaledDeltaTime * 9f);
+                _seekFeedbackRect.localScale = Vector3.MoveTowards(
+                    _seekFeedbackRect.localScale,
+                    _seekFeedbackRestScale,
+                    Time.unscaledDeltaTime * 1.8f);
                 return;
             }
 
@@ -739,9 +840,14 @@ namespace JellyfinForRayNeo
                 _seekFeedbackGroup.alpha,
                 0f,
                 Time.unscaledDeltaTime * 5f);
+            _seekFeedbackRect.localScale = Vector3.MoveTowards(
+                _seekFeedbackRect.localScale,
+                _seekFeedbackRestScale * 0.94f,
+                Time.unscaledDeltaTime * 0.8f);
             if (_seekFeedbackGroup.alpha <= 0.01f)
             {
                 _seekFeedbackRoot.SetActive(false);
+                _seekFeedbackRect.localScale = _seekFeedbackRestScale;
             }
         }
 
@@ -790,6 +896,7 @@ namespace JellyfinForRayNeo
         {
             _seekFeedbackLabel.text = message ?? string.Empty;
             _seekFeedbackGroup.alpha = 0f;
+            _seekFeedbackRect.localScale = _seekFeedbackRestScale * 0.84f;
             _seekFeedbackRoot.SetActive(true);
             _seekFeedbackRoot.transform.SetAsLastSibling();
             _hideSeekFeedbackAt = Time.unscaledTime + 0.72f;
@@ -855,6 +962,19 @@ namespace JellyfinForRayNeo
                 new Vector2(520f, height));
             UiFactory.DestroyChildren(_trackPanel.transform);
 
+            Image accent = UiFactory.CreateRoundedPanel(
+                "Track Menu Accent",
+                _trackPanel.transform,
+                audio ? UiTheme.Accent : UiTheme.AccentSecondary);
+            accent.raycastTarget = false;
+            UiFactory.SetRect(
+                accent.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(18f, -18f),
+                new Vector2(5f, 42f));
+
             Text heading = UiFactory.CreateText(
                 "Heading",
                 _trackPanel.transform,
@@ -868,8 +988,8 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, 1f),
                 new Vector2(1f, 1f),
                 new Vector2(0.5f, 1f),
-                new Vector2(0f, -12f),
-                new Vector2(-44f, 62f));
+                new Vector2(12f, -12f),
+                new Vector2(-74f, 62f));
 
             int row = 0;
             if (!audio)
@@ -880,6 +1000,7 @@ namespace JellyfinForRayNeo
                     "Subtitle Off",
                     selected ? "✓ 关闭字幕" : "关闭字幕",
                     row++,
+                    selected,
                     () => RequestTrackSelection(_plan.AudioStreamIndex, -1));
             }
             foreach (JellyfinMediaStream stream in streams.Take(9))
@@ -892,6 +1013,7 @@ namespace JellyfinForRayNeo
                     (audio ? "Audio " : "Subtitle ") + stream.Index,
                     (selected ? "✓ " : string.Empty) + StreamLabel(stream),
                     row++,
+                    selected,
                     () => RequestTrackSelection(
                         audio ? selectedStream.Index : _plan.AudioStreamIndex,
                         audio ? _plan.SubtitleStreamIndex : selectedStream.Index));
@@ -912,13 +1034,20 @@ namespace JellyfinForRayNeo
             }
         }
 
-        private void AddTrackOption(string name, string label, int row, Action selected)
+        private void AddTrackOption(
+            string name,
+            string label,
+            int row,
+            bool isSelected,
+            Action selected)
         {
             Button button = UiFactory.CreateButton(
                 name,
                 _trackPanel.transform,
                 label,
-                UiTheme.SurfaceRaised,
+                isSelected
+                    ? new Color(0.17f, 0.42f, 0.39f, 0.82f)
+                    : UiTheme.SurfaceSoft,
                 UiTheme.TextPrimary,
                 20);
             UiFactory.SetRect(
@@ -928,7 +1057,15 @@ namespace JellyfinForRayNeo
                 new Vector2(0.5f, 1f),
                 new Vector2(0f, -76f - row * 66f),
                 new Vector2(-32f, 56f));
-            button.GetComponentInChildren<Text>().alignment = TextAnchor.MiddleLeft;
+            Text optionLabel = button.GetComponentInChildren<Text>();
+            optionLabel.alignment = TextAnchor.MiddleLeft;
+            UiFactory.Stretch(optionLabel.rectTransform, 20f, 16f, 6f, 6f);
+            AddGlassOutline(
+                button.targetGraphic as Image,
+                isSelected
+                    ? new Color(0.48f, 0.94f, 0.88f, 0.34f)
+                    : UiTheme.Border);
+            UiFactory.AddItemReveal(button.gameObject, Mathf.Min(row * 0.035f, 0.24f));
             button.onClick.AddListener(() => selected());
         }
 
@@ -941,6 +1078,10 @@ namespace JellyfinForRayNeo
             else
             {
                 _trackPanel.SetActive(false);
+            }
+            if (EventSystem.current != null)
+            {
+                EventSystem.current.SetSelectedGameObject(null);
             }
             _status.text = "正在切换音轨与字幕…";
             ShowControls();
@@ -1089,6 +1230,33 @@ namespace JellyfinForRayNeo
                     time.Minutes,
                     time.Seconds)
                 : string.Format("{0:00}:{1:00}", time.Minutes, time.Seconds);
+        }
+
+        private static void AddGlassTreatment(Image image, Vector2 shadowDistance)
+        {
+            if (image == null)
+            {
+                return;
+            }
+
+            Shadow shadow = image.gameObject.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0f, 0f, 0f, 0.48f);
+            shadow.effectDistance = shadowDistance;
+            shadow.useGraphicAlpha = true;
+            AddGlassOutline(image, UiTheme.Border);
+        }
+
+        private static void AddGlassOutline(Image image, Color color)
+        {
+            if (image == null)
+            {
+                return;
+            }
+
+            Outline outline = image.gameObject.AddComponent<Outline>();
+            outline.effectColor = color;
+            outline.effectDistance = new Vector2(1f, -1f);
+            outline.useGraphicAlpha = true;
         }
     }
 }

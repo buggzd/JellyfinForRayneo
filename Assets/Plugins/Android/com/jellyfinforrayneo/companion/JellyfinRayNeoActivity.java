@@ -86,6 +86,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private static final long PRESENTATION_FALLBACK_DELAY_MS = 2600L;
     private static final int MAX_REMOTE_COMMANDS = 32;
     private static final long DOUBLE_TAP_WINDOW_MS = 280L;
+    private static final long REMOTE_FEEDBACK_DURATION_MS = 320L;
     private static final long DISPLAY_MODE_LONG_PRESS_MS = 550L;
     private static final byte[] DISCOVERY_MESSAGE =
             "who is JellyfinServer?".getBytes(StandardCharsets.UTF_8);
@@ -2640,6 +2641,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
+    private float dp(float value) {
+        return value * getResources().getDisplayMetrics().density;
+    }
+
     private void hideKeyboard() {
         View focused = getCurrentFocus();
         if (focused == null) {
@@ -2735,6 +2740,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         private float downX;
         private float downY;
         private long lastTapAtMs;
+        private long feedbackStartedAtMs;
+        private String feedbackCommand = "";
 
         TouchpadView(Context context) {
             super(context);
@@ -2757,6 +2764,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             tracking = false;
             removeCallbacks(pendingSubmit);
             lastTapAtMs = 0L;
+            feedbackStartedAtMs = 0L;
+            feedbackCommand = "";
             if (active) {
                 requestFocus();
             } else {
@@ -2777,6 +2786,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                     downX = event.getX();
                     downY = event.getY();
                     setPressed(true);
+                    postInvalidateOnAnimation();
                     return true;
                 case MotionEvent.ACTION_MOVE:
                     return true;
@@ -2787,10 +2797,12 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                     tracking = false;
                     setPressed(false);
                     performClick();
+                    postInvalidateOnAnimation();
                     return true;
                 case MotionEvent.ACTION_CANCEL:
                     tracking = false;
                     setPressed(false);
+                    postInvalidateOnAnimation();
                     return true;
                 default:
                     return true;
@@ -2811,10 +2823,65 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             float height = getHeight();
             float centerX = width * 0.5f;
             float centerY = height * 0.5f;
+            long elapsedMs = SystemClock.uptimeMillis() - feedbackStartedAtMs;
+            boolean feedbackActive = feedbackStartedAtMs > 0L
+                    && elapsedMs >= 0L
+                    && elapsedMs < REMOTE_FEEDBACK_DURATION_MS;
+            float progress = feedbackActive
+                    ? Math.min(1f, elapsedMs / (float) REMOTE_FEEDBACK_DURATION_MS)
+                    : 1f;
+            float travel = feedbackActive
+                    ? (float) Math.sin(progress * Math.PI) * dp(10)
+                    : 0f;
+            float offsetX = 0f;
+            float offsetY = 0f;
+            if ("left".equals(feedbackCommand)) {
+                offsetX = -travel;
+            } else if ("right".equals(feedbackCommand)) {
+                offsetX = travel;
+            } else if ("up".equals(feedbackCommand)) {
+                offsetY = -travel;
+            } else if ("down".equals(feedbackCommand)) {
+                offsetY = travel;
+            }
+
+            boolean backFeedback = feedbackActive && "back".equals(feedbackCommand);
+            int red = backFeedback ? 171 : 115;
+            int green = backFeedback ? 143 : 232;
+            int blue = backFeedback ? 255 : 220;
+
+            if (feedbackActive) {
+                float eased = 1f - (float) Math.pow(1f - progress, 3d);
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(dp(1.25f));
+                paint.setColor(Color.argb(
+                        Math.max(0, Math.round(54f * (1f - progress))),
+                        red,
+                        green,
+                        blue));
+                canvas.drawCircle(
+                        centerX + offsetX,
+                        centerY + offsetY,
+                        dp(7f) + dp(7f) * eased,
+                        paint);
+            }
 
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.argb(62, 115, 232, 220));
-            canvas.drawCircle(centerX, centerY, dp(4), paint);
+            int dotAlpha = isPressed() ? 104 : feedbackActive ? 92 : 62;
+            paint.setColor(Color.argb(dotAlpha, red, green, blue));
+            float pressScale = isPressed() ? 1.24f : 1f;
+            float feedbackScale = feedbackActive
+                    ? 1f + (1f - progress) * 0.16f
+                    : 1f;
+            canvas.drawCircle(
+                    centerX + offsetX,
+                    centerY + offsetY,
+                    dp(4f) * pressScale * feedbackScale,
+                    paint);
+
+            if (feedbackActive || isPressed()) {
+                postInvalidateOnAnimation();
+            }
         }
 
         private void handleGesture(float upX, float upY) {
@@ -2851,11 +2918,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
 
         private void emit(String command, int hapticConstant) {
             enqueueRemoteCommand(command);
+            feedbackCommand = command == null ? "" : command;
+            feedbackStartedAtMs = SystemClock.uptimeMillis();
+            postInvalidateOnAnimation();
             performHapticFeedback(hapticConstant);
-        }
-
-        private float sp(int value) {
-            return value * getResources().getDisplayMetrics().scaledDensity;
         }
     }
 
