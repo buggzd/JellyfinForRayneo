@@ -567,6 +567,80 @@ namespace JellyfinForRayNeo
         }
     }
 
+    /// <summary>
+    /// Animates a small radial signal or status glow without allocating per frame.
+    /// Multiple instances can be phase-offset to create a restrained connection ripple.
+    /// </summary>
+    [RequireComponent(typeof(Graphic))]
+    public sealed class UiSignalPulse : MonoBehaviour
+    {
+        public float CycleSeconds = 2.4f;
+        public float Phase;
+        public float StartScale = 0.68f;
+        public float EndScale = 1.24f;
+        public float MinimumAlpha = 0.02f;
+
+        private Graphic _graphic;
+        private Color _baseColor;
+        private Vector3 _restScale;
+
+        private void Awake()
+        {
+            _graphic = GetComponent<Graphic>();
+            _baseColor = _graphic.color;
+            _restScale = transform.localScale;
+        }
+
+        private void OnEnable()
+        {
+            Apply(0f);
+        }
+
+        private void OnDisable()
+        {
+            if (_graphic != null)
+            {
+                _graphic.color = _baseColor;
+            }
+            transform.localScale = _restScale;
+        }
+
+        private void Update()
+        {
+            float cycle = Mathf.Max(0.2f, CycleSeconds);
+            float progress = Mathf.Repeat(Time.unscaledTime / cycle + Phase, 1f);
+            Apply(progress);
+        }
+
+        public void SetBaseColor(Color color)
+        {
+            if (_graphic == null)
+            {
+                _graphic = GetComponent<Graphic>();
+                _restScale = transform.localScale;
+            }
+            _baseColor = color;
+            Apply(Mathf.Repeat(Time.unscaledTime / Mathf.Max(0.2f, CycleSeconds) + Phase, 1f));
+        }
+
+        private void Apply(float progress)
+        {
+            if (_graphic == null)
+            {
+                return;
+            }
+
+            float eased = 1f - Mathf.Pow(1f - progress, 3f);
+            float fadeIn = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(progress / 0.14f));
+            float fadeOut = 1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(
+                (progress - 0.42f) / 0.58f));
+            Color color = _baseColor;
+            color.a *= Mathf.Max(MinimumAlpha, fadeIn * fadeOut);
+            _graphic.color = color;
+            transform.localScale = _restScale * Mathf.Lerp(StartScale, EndScale, eased);
+        }
+    }
+
     public sealed class UiLoadingPulse : MonoBehaviour
     {
         private Graphic[] _dots;

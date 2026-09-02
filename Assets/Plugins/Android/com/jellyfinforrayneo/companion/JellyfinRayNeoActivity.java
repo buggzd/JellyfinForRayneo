@@ -1,5 +1,6 @@
 package com.jellyfinforrayneo.companion;
 
+import android.animation.LayoutTransition;
 import android.app.Presentation;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -148,6 +149,11 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private boolean showingTouchpad;
     private int companionModeAnimationGeneration;
     private int lastConnectionVisualState = -1;
+    private boolean contentStateInitialized;
+    private boolean showingSessionPanel;
+    private boolean showingQuickConnectPanel;
+    private String renderedStatusMessage = "";
+    private boolean renderedStatusVisible;
 
     private String latestState = "login_required";
     private String latestMessage = "Jellyfin 配置可先完成；浏览和播放需要连接 RayNeo Air。";
@@ -454,6 +460,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         card.setBackground(roundedWithStroke(COLOR_SURFACE, COLOR_BORDER, 22));
         card.setElevation(dp(5));
         card.setClipToOutline(true);
+        installLayoutMotion(card, 280L);
         page.addView(card, matchWrap(dp(16)));
 
         TextView configurationEyebrow = createText(
@@ -484,6 +491,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
 
         loginForm = new LinearLayout(this);
         loginForm.setOrientation(LinearLayout.VERTICAL);
+        installLayoutMotion(loginForm, 240L);
         card.addView(loginForm, matchWrap(0));
 
         loginForm.addView(createLabel("服务器地址"), matchWrap(dp(8)));
@@ -527,6 +535,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
 
         discoveredServersContainer = new LinearLayout(this);
         discoveredServersContainer.setOrientation(LinearLayout.VERTICAL);
+        installLayoutMotion(discoveredServersContainer, 220L);
         discoveredServersContainer.setVisibility(View.GONE);
         loginForm.addView(discoveredServersContainer, matchWrap(dp(10)));
 
@@ -669,6 +678,167 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                     .withLayer()
                     .start();
         }
+    }
+
+    private void installLayoutMotion(ViewGroup group, long durationMs) {
+        if (group == null) {
+            return;
+        }
+
+        LayoutTransition transition = new LayoutTransition();
+        transition.setDuration(Math.max(120L, durationMs));
+        transition.setStartDelay(LayoutTransition.APPEARING, 45L);
+        transition.setStartDelay(LayoutTransition.CHANGE_APPEARING, 0L);
+        transition.setStartDelay(LayoutTransition.CHANGE_DISAPPEARING, 0L);
+        DecelerateInterpolator interpolator = new DecelerateInterpolator(1.7f);
+        transition.setInterpolator(LayoutTransition.APPEARING, interpolator);
+        transition.setInterpolator(LayoutTransition.DISAPPEARING, interpolator);
+        transition.setInterpolator(LayoutTransition.CHANGE_APPEARING, interpolator);
+        transition.setInterpolator(LayoutTransition.CHANGE_DISAPPEARING, interpolator);
+        transition.setInterpolator(LayoutTransition.CHANGING, interpolator);
+        transition.enableTransitionType(LayoutTransition.CHANGING);
+        transition.setAnimateParentHierarchy(false);
+        group.setLayoutTransition(transition);
+    }
+
+    private void applyConfigurationContentState(
+            boolean sessionAvailable,
+            boolean waitingForQuickConnect) {
+        if (loginForm == null
+                || sessionPanel == null
+                || quickConnectPanel == null
+                || quickConnectButton == null
+                || manualLoginContainer == null) {
+            return;
+        }
+
+        if (!contentStateInitialized) {
+            contentStateInitialized = true;
+            showingSessionPanel = sessionAvailable;
+            showingQuickConnectPanel = waitingForQuickConnect;
+            loginForm.setVisibility(sessionAvailable ? View.GONE : View.VISIBLE);
+            sessionPanel.setVisibility(sessionAvailable ? View.VISIBLE : View.GONE);
+            quickConnectPanel.setVisibility(
+                    waitingForQuickConnect ? View.VISIBLE : View.GONE);
+            quickConnectButton.setVisibility(
+                    waitingForQuickConnect ? View.GONE : View.VISIBLE);
+            manualLoginContainer.setVisibility(
+                    waitingForQuickConnect ? View.GONE : View.VISIBLE);
+            return;
+        }
+
+        boolean sessionChanged = showingSessionPanel != sessionAvailable;
+        if (sessionChanged) {
+            loginForm.setVisibility(sessionAvailable ? View.GONE : View.VISIBLE);
+            sessionPanel.setVisibility(sessionAvailable ? View.VISIBLE : View.GONE);
+            animatePanelArrival(sessionAvailable ? sessionPanel : loginForm, 55L);
+            showingSessionPanel = sessionAvailable;
+        }
+
+        if (!sessionAvailable
+                && (sessionChanged
+                        || showingQuickConnectPanel != waitingForQuickConnect)) {
+            quickConnectPanel.setVisibility(
+                    waitingForQuickConnect ? View.VISIBLE : View.GONE);
+            quickConnectButton.setVisibility(
+                    waitingForQuickConnect ? View.GONE : View.VISIBLE);
+            manualLoginContainer.setVisibility(
+                    waitingForQuickConnect ? View.GONE : View.VISIBLE);
+            animatePanelArrival(
+                    waitingForQuickConnect ? quickConnectPanel : manualLoginContainer,
+                    70L);
+            showingQuickConnectPanel = waitingForQuickConnect;
+        }
+    }
+
+    private void animatePanelArrival(final View view, final long startDelayMs) {
+        if (view == null || view.getVisibility() != View.VISIBLE) {
+            return;
+        }
+
+        view.animate().cancel();
+        view.setScaleX(0.985f);
+        view.setScaleY(0.985f);
+        view.setTranslationY(dp(10));
+        view.animate()
+                .scaleX(1f)
+                .scaleY(1f)
+                .translationY(0f)
+                .setStartDelay(Math.max(0L, startDelayMs))
+                .setDuration(320L)
+                .setInterpolator(new DecelerateInterpolator(1.8f))
+                .withLayer()
+                .start();
+    }
+
+    private void renderStatusMessage(String message, int color, boolean visible) {
+        if (statusText == null) {
+            return;
+        }
+
+        String normalized = message == null ? "" : message;
+        boolean messageChanged = !TextUtils.equals(renderedStatusMessage, normalized);
+        boolean visibilityChanged = renderedStatusVisible != visible;
+        statusText.setText(normalized);
+        statusText.setTextColor(color);
+        statusText.setVisibility(visible ? View.VISIBLE : View.GONE);
+        if (visible && visibilityChanged) {
+            animatePanelArrival(statusText, 35L);
+        } else if (visible && messageChanged) {
+            statusText.animate().cancel();
+            statusText.setAlpha(0.52f);
+            statusText.setTranslationY(-dp(4));
+            statusText.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setDuration(240L)
+                    .setInterpolator(new DecelerateInterpolator(1.7f))
+                    .start();
+        }
+        renderedStatusMessage = normalized;
+        renderedStatusVisible = visible;
+    }
+
+    private void renderDiscoveryStatus(String message, int color) {
+        if (discoveryStatusText == null) {
+            return;
+        }
+
+        discoveryStatusText.animate().cancel();
+        discoveryStatusText.setText(message == null ? "" : message);
+        discoveryStatusText.setTextColor(color);
+        discoveryStatusText.setVisibility(View.VISIBLE);
+        discoveryStatusText.setAlpha(0.45f);
+        discoveryStatusText.setTranslationY(-dp(4));
+        discoveryStatusText.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(260L)
+                .setInterpolator(new DecelerateInterpolator(1.7f))
+                .start();
+    }
+
+    private void setTextWithReveal(TextView view, String value) {
+        if (view == null) {
+            return;
+        }
+
+        String normalized = value == null ? "" : value;
+        if (TextUtils.equals(view.getText(), normalized)) {
+            return;
+        }
+        view.animate().cancel();
+        view.setText(normalized);
+        view.setAlpha(0.48f);
+        view.setScaleX(0.99f);
+        view.setScaleY(0.99f);
+        view.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(250L)
+                .setInterpolator(new DecelerateInterpolator(1.8f))
+                .start();
     }
 
     private void applyCompanionMode(boolean touchpadActive) {
@@ -1778,9 +1948,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         final int generation = discoveryGeneration;
         discoverButton.setEnabled(false);
         discoverButton.setText("扫描中");
-        discoveryStatusText.setText("正在搜索同一 Wi-Fi 中的 Jellyfin 服务器…");
-        discoveryStatusText.setTextColor(COLOR_SECONDARY);
-        discoveryStatusText.setVisibility(View.VISIBLE);
+        renderDiscoveryStatus(
+                "正在搜索同一 Wi-Fi 中的 Jellyfin 服务器…",
+                COLOR_SECONDARY);
         discoveredServersContainer.removeAllViews();
         discoveredServersContainer.setVisibility(View.GONE);
         hideKeyboard();
@@ -1983,19 +2153,20 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             String failure) {
         discoveredServersContainer.removeAllViews();
         if (servers.isEmpty()) {
-            discoveryStatusText.setText(TextUtils.isEmpty(failure)
-                    ? "未发现服务器。请确认手机与 Jellyfin 在同一 Wi-Fi，或手动输入地址。"
-                    : "自动发现失败，请手动输入服务器地址。");
-            discoveryStatusText.setTextColor(TextUtils.isEmpty(failure)
-                    ? COLOR_SECONDARY
-                    : COLOR_ERROR);
+            renderDiscoveryStatus(
+                    TextUtils.isEmpty(failure)
+                            ? "未发现服务器。请确认手机与 Jellyfin 在同一 Wi-Fi，或手动输入地址。"
+                            : "自动发现失败，请手动输入服务器地址。",
+                    TextUtils.isEmpty(failure) ? COLOR_SECONDARY : COLOR_ERROR);
             discoveredServersContainer.setVisibility(View.GONE);
             return;
         }
 
-        discoveryStatusText.setText("发现 " + servers.size() + " 台 Jellyfin 服务器，点击选择：");
-        discoveryStatusText.setTextColor(COLOR_ACCENT_BRIGHT);
+        renderDiscoveryStatus(
+                "发现 " + servers.size() + " 台 Jellyfin 服务器，点击选择：",
+                COLOR_ACCENT_BRIGHT);
         discoveredServersContainer.setVisibility(View.VISIBLE);
+        animatePanelArrival(discoveredServersContainer, 35L);
 
         for (int index = 0; index < servers.size(); index++) {
             final DiscoveredServer server = servers.get(index);
@@ -2011,11 +2182,20 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                     serverInput.setText(server.address);
                     serverInput.setSelection(serverInput.length());
                     latestServerUrl = server.address;
-                    discoveryStatusText.setText("已选择 " + server.name);
-                    discoveryStatusText.setTextColor(COLOR_ACCENT_BRIGHT);
+                    renderDiscoveryStatus("已选择 " + server.name, COLOR_ACCENT_BRIGHT);
                 }
             });
             discoveredServersContainer.addView(button, matchHeight(62, 8));
+            button.setAlpha(0f);
+            button.setTranslationY(dp(10));
+            button.animate()
+                    .alpha(1f)
+                    .translationY(0f)
+                    .setStartDelay(80L + index * 55L)
+                    .setDuration(300L)
+                    .setInterpolator(new DecelerateInterpolator(1.8f))
+                    .withLayer()
+                    .start();
         }
 
         String current = serverInput.getText().toString().trim();
@@ -2025,7 +2205,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             serverInput.setText(server.address);
             serverInput.setSelection(serverInput.length());
             latestServerUrl = server.address;
-            discoveryStatusText.setText("已自动选择 " + server.name);
+            renderDiscoveryStatus("已自动选择 " + server.name, COLOR_ACCENT_BRIGHT);
         }
     }
 
@@ -2047,8 +2227,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
 
         companionOverlay.setVisibility(View.VISIBLE);
         applyCompanionMode(touchpadActive);
-        loginForm.setVisibility(sessionAvailable ? View.GONE : View.VISIBLE);
-        sessionPanel.setVisibility(sessionAvailable ? View.VISIBLE : View.GONE);
+        applyConfigurationContentState(sessionAvailable, waitingForQuickConnect);
         updateDisplayModeUi();
 
         if (glassesPresentationReady) {
@@ -2109,28 +2288,28 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             passwordInput.getText().clear();
             hideKeyboard();
             boolean mediaVisible = glassesPresentationReady && libraryReady;
-            sessionTitleText.setText(mediaVisible ? "媒体库已在眼镜中打开" : "Jellyfin 已配置");
+            setTextWithReveal(
+                    sessionTitleText,
+                    mediaVisible ? "媒体库已在眼镜中打开" : "Jellyfin 已配置");
             String user = TextUtils.isEmpty(latestUsername) ? "Jellyfin 用户" : latestUsername;
             String server = TextUtils.isEmpty(latestServerUrl) ? "Jellyfin 服务器" : latestServerUrl;
+            String sessionDetail;
             if (mediaVisible) {
-                sessionDetailText.setText(user + " · " + server);
+                sessionDetail = user + " · " + server;
             } else if (glassesPresentationReady) {
-                sessionDetailText.setText(
-                        user + " · " + server + "\n眼镜已连接，媒体库正在同步。");
+                sessionDetail = user + " · " + server + "\n眼镜已连接，媒体库正在同步。";
             } else if (glassesConnected) {
-                sessionDetailText.setText(
-                        user + " · " + server + "\n眼镜画面正在启动，媒体库随后自动同步。");
+                sessionDetail = user + " · " + server + "\n眼镜画面正在启动，媒体库随后自动同步。";
             } else {
-                sessionDetailText.setText(
-                        user + " · " + server + "\n连接 RayNeo Air 后会自动同步媒体库。");
+                sessionDetail = user + " · " + server + "\n连接 RayNeo Air 后会自动同步媒体库。";
             }
+            setTextWithReveal(sessionDetailText, sessionDetail);
         } else {
             setControlsEnabled(!busy && !waitingForQuickConnect);
-            quickConnectPanel.setVisibility(waitingForQuickConnect ? View.VISIBLE : View.GONE);
-            quickConnectButton.setVisibility(waitingForQuickConnect ? View.GONE : View.VISIBLE);
-            manualLoginContainer.setVisibility(waitingForQuickConnect ? View.GONE : View.VISIBLE);
             if (waitingForQuickConnect) {
-                quickConnectCodeText.setText(formatQuickConnectCode(latestQuickConnectCode));
+                setTextWithReveal(
+                        quickConnectCodeText,
+                        formatQuickConnectCode(latestQuickConnectCode));
             }
 
             if (isUsableServerValue(latestServerUrl)
@@ -2165,12 +2344,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 visibleMessage = "Jellyfin 已配置。连接 RayNeo Air 后即可浏览和播放。";
             }
         }
-        statusText.setText(visibleMessage);
-        statusText.setTextColor(latestIsError ? COLOR_ERROR : COLOR_SECONDARY);
-        statusText.setVisibility(
-                latestIsError || busy || waitingForQuickConnect
-                        ? View.VISIBLE
-                        : View.GONE);
+        renderStatusMessage(
+                visibleMessage,
+                latestIsError ? COLOR_ERROR : COLOR_SECONDARY,
+                latestIsError || busy || waitingForQuickConnect);
 
         if (!sessionAvailable && !busy && !automaticDiscoveryStarted) {
             automaticDiscoveryStarted = true;
@@ -2387,9 +2564,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private void showLocalError(String message) {
         latestIsError = true;
         latestMessage = message;
-        statusText.setText(message);
-        statusText.setTextColor(COLOR_ERROR);
-        statusText.setVisibility(View.VISIBLE);
+        renderStatusMessage(message, COLOR_ERROR, true);
     }
 
     private String defaultMessageForState(String state) {

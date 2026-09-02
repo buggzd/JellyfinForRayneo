@@ -51,6 +51,14 @@ namespace JellyfinForRayNeo
             return image;
         }
 
+        public static Image CreateGlowPanel(string name, Transform parent, Color color)
+        {
+            Image image = CreatePanel(name, parent, color);
+            image.sprite = RadialGlowSprite;
+            image.raycastTarget = false;
+            return image;
+        }
+
         public static Text CreateText(
             string name,
             Transform parent,
