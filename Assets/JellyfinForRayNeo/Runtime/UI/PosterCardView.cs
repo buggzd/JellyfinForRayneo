@@ -20,6 +20,11 @@ namespace JellyfinForRayNeo
         private Text _placeholder;
         private Text _title;
         private Text _subtitle;
+        private Text _centerLabel;
+        private GameObject _typeBadge;
+        private Text _typeBadgeLabel;
+        private GameObject _statusBadge;
+        private Text _statusBadgeLabel;
         private Image _progressFill;
         private Button _button;
         private FocusScale _focus;
@@ -115,6 +120,69 @@ namespace JellyfinForRayNeo
                 new Color(0.012f, 0.014f, 0.022f, 0f));
             UiFactory.Stretch(artworkShade.rectTransform);
 
+            Text centerLabel = UiFactory.CreateText(
+                "Library Title Overlay",
+                artworkFrame.transform,
+                string.Empty,
+                landscape ? 34 : 26,
+                Color.white,
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            centerLabel.resizeTextForBestFit = true;
+            centerLabel.resizeTextMinSize = 22;
+            centerLabel.resizeTextMaxSize = landscape ? 36 : 28;
+            Outline centerOutline = centerLabel.gameObject.AddComponent<Outline>();
+            centerOutline.effectColor = new Color(0f, 0f, 0f, 0.82f);
+            centerOutline.effectDistance = new Vector2(2f, -2f);
+            UiFactory.Stretch(centerLabel.rectTransform, 26f, 26f, 28f, 28f);
+            centerLabel.gameObject.SetActive(false);
+
+            Image typeBadge = UiFactory.CreateRoundedPanel(
+                "Type Badge",
+                artworkFrame.transform,
+                new Color(0.025f, 0.03f, 0.05f, 0.84f));
+            typeBadge.raycastTarget = false;
+            UiFactory.SetRect(
+                typeBadge.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(12f, -12f),
+                new Vector2(92f, 34f));
+            Text typeBadgeLabel = UiFactory.CreateText(
+                "Type Badge Label",
+                typeBadge.transform,
+                string.Empty,
+                15,
+                UiTheme.TextPrimary,
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            UiFactory.Stretch(typeBadgeLabel.rectTransform, 8f, 8f, 2f, 2f);
+            typeBadge.gameObject.SetActive(false);
+
+            Image statusBadge = UiFactory.CreateRoundedPanel(
+                "Status Badge",
+                artworkFrame.transform,
+                new Color(0.03f, 0.035f, 0.055f, 0.90f));
+            statusBadge.raycastTarget = false;
+            UiFactory.SetRect(
+                statusBadge.rectTransform,
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(-12f, -12f),
+                new Vector2(104f, 34f));
+            Text statusBadgeLabel = UiFactory.CreateText(
+                "Status Badge Label",
+                statusBadge.transform,
+                string.Empty,
+                15,
+                UiTheme.TextPrimary,
+                TextAnchor.MiddleCenter,
+                FontStyle.Bold);
+            UiFactory.Stretch(statusBadgeLabel.rectTransform, 8f, 8f, 2f, 2f);
+            statusBadge.gameObject.SetActive(false);
+
             Image progressTrack = UiFactory.CreateRoundedPanel(
                 "Progress Track",
                 artworkFrame.transform,
@@ -192,6 +260,11 @@ namespace JellyfinForRayNeo
             view._placeholder = placeholder;
             view._title = title;
             view._subtitle = subtitle;
+            view._centerLabel = centerLabel;
+            view._typeBadge = typeBadge.gameObject;
+            view._typeBadgeLabel = typeBadgeLabel;
+            view._statusBadge = statusBadge.gameObject;
+            view._statusBadgeLabel = statusBadgeLabel;
             view._progressFill = progressFill;
             view._button = button;
             view._focus = focus;
@@ -214,13 +287,17 @@ namespace JellyfinForRayNeo
             Action<JellyfinItem> onSelected,
             CancellationToken cancellationToken,
             int posterMaxWidth = 480,
-            bool preferPrimaryArtwork = false)
+            bool preferPrimaryArtwork = false,
+            bool libraryCard = false)
         {
             _bindingVersion++;
             _item = item;
             _onSelected = onSelected;
-            _title.text = item != null ? item.Name : string.Empty;
-            _subtitle.text = item != null ? item.Subtitle : string.Empty;
+            _title.text = BuildTitle(item);
+            _subtitle.text = BuildSubtitle(item);
+            _centerLabel.text = item != null ? item.Name : string.Empty;
+            _centerLabel.gameObject.SetActive(libraryCard && item != null);
+            BindBadges(item, libraryCard);
             _artwork.sprite = null;
             _artwork.color = Color.clear;
             _placeholder.text = Initial(item != null ? item.Name : null);
@@ -255,6 +332,152 @@ namespace JellyfinForRayNeo
                     imageCache,
                     _bindingVersion,
                     cancellationToken).Forget();
+            }
+        }
+
+        private void BindBadges(JellyfinItem item, bool libraryCard)
+        {
+            string type = libraryCard ? "媒体库" : TypeBadge(item);
+            _typeBadgeLabel.text = type ?? string.Empty;
+            _typeBadge.SetActive(!string.IsNullOrWhiteSpace(type));
+
+            string status = StatusBadge(item);
+            _statusBadgeLabel.text = status ?? string.Empty;
+            _statusBadge.SetActive(!string.IsNullOrWhiteSpace(status));
+        }
+
+        private static string BuildTitle(JellyfinItem item)
+        {
+            if (item == null)
+            {
+                return string.Empty;
+            }
+
+            if (string.Equals(item.Type, "Episode", StringComparison.OrdinalIgnoreCase)
+                && item.ParentIndexNumber.HasValue
+                && item.IndexNumber.HasValue)
+            {
+                return string.Format(
+                    "S{0}E{1} · {2}",
+                    item.ParentIndexNumber.Value,
+                    item.IndexNumber.Value,
+                    item.Name);
+            }
+
+            return item.Name ?? string.Empty;
+        }
+
+        private static string BuildSubtitle(JellyfinItem item)
+        {
+            if (item == null)
+            {
+                return string.Empty;
+            }
+
+            if (item.IsBrowsableContainer)
+            {
+                string count = item.VisibleChildCount.HasValue
+                    ? " · " + item.VisibleChildCount.Value + " 项"
+                    : string.Empty;
+                return FriendlyType(item.Type) + count;
+            }
+
+            if (string.Equals(item.Type, "Episode", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(item.SeriesName))
+            {
+                return item.SeriesName;
+            }
+
+            if (string.Equals(item.Type, "Video", StringComparison.OrdinalIgnoreCase))
+            {
+                string year = item.ProductionYear.HasValue
+                    ? item.ProductionYear.Value.ToString()
+                    : "视频";
+                string runtime = RuntimeLabel(item.RunTimeTicks);
+                return string.IsNullOrWhiteSpace(runtime) ? year : year + " · " + runtime;
+            }
+
+            return item.Subtitle;
+        }
+
+        private static string TypeBadge(JellyfinItem item)
+        {
+            if (item == null)
+            {
+                return null;
+            }
+
+            switch ((item.Type ?? string.Empty).ToLowerInvariant())
+            {
+                case "folder":
+                case "collectionfolder":
+                    return "文件夹";
+                case "boxset":
+                    return "合集";
+                case "video":
+                    return "视频";
+                case "episode":
+                    return "单集";
+                default:
+                    return null;
+            }
+        }
+
+        private static string StatusBadge(JellyfinItem item)
+        {
+            JellyfinUserData userData = item != null ? item.UserData : null;
+            if (userData == null)
+            {
+                return null;
+            }
+
+            if (userData.UnplayedItemCount.HasValue && userData.UnplayedItemCount.Value > 0)
+            {
+                return userData.UnplayedItemCount.Value + " 未看";
+            }
+            if (item != null && item.IsBrowsableContainer)
+            {
+                return userData.IsFavorite ? "★ 收藏" : null;
+            }
+            if (userData.Played)
+            {
+                return "✓ 已看";
+            }
+            if (userData.IsFavorite)
+            {
+                return "★ 收藏";
+            }
+            return null;
+        }
+
+        private static string RuntimeLabel(long? runTimeTicks)
+        {
+            if (!runTimeTicks.HasValue || runTimeTicks.Value <= 0L)
+            {
+                return null;
+            }
+
+            TimeSpan duration = TimeSpan.FromSeconds(
+                runTimeTicks.Value / (double)AppConstants.TicksPerSecond);
+            return duration.TotalHours >= 1d
+                ? string.Format("{0}小时{1}分", (int)duration.TotalHours, duration.Minutes)
+                : Math.Max(1, duration.Minutes) + "分钟";
+        }
+
+        private static string FriendlyType(string type)
+        {
+            switch ((type ?? string.Empty).ToLowerInvariant())
+            {
+                case "collectionfolder":
+                    return "媒体库";
+                case "folder":
+                    return "文件夹";
+                case "boxset":
+                    return "合集";
+                case "playlist":
+                    return "播放列表";
+                default:
+                    return string.IsNullOrWhiteSpace(type) ? "内容" : type;
             }
         }
 

@@ -72,15 +72,20 @@ namespace JellyfinForRayNeo
         public string OriginalTitle;
         public string Type;
         public string MediaType;
+        public string CollectionType;
+        public string ParentId;
         public string Overview;
         public int? ProductionYear;
         public long? RunTimeTicks;
+        public int? ChildCount;
+        public int? RecursiveItemCount;
         public double? PrimaryImageAspectRatio;
         public Dictionary<string, string> ImageTags;
         public List<string> BackdropImageTags;
         public string ParentBackdropItemId;
         public string SeriesName;
         public string SeriesId;
+        public string SeasonId;
         public string SeasonName;
         public int? IndexNumber;
         public int? ParentIndexNumber;
@@ -101,6 +106,7 @@ namespace JellyfinForRayNeo
         public string EndDate;
         public string Status;
         public string VideoType;
+        public List<JellyfinChapter> Chapters;
 
         public bool IsPlayable
         {
@@ -111,6 +117,31 @@ namespace JellyfinForRayNeo
                     || string.Equals(Type, "Episode", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(Type, "Video", StringComparison.OrdinalIgnoreCase);
             }
+        }
+
+        public bool IsBrowsableContainer
+        {
+            get
+            {
+                switch ((Type ?? string.Empty).Trim().ToLowerInvariant())
+                {
+                    case "collectionfolder":
+                    case "folder":
+                    case "boxset":
+                    case "playlist":
+                    case "photoalbum":
+                    case "musicalbum":
+                    case "musicartist":
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+        }
+
+        public int? VisibleChildCount
+        {
+            get { return ChildCount ?? RecursiveItemCount; }
         }
 
         public string Subtitle
@@ -137,10 +168,35 @@ namespace JellyfinForRayNeo
         public double? PlayedPercentage;
         public long PlaybackPositionTicks;
         public int PlayCount;
+        public int? UnplayedItemCount;
         public bool IsFavorite;
         public string LastPlayedDate;
         public bool Played;
         public string Key;
+    }
+
+    [Serializable]
+    public sealed class JellyfinChapter
+    {
+        public long StartPositionTicks;
+        public string Name;
+        public string ImageTag;
+    }
+
+    public sealed class JellyfinItemsQuery
+    {
+        public string ParentId;
+        public string SearchTerm;
+        public string IncludeItemTypes;
+        public string ExcludeItemTypes;
+        public string SortBy;
+        public string SortOrder;
+        public string Filters;
+        public string GenreIds;
+        public int StartIndex;
+        public int Limit = 30;
+        public bool Recursive;
+        public bool EnableTotalRecordCount = true;
     }
 
     [Serializable]
@@ -176,6 +232,8 @@ namespace JellyfinForRayNeo
         public string Container;
         public string Name;
         public string ETag;
+        public long? Size;
+        public int? Bitrate;
         public long? RunTimeTicks;
         public bool SupportsTranscoding;
         public bool SupportsDirectStream;
@@ -197,8 +255,10 @@ namespace JellyfinForRayNeo
         public string Type;
         public string Language;
         public string DisplayTitle;
+        public string Title;
         public bool IsDefault;
         public bool IsForced;
+        public bool IsHearingImpaired;
         public bool SupportsExternalStream;
         public string DeliveryUrl;
         public string Profile;
@@ -213,6 +273,7 @@ namespace JellyfinForRayNeo
         public int? Height;
         public int? BitRate;
         public int? BitDepth;
+        public int? SampleRate;
         public int? Channels;
         public string ChannelLayout;
         public float? AverageFrameRate;

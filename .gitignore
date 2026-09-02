@@ -7,6 +7,11 @@
 [Uu]ser[Ss]ettings/
 [Mm]emoryCaptures/
 [Rr]ecordings/
+[Cc]aptures/
+
+# Temporary scenes emitted by Unity Test Framework initialization.
+Assets/InitTestScene*.unity
+Assets/InitTestScene*.unity.meta
 
 # IDE and generated project files
 .idea/

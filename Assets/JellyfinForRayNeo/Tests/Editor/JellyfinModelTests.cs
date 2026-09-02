@@ -48,6 +48,60 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [Test]
+        public void FolderMetadata_ExposesBrowsingAndUnplayedBadges()
+        {
+            const string json =
+                "{\"Id\":\"folder-id\",\"Name\":\"课程\",\"Type\":\"Folder\",\"CollectionType\":\"homevideos\",\"ChildCount\":23,\"UserData\":{\"UnplayedItemCount\":7}}";
+
+            JellyfinItem item = JsonConvert.DeserializeObject<JellyfinItem>(json);
+
+            Assert.IsTrue(item.IsBrowsableContainer);
+            Assert.IsFalse(item.IsPlayable);
+            Assert.AreEqual("homevideos", item.CollectionType);
+            Assert.AreEqual(23, item.VisibleChildCount);
+            Assert.AreEqual(7, item.UserData.UnplayedItemCount);
+        }
+
+        [Test]
+        public void BrowseQuery_KeepsCourseFoldersNonRecursiveAndFolderFirst()
+        {
+            JellyfinBrowseState state = JellyfinBrowseState.ForLibrary(new JellyfinItem
+            {
+                Id = "course-library",
+                Name = "网课",
+                Type = "CollectionFolder",
+                CollectionType = "homevideos"
+            });
+
+            JellyfinItemsQuery query = BrowseCatalogService.BuildQuery(state);
+
+            Assert.IsFalse(query.Recursive);
+            Assert.IsNull(query.IncludeItemTypes);
+            Assert.AreEqual("IsFolder,SortName", query.SortBy);
+            Assert.AreEqual("Ascending", query.SortOrder);
+            Assert.IsTrue(state.PreferLandscape);
+        }
+
+        [Test]
+        public void BrowseQuery_UsesServerPagingSearchAndFavoriteFilter()
+        {
+            JellyfinBrowseState state = JellyfinBrowseState.ForSearch(" 星球大战 ");
+            state.StartIndex = 30;
+            state.Filter = JellyfinBrowseFilter.Favorite;
+            state.Sort = JellyfinBrowseSort.CommunityRating;
+
+            JellyfinItemsQuery query = BrowseCatalogService.BuildQuery(state);
+
+            Assert.AreEqual("星球大战", query.SearchTerm);
+            Assert.AreEqual(30, query.StartIndex);
+            Assert.AreEqual(JellyfinBrowseState.DefaultPageSize, query.Limit);
+            Assert.IsTrue(query.Recursive);
+            StringAssert.Contains("Movie", query.IncludeItemTypes);
+            Assert.AreEqual("IsFavorite", query.Filters);
+            Assert.AreEqual("CommunityRating,SortName", query.SortBy);
+        }
+
+        [Test]
         public void ItemResponse_DeserializesExpandedDetailMetadata()
         {
             const string json = "{\"OriginalTitle\":\"Original\",\"Tags\":[\"Drama\"],\"ProductionLocations\":[\"Japan\"],\"Studios\":[{\"Name\":\"Studio A\"}],\"People\":[{\"Name\":\"Director A\",\"Type\":\"Director\"}],\"ProviderIds\":{\"Tmdb\":\"123\"},\"CriticRating\":91,\"PremiereDate\":\"2025-04-01T00:00:00.0000000Z\",\"MediaSources\":[{\"MediaStreams\":[{\"Type\":\"Video\",\"Codec\":\"h264\",\"Width\":1920,\"Height\":1080,\"VideoRange\":\"SDR\"}]}]}";

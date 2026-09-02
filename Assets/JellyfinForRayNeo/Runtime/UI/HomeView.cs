@@ -30,6 +30,8 @@ namespace JellyfinForRayNeo
         private int _heroBindingVersion;
 
         public event Action<JellyfinItem> ItemSelected;
+        public event Action SearchRequested;
+        public event Action FavoritesRequested;
         public event Action RefreshRequested;
         public event Action LogoutRequested;
 
@@ -173,7 +175,7 @@ namespace JellyfinForRayNeo
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
-                Vector2.zero,
+                new Vector2(-150f, 0f),
                 new Vector2(112f, 46f));
             Text activeNavigationLabel = UiFactory.CreateText(
                 "Active Navigation Label",
@@ -184,6 +186,38 @@ namespace JellyfinForRayNeo
                 TextAnchor.MiddleCenter,
                 FontStyle.Bold);
             UiFactory.Stretch(activeNavigationLabel.rectTransform, 12f, 12f, 4f, 4f);
+
+            Button favoritesButton = UiFactory.CreateButton(
+                "Home Favorites",
+                header.transform,
+                "收藏",
+                new Color(1f, 1f, 1f, 0.04f),
+                UiTheme.TextSecondary,
+                19);
+            UiFactory.SetRect(
+                favoritesButton.GetComponent<RectTransform>(),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                new Vector2(112f, 46f));
+            favoritesButton.onClick.AddListener(() => FavoritesRequested?.Invoke());
+
+            Button searchButton = UiFactory.CreateButton(
+                "Home Search",
+                header.transform,
+                "搜索",
+                new Color(1f, 1f, 1f, 0.04f),
+                UiTheme.TextSecondary,
+                19);
+            UiFactory.SetRect(
+                searchButton.GetComponent<RectTransform>(),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(150f, 0f),
+                new Vector2(112f, 46f));
+            searchButton.onClick.AddListener(() => SearchRequested?.Invoke());
 
             _serverLabel = UiFactory.CreateText(
                 "Server",
@@ -520,6 +554,10 @@ namespace JellyfinForRayNeo
         private void CreateShelf(JellyfinHomeSection section, CancellationToken cancellationToken)
         {
             bool landscape = IsLandscapeSection(section.Key);
+            bool libraryCards = string.Equals(
+                section.Key,
+                "my-media",
+                StringComparison.OrdinalIgnoreCase);
             float shelfHeight = landscape ? 334f : 454f;
 
             RectTransform shelf = UiFactory.CreateRect("Shelf - " + section.Title, _content);
@@ -600,7 +638,9 @@ namespace JellyfinForRayNeo
                     _imageCache,
                     selected => ItemSelected?.Invoke(selected),
                     cancellationToken,
-                    landscape ? 760 : 480);
+                    landscape ? 760 : 480,
+                    libraryCards,
+                    libraryCards);
             }
         }
 
@@ -616,9 +656,14 @@ namespace JellyfinForRayNeo
             JellyfinItem fallback = null;
             foreach (JellyfinHomeSection section in sections)
             {
+                if (section == null
+                    || string.Equals(section.Key, "my-media", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
                 foreach (JellyfinItem item in section.Items)
                 {
-                    if (item == null)
+                    if (item == null || item.IsBrowsableContainer)
                     {
                         continue;
                     }
@@ -641,7 +686,8 @@ namespace JellyfinForRayNeo
         private static bool IsLandscapeSection(string key)
         {
             return string.Equals(key, "resume", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(key, "next-up", StringComparison.OrdinalIgnoreCase);
+                || string.Equals(key, "next-up", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(key, "my-media", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string BuildHeroMetadata(JellyfinItem item)

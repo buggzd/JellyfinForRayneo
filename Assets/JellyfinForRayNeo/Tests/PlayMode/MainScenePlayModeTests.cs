@@ -377,7 +377,7 @@ namespace JellyfinForRayNeo.Tests
 
             PosterCardView thirdCard = shelf
                 .GetComponentsInChildren<PosterCardView>(true)
-                .First(card => FindDescendant(card.transform, "Title").GetComponent<Text>().text == "第三集");
+                .First(card => FindDescendant(card.transform, "Title").GetComponent<Text>().text == "S1E3 · 第三集");
             thirdCard.GetComponent<Button>().onClick.Invoke();
             Assert.AreSame(episodeThree, playedItem);
             Assert.AreEqual(0L, playedPosition);
@@ -464,6 +464,170 @@ namespace JellyfinForRayNeo.Tests
                 landscapeArtwork.rect.width / landscapeArtwork.rect.height,
                 Is.EqualTo(16f / 9f).Within(0.01f));
 
+            Object.Destroy(host);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator BrowseView_RendersPagedCourseFoldersForDirectionalNavigation()
+        {
+            GameObject host = new GameObject("Browse Test Host", typeof(RectTransform));
+            host.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
+            JellyfinApiClient api = new JellyfinApiClient("browse-test-device");
+            api.SetSession(new JellyfinSession
+            {
+                ServerUrl = "http://127.0.0.1:8096",
+                AccessToken = "browse-token",
+                UserId = "browse-user",
+                DeviceId = "browse-test-device"
+            });
+            JellyfinImageCache imageCache = new JellyfinImageCache();
+            BrowseView browse = new BrowseView(host.transform, api, imageCache);
+            JellyfinItem selected = null;
+            browse.ItemSelected += item => selected = item;
+            JellyfinItem folder = new JellyfinItem
+            {
+                Id = "folder",
+                Name = "2023透视",
+                Type = "Folder",
+                ChildCount = 23,
+                UserData = new JellyfinUserData { UnplayedItemCount = 8 }
+            };
+            browse.SetPage(
+                JellyfinBrowseState.ForLibrary(new JellyfinItem
+                {
+                    Id = "courses",
+                    Name = "网课",
+                    Type = "CollectionFolder",
+                    CollectionType = "homevideos"
+                }),
+                new JellyfinQueryResult
+                {
+                    TotalRecordCount = 31,
+                    StartIndex = 0,
+                    Items = new List<JellyfinItem>
+                    {
+                        folder,
+                        new JellyfinItem
+                        {
+                            Id = "video",
+                            Name = "第一堂课",
+                            Type = "Video",
+                            MediaType = "Video",
+                            UserData = new JellyfinUserData()
+                        }
+                    }
+                },
+                CancellationToken.None);
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+
+            Transform viewport = FindDescendant(host.transform, "Browse Viewport");
+            GridLayoutGroup grid = FindDescendant(host.transform, "Browse Grid")
+                .GetComponent<GridLayoutGroup>();
+            PosterCardView[] cards = host.GetComponentsInChildren<PosterCardView>(true);
+            Assert.NotNull(viewport);
+            AssertTransparentDragSurface(viewport);
+            Assert.AreEqual(5, grid.constraintCount);
+            Assert.AreEqual(PosterCardView.LandscapeWidth, grid.cellSize.x);
+            Assert.AreEqual(2, cards.Length);
+            Assert.IsTrue(cards.All(card =>
+                card.GetComponent<LayoutElement>().preferredHeight == PosterCardView.LandscapeHeight));
+            Assert.AreEqual(
+                "文件夹",
+                FindDescendant(cards[0].transform, "Type Badge Label").GetComponent<Text>().text);
+            Assert.AreEqual(
+                "8 未看",
+                FindDescendant(cards[0].transform, "Status Badge Label").GetComponent<Text>().text);
+            Assert.IsFalse(FindDescendant(host.transform, "Previous Page").GetComponent<Button>().interactable);
+            Assert.IsTrue(FindDescendant(host.transform, "Next Page").GetComponent<Button>().interactable);
+
+            cards[0].GetComponent<Button>().onClick.Invoke();
+            Assert.AreSame(folder, selected);
+
+            browse.Hide();
+            imageCache.Dispose();
+            Object.Destroy(host);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator DetailView_ProvidesExpandableOverviewSeasonsAndSimilarItems()
+        {
+            GameObject host = new GameObject("Related Detail Test Host", typeof(RectTransform));
+            host.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
+            JellyfinApiClient api = new JellyfinApiClient("related-detail-device");
+            api.SetSession(new JellyfinSession
+            {
+                ServerUrl = "http://127.0.0.1:8096",
+                AccessToken = "related-token",
+                UserId = "related-user",
+                DeviceId = "related-detail-device"
+            });
+            JellyfinImageCache imageCache = new JellyfinImageCache();
+            DetailView detail = new DetailView(host.transform);
+            JellyfinItem selected = null;
+            long chapterPosition = -1L;
+            detail.RelatedItemSelected += item => selected = item;
+            detail.PlayRequested += (item, position) => chapterPosition = position;
+            JellyfinItem season = new JellyfinItem
+            {
+                Id = "season-1",
+                Name = "第一季",
+                Type = "Season",
+                UserData = new JellyfinUserData()
+            };
+            JellyfinItem similar = new JellyfinItem
+            {
+                Id = "similar",
+                Name = "相似影片",
+                Type = "Movie",
+                UserData = new JellyfinUserData()
+            };
+            detail.Show(
+                new JellyfinItem
+                {
+                    Id = "series-related",
+                    Name = "测试剧集",
+                    Type = "Movie",
+                    Overview = new string('介', 240),
+                    Chapters = new List<JellyfinChapter>
+                    {
+                        new JellyfinChapter
+                        {
+                            Name = "第二幕",
+                            StartPositionTicks = AppConstants.TicksPerSecond * 403L
+                        }
+                    },
+                    UserData = new JellyfinUserData()
+                },
+                api,
+                imageCache,
+                CancellationToken.None,
+                new List<JellyfinItem>(),
+                new List<JellyfinItem> { season },
+                new List<JellyfinItem> { similar });
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+
+            Assert.IsTrue(FindDescendant(host.transform, "Seasons Shelf").gameObject.activeInHierarchy);
+            Assert.IsTrue(FindDescendant(host.transform, "Similar Shelf").gameObject.activeInHierarchy);
+            Button chapter = FindDescendant(host.transform, "Chapter - 1").GetComponent<Button>();
+            Assert.AreEqual("6:43  ·  第二幕", chapter.GetComponentInChildren<Text>().text);
+            chapter.onClick.Invoke();
+            Assert.AreEqual(AppConstants.TicksPerSecond * 403L, chapterPosition);
+            Button overviewToggle = FindDescendant(host.transform, "Overview Toggle").GetComponent<Button>();
+            Assert.IsTrue(overviewToggle.gameObject.activeInHierarchy);
+            overviewToggle.onClick.Invoke();
+            Assert.IsTrue(FindDescendant(host.transform, "Expanded Overview Card").gameObject.activeInHierarchy);
+
+            PosterCardView similarCard = FindDescendant(host.transform, "Similar Shelf")
+                .GetComponentInChildren<PosterCardView>(true);
+            similarCard.GetComponent<Button>().onClick.Invoke();
+            Assert.AreSame(similar, selected);
+
+            detail.Hide();
+            imageCache.Dispose();
             Object.Destroy(host);
             yield return null;
         }

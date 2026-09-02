@@ -30,24 +30,20 @@ namespace JellyfinForRayNeo
             Task<JellyfinQueryResult> viewsTask = _api.GetUserViewsAsync(cancellationToken);
             Task<JellyfinQueryResult> resumeTask = _api.GetResumeItemsAsync(12, cancellationToken);
             Task<JellyfinQueryResult> nextUpTask = _api.GetNextUpAsync(12, cancellationToken);
-            Task<List<JellyfinItem>> latestMoviesTask = _api.GetLatestItemsAsync("Movie", ShelfLimit, cancellationToken);
-            Task<List<JellyfinItem>> latestSeriesTask = _api.GetLatestItemsAsync("Series", ShelfLimit, cancellationToken);
             Task<JellyfinQueryResult> genresTask = _api.GetGenresAsync(MaxGenreShelves, cancellationToken);
 
-            await Task.WhenAll(viewsTask, resumeTask, nextUpTask, latestMoviesTask, latestSeriesTask, genresTask);
+            await Task.WhenAll(viewsTask, resumeTask, nextUpTask, genresTask);
 
             List<JellyfinHomeSection> sections = new List<JellyfinHomeSection>();
-            AddIfPopulated(sections, "resume", "继续观看", resumeTask.Result != null ? resumeTask.Result.Items : null);
-            AddIfPopulated(sections, "next-up", "下一集", nextUpTask.Result != null ? nextUpTask.Result.Items : null);
-            AddIfPopulated(sections, "latest-movies", "最新电影", latestMoviesTask.Result);
-            AddIfPopulated(sections, "latest-series", "最新剧集", latestSeriesTask.Result);
-
             List<JellyfinItem> views = viewsTask.Result != null && viewsTask.Result.Items != null
                 ? viewsTask.Result.Items
                     .Where(view => view != null && !string.IsNullOrWhiteSpace(view.Id))
                     .Take(MaxLibraryShelves)
                     .ToList()
                 : new List<JellyfinItem>();
+            AddIfPopulated(sections, "my-media", "我的媒体", views);
+            AddIfPopulated(sections, "resume", "继续观看", resumeTask.Result != null ? resumeTask.Result.Items : null);
+            AddIfPopulated(sections, "next-up", "下一集", nextUpTask.Result != null ? nextUpTask.Result.Items : null);
 
             List<Task<JellyfinHomeSection>> libraryTasks = views
                 .Select(view => LoadLibrarySectionAsync(view, cancellationToken))
@@ -84,12 +80,16 @@ namespace JellyfinForRayNeo
 
         private async Task<JellyfinHomeSection> LoadLibrarySectionAsync(JellyfinItem view, CancellationToken cancellationToken)
         {
-            JellyfinQueryResult result = await _api.GetLibraryItemsAsync(view.Id, ShelfLimit, cancellationToken);
+            List<JellyfinItem> items = await _api.GetLatestItemsForLibraryAsync(
+                view.Id,
+                ShelfLimit,
+                cancellationToken);
             return new JellyfinHomeSection
             {
                 Key = "library-" + view.Id,
-                Title = string.IsNullOrWhiteSpace(view.Name) ? "媒体库" : view.Name,
-                Items = result != null && result.Items != null ? result.Items : new List<JellyfinItem>()
+                Title = "最近添加的 "
+                    + (string.IsNullOrWhiteSpace(view.Name) ? "媒体库" : view.Name),
+                Items = items ?? new List<JellyfinItem>()
             };
         }
 

@@ -15,9 +15,12 @@ namespace JellyfinForRayNeo
         private const int DirectPlayMaxBitrate = 120_000_000;
         private const int TranscodeMaxBitrate = 20_000_000;
         private const int SubtitleRequestTimeoutSeconds = 300;
-        private const string ItemFields =
-            "PrimaryImageAspectRatio,Overview,OriginalTitle,Genres,Studios,People,ProviderIds," +
-            "ExternalUrls,Tags,Taglines,ProductionLocations,MediaSources,MediaStreams,DateCreated";
+        private const string ListItemFields =
+            "PrimaryImageAspectRatio,Overview,OriginalTitle,Genres,DateCreated," +
+            "ChildCount,RecursiveItemCount,ParentId";
+        private const string DetailItemFields =
+            ListItemFields + ",Studios,People,ProviderIds,ExternalUrls,Tags,Taglines," +
+            "ProductionLocations,MediaSources,MediaStreams,Chapters";
 
         private readonly string _deviceId;
         private JellyfinSession _session;
@@ -184,6 +187,29 @@ namespace JellyfinForRayNeo
             return SendJsonAsync<List<JellyfinItem>>(UnityWebRequest.kHttpVerbGET, url, null, true, cancellationToken);
         }
 
+        public Task<List<JellyfinItem>> GetLatestItemsForLibraryAsync(
+            string parentId,
+            int limit,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(parentId))
+            {
+                throw new ArgumentException("A Jellyfin library id is required.", nameof(parentId));
+            }
+
+            Dictionary<string, string> query = CommonItemQuery(limit);
+            query["parentId"] = parentId;
+            query["includeItemTypes"] = "Movie,Series,Episode,Video";
+            query["groupItems"] = "false";
+            string url = BuildSessionUrl("/Items/Latest", query);
+            return SendJsonAsync<List<JellyfinItem>>(
+                UnityWebRequest.kHttpVerbGET,
+                url,
+                null,
+                true,
+                cancellationToken);
+        }
+
         public Task<JellyfinQueryResult> GetNextUpAsync(int limit, CancellationToken cancellationToken)
         {
             Dictionary<string, string> query = CommonItemQuery(limit);
@@ -202,6 +228,36 @@ namespace JellyfinForRayNeo
             query["sortOrder"] = "Descending";
             string url = BuildSessionUrl("/Items", query);
             return SendJsonAsync<JellyfinQueryResult>(UnityWebRequest.kHttpVerbGET, url, null, true, cancellationToken);
+        }
+
+        public Task<JellyfinQueryResult> GetItemsAsync(
+            JellyfinItemsQuery itemQuery,
+            CancellationToken cancellationToken)
+        {
+            if (itemQuery == null)
+            {
+                throw new ArgumentNullException(nameof(itemQuery));
+            }
+
+            Dictionary<string, string> query = CommonItemQuery(itemQuery.Limit);
+            query["startIndex"] = Math.Max(0, itemQuery.StartIndex).ToString();
+            query["recursive"] = itemQuery.Recursive ? "true" : "false";
+            query["enableTotalRecordCount"] = itemQuery.EnableTotalRecordCount ? "true" : "false";
+            SetQueryValue(query, "parentId", itemQuery.ParentId);
+            SetQueryValue(query, "searchTerm", itemQuery.SearchTerm);
+            SetQueryValue(query, "includeItemTypes", itemQuery.IncludeItemTypes);
+            SetQueryValue(query, "excludeItemTypes", itemQuery.ExcludeItemTypes);
+            SetQueryValue(query, "sortBy", itemQuery.SortBy);
+            SetQueryValue(query, "sortOrder", itemQuery.SortOrder);
+            SetQueryValue(query, "filters", itemQuery.Filters);
+            SetQueryValue(query, "genreIds", itemQuery.GenreIds);
+            string url = BuildSessionUrl("/Items", query);
+            return SendJsonAsync<JellyfinQueryResult>(
+                UnityWebRequest.kHttpVerbGET,
+                url,
+                null,
+                true,
+                cancellationToken);
         }
 
         public Task<JellyfinQueryResult> GetGenresAsync(int limit, CancellationToken cancellationToken)
@@ -233,6 +289,15 @@ namespace JellyfinForRayNeo
 
         public Task<JellyfinQueryResult> GetEpisodesAsync(string seriesId, int limit, CancellationToken cancellationToken)
         {
+            return GetEpisodesAsync(seriesId, null, limit, cancellationToken);
+        }
+
+        public Task<JellyfinQueryResult> GetEpisodesAsync(
+            string seriesId,
+            string seasonId,
+            int limit,
+            CancellationToken cancellationToken)
+        {
             if (string.IsNullOrWhiteSpace(seriesId))
             {
                 throw new ArgumentException("A Jellyfin series id is required.", nameof(seriesId));
@@ -242,10 +307,52 @@ namespace JellyfinForRayNeo
             query["isMissing"] = "false";
             query["sortBy"] = "ParentIndexNumber,IndexNumber,SortName";
             query["sortOrder"] = "Ascending";
+            SetQueryValue(query, "seasonId", seasonId);
             string url = BuildSessionUrl(
                 "/Shows/" + Uri.EscapeDataString(seriesId) + "/Episodes",
                 query);
             return SendJsonAsync<JellyfinQueryResult>(UnityWebRequest.kHttpVerbGET, url, null, true, cancellationToken);
+        }
+
+        public Task<JellyfinQueryResult> GetSeasonsAsync(
+            string seriesId,
+            CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(seriesId))
+            {
+                throw new ArgumentException("A Jellyfin series id is required.", nameof(seriesId));
+            }
+
+            Dictionary<string, string> query = CommonItemQuery(100);
+            query["sortBy"] = "SortName";
+            query["sortOrder"] = "Ascending";
+            string url = BuildSessionUrl(
+                "/Shows/" + Uri.EscapeDataString(seriesId) + "/Seasons",
+                query);
+            return SendJsonAsync<JellyfinQueryResult>(
+                UnityWebRequest.kHttpVerbGET,
+                url,
+                null,
+                true,
+                cancellationToken);
+        }
+
+        public Task<JellyfinQueryResult> GetSimilarItemsAsync(
+            string itemId,
+            int limit,
+            CancellationToken cancellationToken)
+        {
+            RequireItemId(itemId);
+            Dictionary<string, string> query = CommonItemQuery(limit);
+            string url = BuildSessionUrl(
+                "/Items/" + Uri.EscapeDataString(itemId) + "/Similar",
+                query);
+            return SendJsonAsync<JellyfinQueryResult>(
+                UnityWebRequest.kHttpVerbGET,
+                url,
+                null,
+                true,
+                cancellationToken);
         }
 
         public Task<JellyfinItem> GetItemAsync(string itemId, CancellationToken cancellationToken)
@@ -254,7 +361,7 @@ namespace JellyfinForRayNeo
             string url = BuildSessionUrl("/Items/" + Uri.EscapeDataString(itemId), new Dictionary<string, string>
             {
                 { "userId", RequireSession().UserId },
-                { "fields", ItemFields },
+                { "fields", DetailItemFields },
                 { "enableImages", "true" },
                 { "enableUserData", "true" }
             });
@@ -698,12 +805,23 @@ namespace JellyfinForRayNeo
             {
                 { "userId", session.UserId },
                 { "limit", Math.Max(1, limit <= 0 ? DefaultItemLimit : limit).ToString() },
-                { "fields", ItemFields },
+                { "fields", ListItemFields },
                 { "enableImages", "true" },
                 { "enableUserData", "true" },
                 { "imageTypeLimit", "1" },
                 { "enableImageTypes", "Primary,Backdrop,Thumb" }
             };
+        }
+
+        private static void SetQueryValue(
+            IDictionary<string, string> query,
+            string key,
+            string value)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                query[key] = value.Trim();
+            }
         }
 
         private string BuildSessionUrl(string path, IDictionary<string, string> query)

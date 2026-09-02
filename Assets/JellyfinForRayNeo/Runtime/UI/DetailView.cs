@@ -23,6 +23,11 @@ namespace JellyfinForRayNeo
         private readonly RectTransform _metadataChips;
         private readonly Text _tagline;
         private readonly Text _overview;
+        private readonly GameObject _overviewToggleRow;
+        private readonly Button _overviewToggle;
+        private readonly Text _overviewToggleLabel;
+        private readonly Image _expandedOverviewCard;
+        private readonly Text _expandedOverview;
         private readonly Image _factsCard;
         private readonly RectTransform _factsContainer;
         private readonly Image _mediaCard;
@@ -38,14 +43,20 @@ namespace JellyfinForRayNeo
         private readonly Button _playedButton;
         private readonly Text _playedLabel;
         private readonly EpisodeShelfView _episodeShelf;
+        private readonly ChapterShelfView _chapterShelf;
+        private readonly DetailShelfView _seasonsShelf;
+        private readonly DetailShelfView _similarShelf;
         private JellyfinItem _item;
         private JellyfinItem _playTarget;
         private bool _userActionBusy;
+        private bool _overviewExpanded;
+        private string _fullOverview;
         private int _bindingVersion;
 
         public event Action<JellyfinItem, long> PlayRequested;
         public event Action<JellyfinItem, bool> FavoriteStateChangeRequested;
         public event Action<JellyfinItem, bool> PlayedStateChangeRequested;
+        public event Action<JellyfinItem> RelatedItemSelected;
         public event Action CloseRequested;
 
         public DetailView(Transform parent)
@@ -361,8 +372,61 @@ namespace JellyfinForRayNeo
             LayoutElement overviewElement = _overview.GetComponent<LayoutElement>();
             overviewElement.preferredHeight = 86f;
 
+            RectTransform overviewToggleRow = UiFactory.CreateRect("Overview Toggle Row", heroInfo);
+            LayoutElement overviewToggleRowElement = overviewToggleRow.gameObject.AddComponent<LayoutElement>();
+            overviewToggleRowElement.minHeight = 42f;
+            overviewToggleRowElement.preferredHeight = 42f;
+            overviewToggleRowElement.flexibleHeight = 0f;
+            _overviewToggleRow = overviewToggleRow.gameObject;
+            _overviewToggle = UiFactory.CreateButton(
+                "Overview Toggle",
+                overviewToggleRow,
+                "展开简介",
+                UiTheme.SurfaceSoft,
+                UiTheme.TextPrimary,
+                18);
+            ConfigureActionButton(_overviewToggle, 150f);
+            LayoutElement overviewToggleElement = _overviewToggle.GetComponent<LayoutElement>();
+            overviewToggleElement.minHeight = 42f;
+            overviewToggleElement.preferredHeight = 42f;
+            UiFactory.SetRect(
+                _overviewToggle.GetComponent<RectTransform>(),
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                Vector2.zero,
+                new Vector2(150f, 42f));
+            _overviewToggleLabel = _overviewToggle.GetComponentInChildren<Text>();
+            _overviewToggle.onClick.AddListener(ToggleOverview);
+
+            _expandedOverviewCard = CreateCard("Expanded Overview Card", _content);
+            CreateSectionHeading(_expandedOverviewCard.transform, "剧情简介", "OVERVIEW");
+            _expandedOverview = CreateFlowText(
+                "Expanded Overview",
+                _expandedOverviewCard.transform,
+                22,
+                new Color(0.89f, 0.90f, 0.94f, 1f),
+                FontStyle.Normal,
+                72f);
+            _expandedOverview.lineSpacing = 1.18f;
+            _expandedOverviewCard.gameObject.SetActive(false);
+
             _episodeShelf = new EpisodeShelfView(_content, _scroll);
             _episodeShelf.EpisodeSelected += episode => RequestPlayback(episode, true);
+
+            _chapterShelf = new ChapterShelfView(_content, _scroll);
+            _chapterShelf.ChapterSelected += startPosition =>
+            {
+                if (_item != null && _item.IsPlayable)
+                {
+                    PlayRequested?.Invoke(_item, Math.Max(0L, startPosition));
+                }
+            };
+
+            _seasonsShelf = new DetailShelfView(_content, _scroll, "Seasons Shelf");
+            _seasonsShelf.ItemSelected += item => RelatedItemSelected?.Invoke(item);
+            _similarShelf = new DetailShelfView(_content, _scroll, "Similar Shelf");
+            _similarShelf.ItemSelected += item => RelatedItemSelected?.Invoke(item);
 
             _factsCard = CreateCard("Details Card", _content);
             CreateSectionHeading(_factsCard.transform, "详细信息", "ABOUT");
@@ -406,12 +470,15 @@ namespace JellyfinForRayNeo
             JellyfinApiClient api,
             JellyfinImageCache imageCache,
             CancellationToken cancellationToken,
-            IList<JellyfinItem> episodes = null)
+            IList<JellyfinItem> episodes = null,
+            IList<JellyfinItem> seasons = null,
+            IList<JellyfinItem> similarItems = null)
         {
             _bindingVersion++;
             _item = item;
             bool isSeries = item != null
-                && string.Equals(item.Type, "Series", StringComparison.OrdinalIgnoreCase);
+                && (string.Equals(item.Type, "Series", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(item.Type, "Season", StringComparison.OrdinalIgnoreCase));
             _playTarget = isSeries
                 ? EpisodePlaybackResolver.Select(episodes)
                 : item != null && item.IsPlayable ? item : null;
@@ -440,15 +507,29 @@ namespace JellyfinForRayNeo
             _tagline.text = tagline ?? string.Empty;
             _tagline.gameObject.SetActive(!string.IsNullOrWhiteSpace(tagline));
 
-            string overview = item != null ? JellyfinText.ToPlainText(item.Overview) : string.Empty;
-            _overview.text = string.IsNullOrWhiteSpace(overview)
-                ? "暂无简介。"
-                : Condense(overview, 150);
+            _fullOverview = item != null ? JellyfinText.ToPlainText(item.Overview) : string.Empty;
+            _overviewExpanded = false;
+            UpdateOverview();
             PopulateFacts(item);
             PopulateMediaFacts(item);
             _episodeShelf.Bind(
                 episodes,
                 isSeries ? _playTarget : item,
+                api,
+                imageCache,
+                cancellationToken);
+            _chapterShelf.Bind(item != null ? item.Chapters : null);
+            _seasonsShelf.Bind(
+                "季",
+                seasons,
+                false,
+                api,
+                imageCache,
+                cancellationToken);
+            _similarShelf.Bind(
+                "更多类似",
+                similarItems,
+                false,
                 api,
                 imageCache,
                 cancellationToken);
@@ -507,7 +588,35 @@ namespace JellyfinForRayNeo
         {
             _bindingVersion++;
             _episodeShelf.Hide();
+            _chapterShelf.Hide();
+            _seasonsShelf.Hide();
+            _similarShelf.Hide();
+            _overviewExpanded = false;
+            _expandedOverviewCard.gameObject.SetActive(false);
             _root.SetActive(false);
+        }
+
+        private void ToggleOverview()
+        {
+            if (string.IsNullOrWhiteSpace(_fullOverview) || _fullOverview.Length <= 150)
+            {
+                return;
+            }
+
+            _overviewExpanded = !_overviewExpanded;
+            UpdateOverview();
+            RebuildLayout();
+        }
+
+        private void UpdateOverview()
+        {
+            bool hasOverview = !string.IsNullOrWhiteSpace(_fullOverview);
+            bool canExpand = hasOverview && _fullOverview.Length > 150;
+            _overview.text = hasOverview ? Condense(_fullOverview, 150) : "暂无简介。";
+            _overviewToggleRow.SetActive(canExpand);
+            _overviewToggleLabel.text = _overviewExpanded ? "收起简介" : "展开简介";
+            _expandedOverview.text = _fullOverview ?? string.Empty;
+            _expandedOverviewCard.gameObject.SetActive(canExpand && _overviewExpanded);
         }
 
         private async Task LoadImageAsync(
@@ -634,6 +743,7 @@ namespace JellyfinForRayNeo
 
             AddFact("类型", JoinValues(item.Genres, 8));
             AddFact("导演", JoinPeople(item.People, "Director", 4));
+            AddFact("编剧", JoinPeople(item.People, "Writer", 6));
             AddFact("主演", JoinPeople(item.People, "Actor", 7));
             AddFact(
                 "工作室",
@@ -644,6 +754,11 @@ namespace JellyfinForRayNeo
             AddFact("首映日期", FormatDate(item.PremiereDate));
             AddFact("状态", LocalizeStatus(item.Status));
             AddFact("标签", JoinValues(item.Tags, 10));
+            AddFact(
+                "章节",
+                item.Chapters != null && item.Chapters.Count > 0
+                    ? item.Chapters.Count + " 章"
+                    : null);
             AddFact("外部 ID", BuildProviderIds(item));
             _factsCard.gameObject.SetActive(_factsContainer.childCount > 0);
         }
@@ -661,25 +776,43 @@ namespace JellyfinForRayNeo
             }
 
             List<JellyfinMediaStream> streams = source.MediaStreams ?? new List<JellyfinMediaStream>();
-            JellyfinMediaStream video = streams.FirstOrDefault(stream =>
-                stream != null && string.Equals(stream.Type, "Video", StringComparison.OrdinalIgnoreCase));
-            JellyfinMediaStream audio = streams.FirstOrDefault(stream =>
-                    stream != null
-                    && stream.IsDefault
-                    && string.Equals(stream.Type, "Audio", StringComparison.OrdinalIgnoreCase))
-                ?? streams.FirstOrDefault(stream =>
-                    stream != null && string.Equals(stream.Type, "Audio", StringComparison.OrdinalIgnoreCase));
+            List<JellyfinMediaStream> videos = streams
+                .Where(stream =>
+                    stream != null && string.Equals(stream.Type, "Video", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            List<JellyfinMediaStream> audioTracks = streams
+                .Where(stream =>
+                    stream != null && string.Equals(stream.Type, "Audio", StringComparison.OrdinalIgnoreCase))
+                .ToList();
             List<JellyfinMediaStream> subtitles = streams
                 .Where(stream =>
                     stream != null && string.Equals(stream.Type, "Subtitle", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            AddMediaFact("视频", BuildVideoDescription(video));
-            AddMediaFact("音频", BuildAudioDescription(audio));
-            AddMediaFact("字幕", BuildSubtitleDescription(subtitles));
-            AddMediaFact("封装", !string.IsNullOrWhiteSpace(source.Container)
-                ? source.Container.ToUpperInvariant()
-                : null);
+            AddMediaFact("文件", source.Name);
+            AddMediaFact("封装", BuildContainerDescription(source));
+            for (int index = 0; index < videos.Count; index++)
+            {
+                AddMediaFact(
+                    videos.Count > 1 ? "视频 " + (index + 1) : "视频",
+                    BuildVideoDescription(videos[index]));
+            }
+            for (int index = 0; index < audioTracks.Count; index++)
+            {
+                AddMediaFact(
+                    audioTracks.Count > 1 ? "音频 " + (index + 1) : "音频",
+                    BuildAudioDescription(audioTracks[index]));
+            }
+            for (int index = 0; index < subtitles.Count; index++)
+            {
+                AddMediaFact(
+                    subtitles.Count > 1 ? "字幕 " + (index + 1) : "字幕",
+                    BuildSubtitleStreamDescription(subtitles[index]));
+            }
+            if (subtitles.Count == 0)
+            {
+                AddMediaFact("字幕", "无");
+            }
             AddMediaFact("播放能力", BuildPlaybackCapabilities(source));
             _mediaCard.gameObject.SetActive(_mediaContainer.childCount > 0);
         }
@@ -744,7 +877,8 @@ namespace JellyfinForRayNeo
         {
             bool playable = _playTarget != null && _playTarget.IsPlayable;
             bool isSeries = _item != null
-                && string.Equals(_item.Type, "Series", StringComparison.OrdinalIgnoreCase);
+                && (string.Equals(_item.Type, "Series", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(_item.Type, "Season", StringComparison.OrdinalIgnoreCase));
             long resumePosition = EpisodePlaybackResolver.ResumePosition(_playTarget);
             bool hasResumePosition = resumePosition > AppConstants.TicksPerSecond * 10L;
 
@@ -970,6 +1104,15 @@ namespace JellyfinForRayNeo
                 case "episode":
                     kind = "单集";
                     break;
+                case "season":
+                    kind = "季";
+                    break;
+                case "video":
+                    kind = "视频";
+                    break;
+                case "boxset":
+                    kind = "合集";
+                    break;
                 default:
                     kind = item.Type;
                     break;
@@ -1074,26 +1217,87 @@ namespace JellyfinForRayNeo
             }
             AddDistinct(values, audio.ChannelLayout);
             AddDistinct(values, audio.DisplayTitle);
+            if (audio.SampleRate.HasValue && audio.SampleRate.Value > 0)
+            {
+                values.Add((audio.SampleRate.Value / 1000f).ToString("0.#") + " kHz");
+            }
+            if (audio.BitDepth.HasValue && audio.BitDepth.Value > 0)
+            {
+                values.Add(audio.BitDepth.Value + "-bit");
+            }
+            if (audio.BitRate.HasValue && audio.BitRate.Value > 0)
+            {
+                values.Add((audio.BitRate.Value / 1000f).ToString("0") + " kbps");
+            }
+            if (audio.IsDefault && !ContainsStateLabel(audio.DisplayTitle, "默认", "default"))
+            {
+                AddDistinct(values, "默认");
+            }
             return string.Join(" · ", values);
         }
 
-        private static string BuildSubtitleDescription(IList<JellyfinMediaStream> subtitles)
+        private static string BuildContainerDescription(JellyfinMediaSource source)
         {
-            if (subtitles == null || subtitles.Count == 0)
+            if (source == null)
             {
-                return "无";
+                return null;
             }
 
-            List<string> languages = subtitles
-                .Select(stream => !string.IsNullOrWhiteSpace(stream.Language)
-                    ? stream.Language
-                    : stream.DisplayTitle)
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(6)
-                .ToList();
-            return subtitles.Count + " 条"
-                + (languages.Count > 0 ? " · " + string.Join(" / ", languages) : string.Empty);
+            List<string> values = new List<string>();
+            AddDistinct(values, !string.IsNullOrWhiteSpace(source.Container)
+                ? source.Container.ToUpperInvariant()
+                : null);
+            if (source.Size.HasValue && source.Size.Value > 0L)
+            {
+                double gibibytes = source.Size.Value / 1073741824d;
+                values.Add(gibibytes >= 0.1d
+                    ? gibibytes.ToString("0.##") + " GiB"
+                    : (source.Size.Value / 1048576d).ToString("0.#") + " MiB");
+            }
+            if (source.Bitrate.HasValue && source.Bitrate.Value > 0)
+            {
+                values.Add((source.Bitrate.Value / 1000000f).ToString("0.##") + " Mbps");
+            }
+            return string.Join(" · ", values);
+        }
+
+        private static string BuildSubtitleStreamDescription(JellyfinMediaStream subtitle)
+        {
+            if (subtitle == null)
+            {
+                return null;
+            }
+
+            List<string> values = new List<string>();
+            AddDistinct(values, subtitle.Language);
+            AddDistinct(values, subtitle.DisplayTitle);
+            AddDistinct(values, !string.IsNullOrWhiteSpace(subtitle.Codec)
+                ? subtitle.Codec.ToUpperInvariant()
+                : null);
+            values.Add(subtitle.IsExternal ? "外挂" : "内嵌");
+            if (subtitle.IsDefault && !ContainsStateLabel(subtitle.DisplayTitle, "默认", "default"))
+            {
+                AddDistinct(values, "默认");
+            }
+            if (subtitle.IsForced && !ContainsStateLabel(subtitle.DisplayTitle, "强制", "forced"))
+            {
+                AddDistinct(values, "强制");
+            }
+            if (subtitle.IsHearingImpaired)
+            {
+                AddDistinct(values, "听障字幕");
+            }
+            return string.Join(" · ", values);
+        }
+
+        private static bool ContainsStateLabel(
+            string value,
+            string localizedLabel,
+            string englishLabel)
+        {
+            return !string.IsNullOrWhiteSpace(value)
+                && (value.IndexOf(localizedLabel, StringComparison.OrdinalIgnoreCase) >= 0
+                    || value.IndexOf(englishLabel, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
         private static string BuildPlaybackCapabilities(JellyfinMediaSource source)

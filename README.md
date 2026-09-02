@@ -1,6 +1,6 @@
 # Jellyfin for RayNeo Air
 
-面向 RayNeo Air 系列眼镜的第三方 Jellyfin 客户端原型。项目使用 Unity 构建空间海报墙，以头部姿态控制射线、手机触摸确认，交互节奏参考 Apple TV 在 Vision Pro 中的远距浏览方式。
+面向 RayNeo Air 系列眼镜的第三方 Jellyfin 客户端原型。项目使用 Unity 构建空间海报墙；Air 3S 不依赖头部追踪，手机在佩戴眼镜后切换为盲操触控板，以上下左右焦点导航和确认/返回完成交互，节奏参考 Apple TV 在 Vision Pro 中的远距浏览方式。
 
 > 本项目不是 Jellyfin、RayNeo 或 Apple 的官方产品，与这些公司不存在隶属或背书关系。
 
@@ -9,16 +9,17 @@
 - Jellyfin UDP 局域网自动发现、Quick Connect 快速登录、帐号密码登录和本地会话恢复
 - 手机端原生 Android 登录页；RayNeo Air 眼镜端只显示连接状态与媒体内容
 - Unity Editor 手机伴侣模拟器，可与 Game View 组成双端调试环境
-- 加载用户媒体库、继续观看、下一集、最新电影和最新剧集
-- 按媒体库与流派生成横向海报架
+- 加载“我的媒体”、继续观看、下一集和各媒体库最近添加内容
+- 电影/剧集海报网格、收藏、搜索、服务端分页、排序与观看状态筛选
+- 通用文件夹逐层浏览，支持网课库中目录和普通视频混排，并保留返回栈
 - 海报、背景图和用户观看进度展示，带内存图片缓存与并发限制
-- 电影/剧集详情；电视剧按季分组浏览并选择具体分集
+- 电影/剧集/季/单集详情；按季选集、相似内容、完整音视频/字幕轨道信息与章节直达
 - 动态探测 Android `MediaCodecList`，按“系统硬解 → LibVLC MediaCodec 兼容容器硬件优先 → LibVLC 本地软解 → Jellyfin H.264/AAC HLS 转码”自动降级
 - 播放、暂停、拖动进度、音轨切换；VTT/SRT/ASS/SSA 文字字幕后台加载并本地渲染，PGS/DVD/DVB 字幕由服务器烧录
 - 向 Jellyfin 同步播放开始、进度和停止事件，用于继续观看与历史记录
-- RayNeo 官方 XR Rig、双眼世界空间 UI、凝视聚焦放大、横向/纵向滚动
+- RayNeo 官方双显示链路；可选单目铺满的 2D 镜像或双目立体虚拟屏幕模式
 
-这是可运行的 MVP，而不是完整播放器。目前尚未实现搜索、多服务器管理、离线下载和安全凭据存储。
+这是可运行的 MVP，而不是完整播放器。目前尚未实现多服务器切换、离线下载、播放列表编辑和安全凭据存储。
 
 ## 技术基线
 
@@ -72,15 +73,15 @@ Jellyfin for RayNeo > Configure Project and Scene
 2. 手机会通过 Jellyfin UDP 发现协议自动搜索同一局域网的服务器；点击结果即可选择，也可以手动输入地址。反向代理子路径同样受支持，例如 `https://media.example.com/jellyfin`。
 3. 推荐点击“使用 Jellyfin 快速登录”：应用显示 6 位码，可复制或直接打开服务器授权页；在已登录的 Jellyfin App/网页确认后，眼镜端会自动进入媒体库。
 4. 也可以输入用户名和密码并点击“连接并在眼镜中打开”。密码只在进程内传递本次登录，不会保存。
-5. 连接成功后戴上眼镜，使用 RayNeo 头控射线与手机遥控区浏览海报墙。
+5. 连接成功后戴上眼镜，手机自动变成盲操触控板：上下左右滑动移动唯一焦点，单击确认，双击返回。搜索框获得焦点后使用手机系统键盘输入。
 
 Unity Editor 流程：
 
 1. 打开 `Main` 场景并进入 Play Mode。
 2. `RayNeo Phone` 模拟器窗口会自动打开，也可通过 `Jellyfin for RayNeo > Companion Simulator` 手动打开。
 3. 在模拟器窗口输入 Jellyfin 地址后，可申请并测试 Quick Connect，也可以使用帐号密码；`Game View` 同时作为眼镜画面。UDP 自动发现仅在 Android 手机端运行。
-4. 点击 `Game View`，按一次左 Ctrl 捕获鼠标。系统光标会隐藏并固定在窗口中心，这是相对鼠标输入的正常表现；此时观察 RayNeo 激光点的位置。
-5. 移动鼠标瞄准，使用左键点击菜单；按住左键可从黑色空白处或海报区域横向/纵向拖拽。再次按左 Ctrl 或按 Esc 释放鼠标。
+4. 点击 `Game View` 后，使用方向键或 `WASD` 移动焦点，`Enter`/`Space` 确认，`Esc`/`Backspace` 返回；这与手机盲操触控板发送的命令一致。
+5. 按 `1` 预览铺满单目视野的 2D 镜像，按 `2` 预览双目立体虚拟屏幕；按 `F1` 显示或隐藏调试快捷键说明。鼠标仍可直接点击和拖拽滚动区。
 
 局域网 HTTP 服务器需要同时放行 Android 明文网络和 Unity Player 的非安全 HTTP 选项，本项目已在 Manifest 与 Player Settings 中开启。跨公网使用时仍应配置 HTTPS。
 
@@ -139,7 +140,7 @@ adb reverse tcp:8096 tcp:8096
 
 ## 测试
 
-EditMode 测试覆盖 URL、认证响应、媒体元数据、会话和播放设备配置；PlayMode 测试会实际加载主场景并检查登录 UI、世界空间 Canvas 与 RayNeo 头控射线 Rig。
+EditMode 测试覆盖 URL、认证响应、浏览查询、媒体元数据、会话和播放设备配置；PlayMode 测试会实际加载主场景并检查登录 UI、分页网格、详情分区、世界空间 Canvas 与 Air 3S 双目显示模式。
 
 ```bash
 /Applications/Unity/Hub/Editor/2022.3.62f3c1/Unity.app/Contents/MacOS/Unity \
@@ -157,7 +158,7 @@ EditMode 测试覆盖 URL、认证响应、媒体元数据、会话和播放设�
   -logFile /tmp/jellyfin-rayneo-playmode.log
 ```
 
-当前验证结果：EditMode `35/35`、PlayMode `10/10`；Android ARM64 IL2CPP APK 构建成功。含本地解码库的开发 APK 约 54 MiB，包名 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29。
+当前验证结果：EditMode `53/53`、PlayMode `12/12`；Android ARM64 IL2CPP APK 构建成功。含本地解码库的开发 APK 约 54 MiB，包名 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29。
 
 ## 播放降级策略
 

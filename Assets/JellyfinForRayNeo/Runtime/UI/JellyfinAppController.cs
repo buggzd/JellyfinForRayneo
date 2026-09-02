@@ -10,6 +10,22 @@ namespace JellyfinForRayNeo
 {
     public sealed class JellyfinAppController : MonoBehaviour
     {
+        private enum BrowseHistoryMode
+        {
+            Reset,
+            Push,
+            Replace,
+            Pop
+        }
+
+        private enum DetailHistoryMode
+        {
+            Reset,
+            Push,
+            Replace,
+            Pop
+        }
+
         private static readonly TimeSpan QuickConnectTimeout = TimeSpan.FromMinutes(5d);
         private static readonly TimeSpan QuickConnectPollInterval = TimeSpan.FromSeconds(1.5d);
 
@@ -17,12 +33,14 @@ namespace JellyfinForRayNeo
         private JellyfinApiClient _api;
         private JellyfinImageCache _imageCache;
         private HomeCatalogService _catalog;
+        private BrowseCatalogService _browseCatalog;
         private PlaybackReporter _playbackReporter;
         private PlaybackCapabilities _playbackCapabilities;
         private CompanionLoginBridge _companionBridge;
         private DirectionalFocusNavigator _focusNavigator;
         private LoginView _loginView;
         private HomeView _homeView;
+        private BrowseView _browseView;
         private DetailView _detailView;
         private PlayerView _playerView;
         private GameObject _loadingOverlay;
@@ -42,7 +60,13 @@ namespace JellyfinForRayNeo
         private CancellationTokenSource _lifetime;
         private CancellationTokenSource _operation;
         private CancellationTokenSource _homeImages;
+        private CancellationTokenSource _browseImages;
         private CancellationTokenSource _detailImages;
+        private readonly List<JellyfinBrowseState> _browseHistory =
+            new List<JellyfinBrowseState>();
+        private readonly List<JellyfinItem> _detailHistory =
+            new List<JellyfinItem>();
+        private bool _detailReturnsToBrowse;
 
         private void Start()
         {
@@ -75,6 +99,7 @@ namespace JellyfinForRayNeo
             _api = new JellyfinApiClient(deviceId);
             _imageCache = new JellyfinImageCache();
             _catalog = new HomeCatalogService(_api);
+            _browseCatalog = new BrowseCatalogService(_api);
             _playbackReporter = new PlaybackReporter(_api);
             _playbackCapabilities = PlaybackCapabilities.Detect();
 
@@ -87,6 +112,7 @@ namespace JellyfinForRayNeo
 
             _loginView = new LoginView(appBackground.transform);
             _homeView = new HomeView(appBackground.transform, _api, _imageCache);
+            _browseView = new BrowseView(appBackground.transform, _api, _imageCache);
             _detailView = new DetailView(appBackground.transform);
             _playerView = new PlayerView(appBackground.transform);
             _focusNavigator = new DirectionalFocusNavigator();
@@ -94,6 +120,7 @@ namespace JellyfinForRayNeo
             WireEvents();
 
             _homeView.Show(false);
+            _browseView.Hide();
             _detailView.Hide();
             _loginView.Show(true);
 
@@ -145,15 +172,28 @@ namespace JellyfinForRayNeo
 
         private void WireEvents()
         {
-            _homeView.ItemSelected += item => ShowDetailsAsync(item).Forget(HandleFatalError);
+            _homeView.ItemSelected += OpenItem;
+            _homeView.SearchRequested += OpenSearch;
+            _homeView.FavoritesRequested += OpenFavorites;
             _homeView.RefreshRequested += () => RefreshHomeAsync().Forget(HandleFatalError);
             _homeView.LogoutRequested += Logout;
+            _browseView.ItemSelected += OpenItem;
+            _browseView.BackRequested += NavigateBrowseBack;
+            _browseView.HomeRequested += CloseBrowseToHome;
+            _browseView.SearchModeRequested += OpenSearch;
+            _browseView.FavoritesRequested += OpenFavorites;
+            _browseView.SearchSubmitted += query => SubmitSearchAsync(query).Forget(HandleFatalError);
+            _browseView.SortRequested += () => CycleBrowseSortAsync().Forget(HandleFatalError);
+            _browseView.FilterRequested += () => CycleBrowseFilterAsync().Forget(HandleFatalError);
+            _browseView.PreviousPageRequested += () => MoveBrowsePageAsync(-1).Forget(HandleFatalError);
+            _browseView.NextPageRequested += () => MoveBrowsePageAsync(1).Forget(HandleFatalError);
             _detailView.CloseRequested += CloseDetails;
             _detailView.PlayRequested += (item, position) => PlayAsync(item, position).Forget(HandleFatalError);
             _detailView.FavoriteStateChangeRequested += (item, isFavorite) =>
                 SetFavoriteStateAsync(item, isFavorite).Forget(HandleFatalError);
             _detailView.PlayedStateChangeRequested += (item, isPlayed) =>
                 SetPlayedStateAsync(item, isPlayed).Forget(HandleFatalError);
+            _detailView.RelatedItemSelected += OpenRelatedItem;
             _playerView.BackRequested += () => StopPlaybackAsync(false, null).Forget(HandleFatalError);
             _playerView.PauseStateChanged += paused => ReportForcedProgressAsync(paused).Forget(HandleNonFatalError);
             _playerView.PlaybackFailed += message =>
@@ -191,13 +231,286 @@ namespace JellyfinForRayNeo
             if (_detailView != null && _detailView.IsVisible)
             {
                 CloseDetails();
+                return;
+            }
+
+            if (_browseView != null && _browseView.IsVisible)
+            {
+                NavigateBrowseBack();
             }
         }
 
         private void CloseDetails()
         {
+            if (_detailHistory.Count > 1)
+            {
+                JellyfinItem previous = _detailHistory[_detailHistory.Count - 2];
+                ShowDetailsAsync(previous, DetailHistoryMode.Pop).Forget(HandleFatalError);
+                return;
+            }
+
             _detailView?.Hide();
-            _focusNavigator?.SelectPreferred("Hero Action", "Poster Card", "Refresh");
+            CancelAndDispose(ref _detailImages);
+            _detailHistory.Clear();
+            if (_detailReturnsToBrowse && _browseView != null)
+            {
+                _browseView.Show();
+                _focusNavigator?.SelectPreferred("Poster Card", "Search Input", "Browse Back");
+            }
+            else
+            {
+                _homeView?.Show(true);
+                _focusNavigator?.SelectPreferred("Hero Action", "Poster Card", "Home Search");
+            }
+        }
+
+        private void OpenItem(JellyfinItem item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            if (item.IsBrowsableContainer)
+            {
+                JellyfinBrowseState state = string.Equals(
+                    item.Type,
+                    "CollectionFolder",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? JellyfinBrowseState.ForLibrary(item)
+                    : JellyfinBrowseState.ForFolder(item);
+                BrowseHistoryMode historyMode = _browseView != null && _browseView.IsVisible
+                    ? BrowseHistoryMode.Push
+                    : BrowseHistoryMode.Reset;
+                ShowBrowseAsync(state, historyMode).Forget(HandleFatalError);
+                return;
+            }
+
+            ShowDetailsAsync(item, DetailHistoryMode.Reset).Forget(HandleFatalError);
+        }
+
+        private void OpenRelatedItem(JellyfinItem item)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            if (item.IsBrowsableContainer)
+            {
+                JellyfinBrowseState state = JellyfinBrowseState.ForFolder(item);
+                _detailView.Hide();
+                ShowBrowseAsync(state, BrowseHistoryMode.Push).Forget(HandleFatalError);
+                return;
+            }
+
+            ShowDetailsAsync(item, DetailHistoryMode.Push).Forget(HandleFatalError);
+        }
+
+        private void OpenSearch()
+        {
+            JellyfinBrowseState current = _browseView != null
+                ? _browseView.CurrentState
+                : null;
+            if (_browseView != null && _browseView.IsVisible && current != null && current.IsSearch)
+            {
+                _focusNavigator?.SelectPreferred("Search Input", "Submit Search");
+                return;
+            }
+
+            BrowseHistoryMode historyMode = _browseView != null && _browseView.IsVisible
+                ? BrowseHistoryMode.Push
+                : BrowseHistoryMode.Reset;
+            ShowBrowseAsync(
+                JellyfinBrowseState.ForSearch(),
+                historyMode).Forget(HandleFatalError);
+        }
+
+        private void OpenFavorites()
+        {
+            BrowseHistoryMode historyMode = _browseView != null && _browseView.IsVisible
+                ? BrowseHistoryMode.Push
+                : BrowseHistoryMode.Reset;
+            ShowBrowseAsync(
+                JellyfinBrowseState.ForFavorites(),
+                historyMode).Forget(HandleFatalError);
+        }
+
+        private void NavigateBrowseBack()
+        {
+            if (_browseHistory.Count <= 1)
+            {
+                CloseBrowseToHome();
+                return;
+            }
+
+            JellyfinBrowseState target = _browseHistory[_browseHistory.Count - 2].Clone();
+            ShowBrowseAsync(target, BrowseHistoryMode.Pop).Forget(HandleFatalError);
+        }
+
+        private void CloseBrowseToHome()
+        {
+            CancelAndDispose(ref _operation);
+            CancelAndDispose(ref _browseImages);
+            _browseHistory.Clear();
+            _detailHistory.Clear();
+            _browseView?.Hide();
+            _detailView?.Hide();
+            _homeView?.Show(true);
+            _detailReturnsToBrowse = false;
+            _focusNavigator?.SelectPreferred("Hero Action", "Poster Card", "Home Search");
+        }
+
+        private async Task SubmitSearchAsync(string query)
+        {
+            JellyfinBrowseState state = _browseView != null
+                ? _browseView.CurrentState
+                : JellyfinBrowseState.ForSearch();
+            if (state == null || !state.IsSearch)
+            {
+                state = JellyfinBrowseState.ForSearch();
+            }
+            state.SearchTerm = query != null ? query.Trim() : string.Empty;
+            state.Title = string.IsNullOrWhiteSpace(state.SearchTerm)
+                ? "搜索"
+                : "搜索 · " + state.SearchTerm;
+            state.StartIndex = 0;
+            await ShowBrowseAsync(state, BrowseHistoryMode.Replace);
+        }
+
+        private async Task CycleBrowseSortAsync()
+        {
+            JellyfinBrowseState state = _browseView != null
+                ? _browseView.CurrentState
+                : null;
+            if (state == null)
+            {
+                return;
+            }
+
+            state.Sort = (JellyfinBrowseSort)(((int)state.Sort + 1) % 3);
+            state.StartIndex = 0;
+            await ShowBrowseAsync(state, BrowseHistoryMode.Replace);
+        }
+
+        private async Task CycleBrowseFilterAsync()
+        {
+            JellyfinBrowseState state = _browseView != null
+                ? _browseView.CurrentState
+                : null;
+            if (state == null)
+            {
+                return;
+            }
+
+            if (string.Equals(state.Title, "我的收藏", StringComparison.Ordinal)
+                && state.Filter == JellyfinBrowseFilter.Favorite)
+            {
+                ShowToast("收藏页已经只显示收藏内容。", false);
+                return;
+            }
+
+            state.Filter = (JellyfinBrowseFilter)(((int)state.Filter + 1) % 4);
+            state.StartIndex = 0;
+            await ShowBrowseAsync(state, BrowseHistoryMode.Replace);
+        }
+
+        private async Task MoveBrowsePageAsync(int direction)
+        {
+            JellyfinBrowseState state = _browseView != null
+                ? _browseView.CurrentState
+                : null;
+            if (state == null || direction == 0)
+            {
+                return;
+            }
+
+            state.StartIndex = Math.Max(
+                0,
+                state.StartIndex + Math.Sign(direction) * Math.Max(1, state.PageSize));
+            await ShowBrowseAsync(state, BrowseHistoryMode.Replace);
+        }
+
+        private async Task ShowBrowseAsync(
+            JellyfinBrowseState state,
+            BrowseHistoryMode historyMode)
+        {
+            if (state == null || _api.Session == null)
+            {
+                return;
+            }
+
+            CancellationToken token = BeginOperation();
+            ShowLoading(true, state.IsSearch ? "正在搜索 Jellyfin…" : "正在加载媒体库…");
+            try
+            {
+                JellyfinQueryResult result = await _browseCatalog.LoadPageAsync(state, token);
+                token.ThrowIfCancellationRequested();
+                ReplaceBrowseImageToken();
+                ApplyBrowseHistory(state, historyMode);
+                _homeView.Show(false);
+                _detailView.Hide();
+                _browseView.SetPage(state, result, _browseImages.Token);
+                _detailReturnsToBrowse = false;
+                _focusNavigator?.SelectPreferred(
+                    state.IsSearch && string.IsNullOrWhiteSpace(state.SearchTerm)
+                        ? "Search Input"
+                        : "Poster Card",
+                    "Search Input",
+                    "Browse Back");
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception exception)
+            {
+                ShowToast(UserMessage(exception), true);
+            }
+            finally
+            {
+                ShowLoading(false);
+            }
+        }
+
+        private void ApplyBrowseHistory(
+            JellyfinBrowseState state,
+            BrowseHistoryMode historyMode)
+        {
+            JellyfinBrowseState snapshot = state.Clone();
+            switch (historyMode)
+            {
+                case BrowseHistoryMode.Reset:
+                    _browseHistory.Clear();
+                    _browseHistory.Add(snapshot);
+                    break;
+                case BrowseHistoryMode.Push:
+                    _browseHistory.Add(snapshot);
+                    break;
+                case BrowseHistoryMode.Pop:
+                    if (_browseHistory.Count > 1)
+                    {
+                        _browseHistory.RemoveAt(_browseHistory.Count - 1);
+                    }
+                    if (_browseHistory.Count == 0)
+                    {
+                        _browseHistory.Add(snapshot);
+                    }
+                    else
+                    {
+                        _browseHistory[_browseHistory.Count - 1] = snapshot;
+                    }
+                    break;
+                default:
+                    if (_browseHistory.Count == 0)
+                    {
+                        _browseHistory.Add(snapshot);
+                    }
+                    else
+                    {
+                        _browseHistory[_browseHistory.Count - 1] = snapshot;
+                    }
+                    break;
+            }
         }
 
         private void HandleCompanionLoginRequested(CompanionLoginRequest request)
@@ -540,8 +853,12 @@ namespace JellyfinForRayNeo
             _homeView.SetHeader(session);
             _homeView.SetSections(sections, _homeImages.Token);
             _loginView.Show(false);
+            _browseView.Hide();
             _detailView.Hide();
             _homeView.Show(true);
+            _browseHistory.Clear();
+            _detailHistory.Clear();
+            _detailReturnsToBrowse = false;
             _focusNavigator?.SelectPreferred("Hero Action", "Poster Card", "Refresh");
             _pendingServerUrl = session.ServerUrl;
             _pendingUserName = session.UserName;
@@ -577,13 +894,18 @@ namespace JellyfinForRayNeo
             }
         }
 
-        private async Task ShowDetailsAsync(JellyfinItem item)
+        private async Task ShowDetailsAsync(
+            JellyfinItem item,
+            DetailHistoryMode historyMode = DetailHistoryMode.Replace)
         {
             if (item == null)
             {
                 return;
             }
 
+            bool returnsToBrowse = historyMode == DetailHistoryMode.Reset
+                ? _browseView != null && _browseView.IsVisible
+                : _detailReturnsToBrowse;
             CancellationToken token = BeginOperation();
             ShowLoading(true, "正在加载详情与剧集…");
             try
@@ -591,15 +913,27 @@ namespace JellyfinForRayNeo
                 JellyfinItem details = await _api.GetItemAsync(item.Id, token);
                 token.ThrowIfCancellationRequested();
                 JellyfinItem resolvedItem = details ?? item;
-                List<JellyfinItem> episodes = await GetEpisodesForDetailAsync(resolvedItem, token);
+                Task<List<JellyfinItem>> episodesTask =
+                    GetEpisodesForDetailAsync(resolvedItem, token);
+                Task<List<JellyfinItem>> seasonsTask =
+                    GetSeasonsForDetailAsync(resolvedItem, token);
+                Task<List<JellyfinItem>> similarTask =
+                    GetSimilarForDetailAsync(resolvedItem, token);
+                await Task.WhenAll(episodesTask, seasonsTask, similarTask);
                 token.ThrowIfCancellationRequested();
                 ReplaceDetailImageToken();
+                _detailReturnsToBrowse = returnsToBrowse;
+                ApplyDetailHistory(resolvedItem, historyMode);
+                _homeView.Show(false);
+                _browseView.Hide();
                 _detailView.Show(
                     resolvedItem,
                     _api,
                     _imageCache,
                     _detailImages.Token,
-                    episodes);
+                    episodesTask.Result,
+                    seasonsTask.Result,
+                    similarTask.Result);
                 _focusNavigator?.SelectPreferred("Continue", "From Start", "Close");
             }
             catch (OperationCanceledException)
@@ -615,7 +949,7 @@ namespace JellyfinForRayNeo
             }
         }
 
-        private async Task<List<JellyfinItem>> GetEpisodesForDetailAsync(
+        private async Task<List<JellyfinItem>> GetSeasonsForDetailAsync(
             JellyfinItem item,
             CancellationToken cancellationToken)
         {
@@ -624,7 +958,9 @@ namespace JellyfinForRayNeo
             {
                 seriesId = item.Id;
             }
-            else if (item != null && string.Equals(item.Type, "Episode", StringComparison.OrdinalIgnoreCase))
+            else if (item != null
+                && (string.Equals(item.Type, "Season", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(item.Type, "Episode", StringComparison.OrdinalIgnoreCase)))
             {
                 seriesId = item.SeriesId;
             }
@@ -633,7 +969,124 @@ namespace JellyfinForRayNeo
                 return new List<JellyfinItem>();
             }
 
-            JellyfinQueryResult result = await _api.GetEpisodesAsync(seriesId, 500, cancellationToken);
+            try
+            {
+                JellyfinQueryResult result = await _api.GetSeasonsAsync(seriesId, cancellationToken);
+                return result != null && result.Items != null
+                    ? result.Items
+                    : new List<JellyfinItem>();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                HandleNonFatalError(exception);
+                return new List<JellyfinItem>();
+            }
+        }
+
+        private async Task<List<JellyfinItem>> GetSimilarForDetailAsync(
+            JellyfinItem item,
+            CancellationToken cancellationToken)
+        {
+            if (item == null || string.IsNullOrWhiteSpace(item.Id) || item.IsBrowsableContainer)
+            {
+                return new List<JellyfinItem>();
+            }
+
+            try
+            {
+                JellyfinQueryResult result = await _api.GetSimilarItemsAsync(
+                    item.Id,
+                    16,
+                    cancellationToken);
+                return result != null && result.Items != null
+                    ? result.Items
+                    : new List<JellyfinItem>();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                HandleNonFatalError(exception);
+                return new List<JellyfinItem>();
+            }
+        }
+
+        private void ApplyDetailHistory(
+            JellyfinItem item,
+            DetailHistoryMode historyMode)
+        {
+            switch (historyMode)
+            {
+                case DetailHistoryMode.Reset:
+                    _detailHistory.Clear();
+                    _detailHistory.Add(item);
+                    break;
+                case DetailHistoryMode.Push:
+                    _detailHistory.Add(item);
+                    break;
+                case DetailHistoryMode.Pop:
+                    if (_detailHistory.Count > 1)
+                    {
+                        _detailHistory.RemoveAt(_detailHistory.Count - 1);
+                    }
+                    if (_detailHistory.Count == 0)
+                    {
+                        _detailHistory.Add(item);
+                    }
+                    else
+                    {
+                        _detailHistory[_detailHistory.Count - 1] = item;
+                    }
+                    break;
+                default:
+                    if (_detailHistory.Count == 0)
+                    {
+                        _detailHistory.Add(item);
+                    }
+                    else
+                    {
+                        _detailHistory[_detailHistory.Count - 1] = item;
+                    }
+                    break;
+            }
+        }
+
+        private async Task<List<JellyfinItem>> GetEpisodesForDetailAsync(
+            JellyfinItem item,
+            CancellationToken cancellationToken)
+        {
+            string seriesId = null;
+            string seasonId = null;
+            if (item != null && string.Equals(item.Type, "Series", StringComparison.OrdinalIgnoreCase))
+            {
+                seriesId = item.Id;
+            }
+            else if (item != null && string.Equals(item.Type, "Season", StringComparison.OrdinalIgnoreCase))
+            {
+                seriesId = item.SeriesId;
+                seasonId = item.Id;
+            }
+            else if (item != null && string.Equals(item.Type, "Episode", StringComparison.OrdinalIgnoreCase))
+            {
+                seriesId = item.SeriesId;
+                seasonId = item.SeasonId;
+            }
+            if (string.IsNullOrWhiteSpace(seriesId))
+            {
+                return new List<JellyfinItem>();
+            }
+
+            JellyfinQueryResult result = await _api.GetEpisodesAsync(
+                seriesId,
+                seasonId,
+                500,
+                cancellationToken);
             return result != null && result.Items != null
                 ? result.Items
                 : new List<JellyfinItem>();
@@ -1083,12 +1536,16 @@ namespace JellyfinForRayNeo
             }
             CancelAndDispose(ref _operation);
             CancelAndDispose(ref _homeImages);
+            CancelAndDispose(ref _browseImages);
             CancelAndDispose(ref _detailImages);
             _sessionStore.ClearSession();
             _api.ClearSession();
             _companionBridge.ClearNativeSession();
             _detailView.Hide();
+            _browseView.Hide();
             _homeView.Show(false);
+            _browseHistory.Clear();
+            _detailHistory.Clear();
             ShowLogin(
                 "已退出当前 Jellyfin 用户，请在手机端重新连接。",
                 false,
@@ -1113,7 +1570,10 @@ namespace JellyfinForRayNeo
 
             ShowLoading(false);
             _homeView.Show(false);
+            _browseView.Hide();
             _detailView.Hide();
+            _browseHistory.Clear();
+            _detailHistory.Clear();
             _loginView.Show(true);
             _focusNavigator?.ClearSelection();
             _loginView.SetMessage(message, isError);
@@ -1176,6 +1636,7 @@ namespace JellyfinForRayNeo
 
             CancelAndDispose(ref _operation);
             CancelAndDispose(ref _homeImages);
+            CancelAndDispose(ref _browseImages);
             CancelAndDispose(ref _detailImages);
             if (_companionBridge != null)
             {
@@ -1214,6 +1675,12 @@ namespace JellyfinForRayNeo
         {
             CancelAndDispose(ref _homeImages);
             _homeImages = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        }
+
+        private void ReplaceBrowseImageToken()
+        {
+            CancelAndDispose(ref _browseImages);
+            _browseImages = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         }
 
         private void ReplaceDetailImageToken()

@@ -10,6 +10,7 @@ namespace JellyfinForRayNeo
         private bool _previousSendNavigationEvents = true;
         private Air3SDisplayController _displayController;
         private EventSystem _eventSystem;
+        private bool _showHelp;
 
         private void Awake()
         {
@@ -57,6 +58,10 @@ namespace JellyfinForRayNeo
             {
                 FindDisplayController()?.SetMode(Air3SDisplayMode.StereoVirtualScreen);
             }
+            if (Input.GetKeyDown(KeyCode.F1))
+            {
+                _showHelp = !_showHelp;
+            }
         }
 
         private void OnDisable()
@@ -71,17 +76,27 @@ namespace JellyfinForRayNeo
 
         private void OnGUI()
         {
+            if (!_showHelp)
+            {
+                GUI.Box(
+                    new Rect(14f, Mathf.Max(8f, Screen.height - 34f), 132f, 24f),
+                    "F1  调试说明");
+                return;
+            }
+
             Air3SDisplayController display = FindDisplayController();
             string displayMode = display != null
                 && display.ActiveMode == Air3SDisplayMode.StereoVirtualScreen
                     ? "立体屏幕（SBS 预览）"
                     : "镜像 2D";
+            float top = Mathf.Max(10f, Screen.height - 78f);
+            GUI.Box(new Rect(12f, top, 920f, 66f), string.Empty);
             GUI.Label(
-                new Rect(18f, 14f, 880f, 28f),
+                new Rect(24f, top + 8f, 890f, 26f),
                 "Air 3S 盲操调试：方向键/WASD 移动，Enter/Space 确认，Esc/Backspace 返回；1=镜像 2D，2=立体屏幕");
             GUI.Label(
-                new Rect(18f, 40f, 420f, 24f),
-                "当前显示模式：" + displayMode);
+                new Rect(24f, top + 34f, 520f, 24f),
+                "当前显示模式：" + displayMode + "  ·  F1 隐藏说明");
         }
 
         private void ConfigureEventSystem()
