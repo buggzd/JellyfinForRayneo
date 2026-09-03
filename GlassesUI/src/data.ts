@@ -16,6 +16,42 @@ export type MediaItem = {
   unwatched?: number
   folder?: boolean
   resolution?: string
+  overview?: string
+  tagline?: string
+  officialRating?: string
+  genres?: string[]
+  studios?: string[]
+  people?: Array<{ name: string; role: string; type: string }>
+  path?: string
+  dateCreated?: string
+  sourceType?: string
+  mediaType?: string
+  collectionType?: string
+  parentId?: string
+  seriesId?: string
+  seasonId?: string
+  indexNumber?: number
+  parentIndexNumber?: number
+  runtimeTicks?: number
+  playbackPositionTicks?: number
+  imageUrl?: string
+  backdropUrl?: string
+  logoUrl?: string
+  videoCodec?: string
+  audioCodec?: string
+  container?: string
+  width?: number
+  height?: number
+  bitrate?: number
+  canPlay?: boolean
+}
+
+export type MediaShelf = {
+  id: string
+  title: string
+  eyebrow: string
+  items: MediaItem[]
+  library?: boolean
 }
 
 export const featured: MediaItem = {

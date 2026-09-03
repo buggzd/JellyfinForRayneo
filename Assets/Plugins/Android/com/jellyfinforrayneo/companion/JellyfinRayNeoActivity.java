@@ -2131,6 +2131,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                         ? "Jellyfin 配置已保存。请连接 RayNeo Air 以浏览和播放。"
                         : "Jellyfin 已连接；会话仅在本次运行期间保留。";
                 applyCompanionState();
+                refreshGlassesWebBootstrap();
             }
         });
     }
@@ -2378,6 +2379,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 if (companionOverlay != null && !isFinishing()) {
                     applyCompanionState();
                 }
+                refreshGlassesWebBootstrap();
             }
         });
     }
@@ -2459,6 +2461,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 if (companionOverlay != null) {
                     applyCompanionState();
                 }
+                refreshGlassesWebBootstrap();
             }
         });
     }
@@ -3145,6 +3148,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         if (companionOverlay != null && !isFinishing()) {
             applyCompanionState();
         }
+        refreshGlassesWebBootstrap();
     }
 
     private void dismissFallbackPresentation() {

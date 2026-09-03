@@ -3617,6 +3617,138 @@ kbd {
   }
 }
 
+/* Runtime data integration */
+.is-spinning {
+  animation: spin 1.15s linear infinite;
+}
+
+.art-frame--real .art-frame__image {
+  inset: 0;
+  filter: saturate(1.03) contrast(1.04) brightness(.86);
+  transform: scale(1.015);
+}
+
+.art-frame--real .art-frame__orb {
+  opacity: .16;
+}
+
+.art-frame--real .art-frame__flare {
+  opacity: .34;
+}
+
+.meta-row__fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.meta-row__fact i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(220, 240, 247, .36);
+}
+
+.runtime-gate {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  overflow: hidden;
+  padding: 120px var(--safe-x) 90px;
+  background: #02070d;
+}
+
+.runtime-gate__header {
+  position: absolute;
+  z-index: 2;
+  top: 44px;
+  left: var(--safe-x);
+}
+
+.runtime-gate__content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: min(680px, 72vw);
+  min-height: 390px;
+  padding: 54px 62px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 42px;
+  text-align: center;
+}
+
+.runtime-gate__content::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(222, 248, 255, .09);
+  pointer-events: none;
+}
+
+.runtime-gate__orb {
+  display: grid;
+  width: 104px;
+  height: 104px;
+  margin-bottom: 27px;
+  place-items: center;
+  color: rgba(218, 249, 255, .9);
+  border-radius: 46% 54% 64% 36% / 52% 41% 59% 48%;
+  background: radial-gradient(circle at 30% 24%, rgba(255, 255, 255, .42), rgba(92, 205, 240, .18) 39%, rgba(9, 31, 46, .2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 0 66px rgba(70, 207, 255, .19);
+  animation: orb-float 4.2s ease-in-out infinite;
+}
+
+.runtime-gate__orb.is-loading {
+  color: #bcefff;
+}
+
+.runtime-gate__content > small {
+  color: rgba(157, 226, 247, .52);
+  font-size: 10px;
+  letter-spacing: .25em;
+}
+
+.runtime-gate__content h1 {
+  margin: 14px 0 13px;
+  font-size: clamp(34px, 4vw, 54px);
+  font-weight: 280;
+  letter-spacing: -.035em;
+}
+
+.runtime-gate__content p {
+  max-width: 520px;
+  margin: 0 0 31px;
+  color: rgba(220, 238, 246, .58);
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.runtime-gate__signal {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 10px;
+  gap: 10px;
+  color: rgba(216, 239, 247, .54);
+  font-size: 13px;
+}
+
+.runtime-gate__signal span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #9ff3d0;
+  box-shadow: 0 0 15px rgba(91, 255, 190, .8);
+  animation: status-pulse 2s ease-in-out infinite;
+}
+
+.empty-state.is-loading .empty-state__orb {
+  animation: orb-float 4s ease-in-out infinite;
+}
+
 @media (max-height: 820px) {
   :root {
     --header-h: 90px;

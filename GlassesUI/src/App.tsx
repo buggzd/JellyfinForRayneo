@@ -15,6 +15,7 @@ import {
   Keyboard,
   Languages,
   ListFilter,
+  LoaderCircle,
   LogOut,
   MonitorPlay,
   MoreHorizontal,
@@ -43,7 +44,14 @@ import {
   useRef,
   useState,
 } from 'react'
-import { byId, episodes, featured, mediaItems, shelves, type MediaItem } from './data'
+import {
+  episodes,
+  featured as demoFeatured,
+  mediaItems as demoMediaItems,
+  type MediaItem,
+  type MediaShelf,
+} from './data'
+import { useJellyfin, type JellyfinUiStatus } from './useJellyfin'
 
 type Page = 'home' | 'browse' | 'favorites' | 'search' | 'detail' | 'player'
 type Direction = 'up' | 'down' | 'left' | 'right'
@@ -287,16 +295,16 @@ function Logo({ compact = false }: { compact?: boolean }) {
   )
 }
 
-function AmbientBackground({ tone, dim = 0.45 }: { tone: number; dim?: number }) {
-  const image = new URL(
+function AmbientBackground({ tone, imageUrl, dim = 0.45 }: { tone: number; imageUrl?: string; dim?: number }) {
+  const fallbackImage = new URL(
     tone % 3 === 1 ? './assets/monochrome-flow.png' : './assets/crystal-flow.png',
     document.baseURI,
   ).href
   const style = {
-    '--tone': `${tone * 31}deg`,
+    '--tone': imageUrl ? '0deg' : `${tone * 31}deg`,
     '--drift-x': `${42 + (tone % 5) * 8}%`,
     '--dim': dim,
-    backgroundImage: `url(${image})`,
+    backgroundImage: `url(${imageUrl ?? fallbackImage})`,
   } as CSSProperties
 
   return (
@@ -310,18 +318,18 @@ function AmbientBackground({ tone, dim = 0.45 }: { tone: number; dim?: number })
 }
 
 function ArtFrame({ item, wide = false, className }: { item: MediaItem; wide?: boolean; className?: string }) {
-  const image = new URL(
+  const fallbackImage = new URL(
     item.art % 3 === 1 ? './assets/monochrome-flow.png' : './assets/crystal-flow.png',
     document.baseURI,
   ).href
   const style = {
-    '--art-hue': `${item.art * 28}deg`,
-    '--art-x': `${30 + (item.art % 5) * 14}%`,
-    '--art-y': `${30 + (item.art % 4) * 15}%`,
-    backgroundImage: `url(${image})`,
+    '--art-hue': item.imageUrl ? '0deg' : `${item.art * 28}deg`,
+    '--art-x': item.imageUrl ? '50%' : `${30 + (item.art % 5) * 14}%`,
+    '--art-y': item.imageUrl ? '50%' : `${30 + (item.art % 4) * 15}%`,
+    backgroundImage: `url(${item.imageUrl ?? fallbackImage})`,
   } as CSSProperties
   return (
-    <div className={cx('art-frame', wide ? 'art-frame--wide' : 'art-frame--poster', className)}>
+    <div className={cx('art-frame', item.imageUrl && 'art-frame--real', wide ? 'art-frame--wide' : 'art-frame--poster', className)}>
       <div className="art-frame__image" style={style} />
       <div className={`art-frame__orb art-frame__orb--${item.art % 4}`} />
       <div className="art-frame__flare" />
@@ -339,10 +347,13 @@ type HeaderProps = {
   onNavigate: (page: Page) => void
   onRefresh: () => void
   onExit: () => void
+  serverName: string
+  userName: string
+  refreshing?: boolean
   minimal?: boolean
 }
 
-function PageHeader({ active, onNavigate, onRefresh, onExit, minimal = false }: HeaderProps) {
+function PageHeader({ active, onNavigate, onRefresh, onExit, serverName, userName, refreshing = false, minimal = false }: HeaderProps) {
   return (
     <aside className={cx('page-header', 'side-navigation', minimal && 'side-navigation--minimal')} aria-label="全局导航">
       <span className="side-navigation__backdrop" aria-hidden="true" />
@@ -357,9 +368,9 @@ function PageHeader({ active, onNavigate, onRefresh, onExit, minimal = false }: 
           <Logo compact />
         </FocusButton>
 
-        <div className="side-navigation__profile" aria-label="当前用户 泠">
+        <div className="side-navigation__profile" aria-label={`当前用户 ${userName}`}>
           <span className="side-navigation__avatar"><UserRound size={19} /></span>
-          <span className="side-navigation__profile-copy"><small>晚上好</small><strong>泠</strong></span>
+          <span className="side-navigation__profile-copy"><small>已登录</small><strong>{userName || 'Jellyfin 用户'}</strong></span>
         </div>
 
         <nav className="main-nav" aria-label="主导航">
@@ -370,13 +381,13 @@ function PageHeader({ active, onNavigate, onRefresh, onExit, minimal = false }: 
         </nav>
 
         <div className="header-spacer" />
-        <div className="side-navigation__server" aria-label="当前 Jellyfin 服务器 海面以下">
+        <div className="side-navigation__server" aria-label={`当前 Jellyfin 服务器 ${serverName}`}>
           <span className="server-pill__pulse" />
-          <span><small>JELLYFIN SERVER</small><strong>海面以下</strong></span>
+          <span><small>JELLYFIN SERVER</small><strong>{serverName || 'Jellyfin'}</strong></span>
         </div>
         <nav className="side-navigation__utilities" aria-label="服务器操作">
-          <FocusButton className="side-navigation__item" variant="ghost" icon={<RefreshCw size={21} />} onClick={onRefresh}>刷新媒体库</FocusButton>
-          <FocusButton className="side-navigation__item" variant="ghost" icon={<LogOut size={21} />} onClick={onExit}>退出服务器</FocusButton>
+          <FocusButton className="side-navigation__item" variant="ghost" disabled={refreshing} icon={<RefreshCw className={cx(refreshing && 'is-spinning')} size={21} />} onClick={onRefresh}>{refreshing ? '正在刷新' : '刷新媒体库'}</FocusButton>
+          <FocusButton className="side-navigation__item" variant="ghost" icon={<LogOut size={21} />} onClick={onExit}>管理登录</FocusButton>
         </nav>
       </div>
     </aside>
@@ -384,12 +395,11 @@ function PageHeader({ active, onNavigate, onRefresh, onExit, minimal = false }: 
 }
 
 function MetaRow({ item }: { item: MediaItem }) {
+  const facts = [item.year, item.kind, item.duration].filter(Boolean)
   return (
     <div className="meta-row">
-      <span>{item.year}</span><i />
-      <span>{item.kind}</span><i />
-      <span>{item.duration}</span><i />
-      <span className="rating"><Star size={16} fill="currentColor" /> {item.rating}</span>
+      {facts.map((fact, index) => <span className="meta-row__fact" key={fact}>{fact}{index < facts.length - 1 && <i />}</span>)}
+      {item.rating && <span className="rating"><Star size={16} fill="currentColor" /> {item.rating}</span>}
       {item.resolution && <span className="meta-badge">{item.resolution}</span>}
     </div>
   )
@@ -441,12 +451,22 @@ function MediaCard({
 }
 
 function HomePage({
+  featured,
+  shelves,
+  serverName,
+  userName,
+  refreshing,
   onNavigate,
   onOpen,
   onPreview,
   onRefresh,
   onExit,
 }: {
+  featured: MediaItem
+  shelves: MediaShelf[]
+  serverName: string
+  userName: string
+  refreshing: boolean
   onNavigate: (page: Page) => void
   onOpen: (item: MediaItem) => void
   onPreview: (item: MediaItem) => void
@@ -455,22 +475,24 @@ function HomePage({
 }) {
   return (
     <div className="home-page page-enter">
-      <PageHeader active="home" onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
+      <PageHeader active="home" serverName={serverName} userName={userName} refreshing={refreshing} onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
       <section className="hero-section">
         <div className="hero-section__copy">
-          <div className="hero-eyebrow"><Sparkles size={17} /> LUCENT 本周推荐</div>
+          <div className="hero-eyebrow"><Sparkles size={17} /> LUCENT 为你推荐</div>
           <p className="hero-original">{featured.original}</p>
           <h1>{featured.title}</h1>
-          <p className="hero-tagline">「越向下潜，记忆越接近光。」</p>
+          {featured.tagline && <p className="hero-tagline">「{featured.tagline}」</p>}
           <MetaRow item={featured} />
-          <p className="hero-overview">一支深海测绘队在海沟底部发现了一段不属于任何已知文明的记忆。每一次回放，都让他们忘记一部分自己。</p>
-          <div className="hero-progress">
-            <div><span>上次看到</span><strong>S01 E03 · 潮汐记忆</strong></div>
-            <span>38%</span>
-            <i><b style={{ width: '38%' }} /></i>
-          </div>
+          <p className="hero-overview">{featured.overview || featured.subtitle}</p>
+          {featured.progress !== undefined && featured.progress > 0 && (
+            <div className="hero-progress">
+              <div><span>继续观看</span><strong>{featured.subtitle}</strong></div>
+              <span>{featured.progress}%</span>
+              <i><b style={{ width: `${featured.progress}%` }} /></i>
+            </div>
+          )}
           <div className="hero-actions">
-            <FocusButton variant="primary" autoFocusTarget icon={<Play size={22} fill="currentColor" />} onClick={() => onOpen(featured)} onFocus={() => onPreview(featured)}>继续观看</FocusButton>
+            <FocusButton variant="primary" autoFocusTarget icon={featured.folder ? <Grid3X3 size={22} /> : <Play size={22} fill="currentColor" />} onClick={() => featured.folder ? onNavigate('browse') : onOpen(featured)} onFocus={() => onPreview(featured)}>{featured.folder ? '浏览媒体库' : featured.progress ? '继续观看' : '立即观看'}</FocusButton>
             <FocusButton variant="glass" icon={<Info size={21} />} onClick={() => onOpen(featured)} onFocus={() => onPreview(featured)}>查看详情</FocusButton>
           </div>
         </div>
@@ -478,12 +500,12 @@ function HomePage({
           <span className="hero-sculpture__orbit hero-sculpture__orbit--outer" />
           <span className="hero-sculpture__orbit hero-sculpture__orbit--inner" />
           <span className="hero-sculpture__core"><i /><b /></span>
-          <span className="hero-sculpture__coordinate">31.74° N / MEMORY NODE 03</span>
+          <span className="hero-sculpture__coordinate">JELLYFIN / {featured.id.slice(0, 8).toLocaleUpperCase()}</span>
         </div>
         <div className="hero-section__edition">
-          <span>ORIGINAL SERIES</span>
-          <strong>01</strong>
-          <small>SEASON</small>
+          <span>{featured.sourceType ?? 'MEDIA'}</span>
+          <strong>{featured.indexNumber ? String(featured.indexNumber).padStart(2, '0') : '◈'}</strong>
+          <small>{featured.year ?? 'LUCENT'}</small>
         </div>
         <div className="hero-section__scroll-cue"><span /> 向下探索</div>
       </section>
@@ -496,11 +518,11 @@ function HomePage({
               <FocusButton variant="ghost" trailing={<ChevronRight size={18} />} onClick={() => onNavigate('browse')}>查看全部</FocusButton>
             </header>
             <div className="shelf__rail">
-              {shelf.ids.map((id, cardIndex) => (
+              {shelf.items.map((item, cardIndex) => (
                 <MediaCard
-                  key={`${shelf.title}-${id}`}
-                  item={byId(id)}
-                  library={shelfIndex === 0}
+                  key={`${shelf.id}-${item.id}`}
+                  item={item}
+                  library={Boolean(shelf.library)}
                   onOpen={onOpen}
                   onPreview={onPreview}
                   autoFocusTarget={shelfIndex === 0 && cardIndex === 0}
@@ -516,15 +538,6 @@ function HomePage({
 }
 
 type BrowseMode = 'library' | 'favorites' | 'search'
-
-const nestedFolderItems: MediaItem[] = [
-  { id: 'raw-aerial', title: '无人机原始素材', subtitle: '文件夹 · 12 项', kind: '文件夹', art: 4, folder: true },
-  { id: 'reef-log', title: '珊瑚礁观察日志', subtitle: '2026-08-14 · 18 分钟', kind: '视频', art: 1, duration: '18 分钟', resolution: '4K' },
-  { id: 'night-dive', title: '夜潜记录 07', subtitle: '2026-08-02 · 42 分钟', kind: '视频', art: 7, duration: '42 分钟', progress: 26, favorite: true, resolution: '4K' },
-  { id: 'lecture-cut', title: '海洋声学讲座', subtitle: '课程 · 第 5 章', kind: '课程', art: 9, duration: '54 分钟', unwatched: 1 },
-  { id: 'export-master', title: '成片导出', subtitle: '文件夹 · 8 项', kind: '文件夹', art: 11, folder: true },
-  { id: 'sample-01', title: '水下采样 01', subtitle: '2026-07-28 · 09 分钟', kind: '视频', art: 2, duration: '09 分钟', watched: true },
-]
 
 const qwertyRows = [
   ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
@@ -570,6 +583,14 @@ function findPinyinCandidates(value: string) {
 
 function BrowsePage({
   mode,
+  items,
+  favorites,
+  searchSeed,
+  serverName,
+  userName,
+  refreshing,
+  onLoadFolder,
+  onSearch,
   onNavigate,
   onOpen,
   onPreview,
@@ -577,19 +598,30 @@ function BrowsePage({
   onExit,
 }: {
   mode: BrowseMode
+  items: MediaItem[]
+  favorites: MediaItem[]
+  searchSeed: MediaItem[]
+  serverName: string
+  userName: string
+  refreshing: boolean
+  onLoadFolder: (parentId: string) => Promise<MediaItem[]>
+  onSearch: (query: string) => Promise<MediaItem[]>
   onNavigate: (page: Page) => void
   onOpen: (item: MediaItem) => void
   onPreview: (item: MediaItem) => void
   onRefresh: () => void
   onExit: () => void
 }) {
-  const [path, setPath] = useState<string[]>([])
+  const [path, setPath] = useState<Array<{ item: MediaItem; children: MediaItem[] }>>([])
   const [filter, setFilter] = useState<'all' | 'unwatched' | 'continue' | 'favorite'>('all')
   const [sort, setSort] = useState<'最近加入' | '名称' | '评分最高'>('最近加入')
   const [query, setQuery] = useState('')
   const [composition, setComposition] = useState('')
   const [keyboardMode, setKeyboardMode] = useState<'zh' | 'en'>('zh')
   const [page, setPage] = useState(1)
+  const [folderLoading, setFolderLoading] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const [searchResults, setSearchResults] = useState<MediaItem[]>([])
 
   const keyboardRows = keyboardMode === 'zh'
     ? qwertyRows
@@ -600,22 +632,39 @@ function BrowsePage({
   const pinyinCandidates = useMemo(() => findPinyinCandidates(composition), [composition])
   const keyboardSuggestions = composition ? pinyinCandidates : ['深海', '科幻', '4K', '课程', '收藏']
 
-  const baseItems = useMemo(() => {
-    if (mode === 'favorites') return mediaItems.filter((item) => item.favorite)
-    if (mode === 'search') {
-      if (!query) return mediaItems.slice(0, 8)
-      if (query === '未知信号') return []
-      if (query === '课程') return [...mediaItems.filter((item) => item.kind === '课程' || item.folder), nestedFolderItems[3]]
-      if (query === '4K') return mediaItems.filter((item) => item.resolution === '4K')
-      if (query === '科幻') return mediaItems.filter((item) => ['电影', '剧集'].includes(item.kind)).slice(0, 8)
-      if (query === '高分') return mediaItems.filter((item) => Number(item.rating ?? 0) >= 8.7)
-      if (query === '收藏') return mediaItems.filter((item) => item.favorite)
-      if (query === '继续') return mediaItems.filter((item) => item.progress && item.progress > 0)
-      const needle = query.toLocaleLowerCase()
-      return mediaItems.filter((item) => `${item.title} ${item.original ?? ''} ${item.subtitle} ${item.kind} ${item.resolution ?? ''}`.toLocaleLowerCase().includes(needle))
+  useEffect(() => {
+    if (mode !== 'search') return
+    if (!query.trim()) {
+      setSearchResults(searchSeed.slice(0, 12))
+      setSearching(false)
+      return
     }
-    return path.length ? nestedFolderItems : mediaItems
-  }, [mode, path.length, query])
+
+    let active = true
+    setSearching(true)
+    const timer = window.setTimeout(() => {
+      onSearch(query).then((results) => {
+        if (active) setSearchResults(results)
+      }).catch(() => {
+        if (active) setSearchResults([])
+      }).finally(() => {
+        if (active) setSearching(false)
+      })
+    }, 280)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [mode, onSearch, query, searchSeed])
+
+  const baseItems = useMemo(() => {
+    if (mode === 'favorites') return favorites
+    if (mode === 'search') {
+      if (!query) return searchSeed.slice(0, 12)
+      return searchResults
+    }
+    return path.length ? path[path.length - 1].children : items
+  }, [favorites, items, mode, path, query, searchResults, searchSeed])
 
   const shownItems = useMemo(() => {
     let result = [...baseItems]
@@ -627,14 +676,26 @@ function BrowsePage({
     return result
   }, [baseItems, filter, sort])
 
-  const title = mode === 'favorites' ? '我的收藏' : mode === 'search' ? '全局搜索' : path.at(-1) ?? '媒体库'
+  const totalPages = Math.max(1, Math.ceil(shownItems.length / 12))
+  const pagedItems = shownItems.slice((page - 1) * 12, page * 12)
+  const title = mode === 'favorites' ? '我的收藏' : mode === 'search' ? '全局搜索' : path.at(-1)?.item.title ?? '媒体库'
   const eyebrow = mode === 'favorites' ? 'SAVED MOMENTS' : mode === 'search' ? 'SEARCH EVERYWHERE' : path.length ? 'FOLDER VIEW' : 'ALL LIBRARIES'
 
-  const openItem = (item: MediaItem) => {
+  useEffect(() => {
+    setPage((value) => Math.min(value, totalPages))
+  }, [totalPages])
+
+  const openItem = async (item: MediaItem) => {
     if (item.folder && mode === 'library') {
-      setPath((current) => [...current, item.title])
-      setPage(1)
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      setFolderLoading(true)
+      try {
+        const children = await onLoadFolder(item.id)
+        setPath((current) => [...current, { item, children }])
+        setPage(1)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      } finally {
+        setFolderLoading(false)
+      }
       return
     }
     onOpen(item)
@@ -689,6 +750,9 @@ function BrowsePage({
     <div className={cx('browse-page', mode === 'search' && 'browse-page--search', 'page-enter')}>
       <PageHeader
         active={mode === 'favorites' ? 'favorites' : mode === 'search' ? 'search' : 'browse'}
+        serverName={serverName}
+        userName={userName}
+        refreshing={refreshing}
         onNavigate={onNavigate}
         onRefresh={onRefresh}
         onExit={onExit}
@@ -698,11 +762,11 @@ function BrowsePage({
           <FocusButton variant="round" label="返回上一级" onClick={() => path.length ? setPath((current) => current.slice(0, -1)) : onNavigate('home')}><ArrowLeft size={20} /></FocusButton>
           <FocusButton variant="ghost" onClick={() => { setPath([]); onNavigate('home') }}><Home size={16} /> 首页</FocusButton>
           {mode === 'library' && <><ChevronRight size={15} /><FocusButton variant="ghost" active={!path.length} onClick={() => setPath([])}>媒体库</FocusButton></>}
-          {path.map((crumb, index) => <span className="breadcrumb-part" key={`${crumb}-${index}`}><ChevronRight size={15} /><FocusButton variant="ghost" active={index === path.length - 1} onClick={() => setPath((current) => current.slice(0, index + 1))}>{crumb}</FocusButton></span>)}
+          {path.map((crumb, index) => <span className="breadcrumb-part" key={crumb.item.id}><ChevronRight size={15} /><FocusButton variant="ghost" active={index === path.length - 1} onClick={() => setPath((current) => current.slice(0, index + 1))}>{crumb.item.title}</FocusButton></span>)}
         </div>
 
         <header className="browse-title-row">
-          <div><small>{eyebrow}</small><h1>{title}</h1><p>{mode === 'search' ? composition ? `正在输入拼音 “${composition}”` : query ? `正在所有媒体库中查找 “${query}”` : '使用遥控器与屏幕键盘搜索全部媒体库' : `${baseItems.length} 个项目 · Jellyfin / 海面以下`}</p></div>
+          <div><small>{eyebrow}</small><h1>{title}</h1><p>{mode === 'search' ? composition ? `正在输入拼音 “${composition}”` : searching ? `正在 Jellyfin 中查找 “${query}”` : query ? `正在所有媒体库中查找 “${query}”` : '使用遥控器与屏幕键盘搜索全部媒体库' : `${baseItems.length} 个项目 · Jellyfin / ${serverName}`}</p></div>
           <div className="layout-indicator"><Grid3X3 size={18} /><span>{path.length ? '横向缩略图' : '海报网格'}</span></div>
         </header>
 
@@ -717,7 +781,7 @@ function BrowsePage({
                 </strong>
               </div>
               <span className="search-console__cursor" />
-              <span className="search-console__count">{composition ? '选择候选词' : query ? `${shownItems.length} 个结果` : '为你推荐'}</span>
+              <span className="search-console__count">{composition ? '选择候选词' : searching ? '搜索中…' : query ? `${shownItems.length} 个结果` : '为你推荐'}</span>
               <FocusButton variant="round" label="删除最后一个字符" disabled={!query && !composition} onClick={eraseSearchCharacter}><ArrowLeft size={21} /></FocusButton>
             </section>
 
@@ -785,9 +849,16 @@ function BrowsePage({
           </div>
         </section>
 
-        {shownItems.length ? (
+        {folderLoading ? (
+          <section className="empty-state glass-panel is-loading">
+            <div className="empty-state__orb"><LoaderCircle className="is-spinning" size={32} /></div>
+            <small>READING LIBRARY</small>
+            <h2>正在展开媒体库</h2>
+            <p>从 Jellyfin 读取这个目录的内容…</p>
+          </section>
+        ) : shownItems.length ? (
           <section className={cx('media-grid', mode === 'search' && 'search-results', path.length > 0 && 'media-grid--wide')}>
-            {shownItems.map((item, index) => (
+            {pagedItems.map((item, index) => (
               <MediaCard
                 key={item.id}
                 item={item}
@@ -812,8 +883,8 @@ function BrowsePage({
           <span>第 {(page - 1) * 12 + (shownItems.length ? 1 : 0)}–{Math.min(page * 12, shownItems.length)} 项 / 共 {shownItems.length} 项</span>
           <div>
             <FocusButton variant="round" label="上一页" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={21} /></FocusButton>
-            <span className="pagination__page">{String(page).padStart(2, '0')} <i /> 01</span>
-            <FocusButton variant="round" label="下一页" disabled={page >= 1} onClick={() => setPage((value) => value + 1)}><ChevronRight size={21} /></FocusButton>
+            <span className="pagination__page">{String(page).padStart(2, '0')} <i /> {String(totalPages).padStart(2, '0')}</span>
+            <FocusButton variant="round" label="下一页" disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}><ChevronRight size={21} /></FocusButton>
           </div>
         </footer>
       </main>
@@ -824,6 +895,9 @@ function BrowsePage({
 
 function DetailPage({
   item,
+  serverName,
+  userName,
+  refreshing,
   onNavigate,
   onPlay,
   onOpen,
@@ -832,6 +906,9 @@ function DetailPage({
   onExit,
 }: {
   item: MediaItem
+  serverName: string
+  userName: string
+  refreshing: boolean
   onNavigate: (page: Page) => void
   onPlay: () => void
   onOpen: (item: MediaItem) => void
@@ -854,7 +931,7 @@ function DetailPage({
 
   return (
     <div className="detail-page page-enter">
-      <PageHeader active="none" minimal onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
+      <PageHeader active="none" minimal serverName={serverName} userName={userName} refreshing={refreshing} onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
       <main className="detail-content">
         <FocusButton variant="round" className="detail-back" label="返回" onClick={() => onNavigate('home')}><ArrowLeft size={22} /></FocusButton>
         <section className="detail-hero">
@@ -940,7 +1017,7 @@ function DetailPage({
             <section className="similar-section detail-tab-panel">
               <header className="section-heading"><div><small>SIMILAR FREQUENCIES</small><h2>更多类似内容</h2></div></header>
               <div className="shelf__rail">
-                {mediaItems.slice(1, 7).map((related) => <MediaCard key={related.id} item={related} wide onOpen={onOpen} onPreview={onPreview} />)}
+                {demoMediaItems.slice(1, 7).map((related) => <MediaCard key={related.id} item={related} wide onOpen={onOpen} onPreview={onPreview} />)}
               </div>
             </section>
           )}
@@ -1197,18 +1274,80 @@ function RemoteHint({ dark = false }: { dark?: boolean }) {
       <span><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> / WASD 移动</span>
       <span><kbd>ENTER</kbd> 确认</span>
       <span><kbd>ESC</kbd> 返回</span>
-      <span className="remote-hint__demo">1–5 页面预览</span>
+      {import.meta.env.DEV && <span className="remote-hint__demo">1–5 页面预览</span>}
+    </div>
+  )
+}
+
+function RuntimeGate({
+  status,
+  error,
+  onRetry,
+}: {
+  status: JellyfinUiStatus
+  error: string
+  onRetry: () => void
+}) {
+  const busy = status === 'booting' || status === 'loading'
+  const title = status === 'no-session'
+    ? '请在手机端登录 Jellyfin'
+    : status === 'error'
+      ? '媒体库连接失败'
+      : '正在点亮你的媒体库'
+  const description = status === 'no-session'
+    ? '眼镜画面已经就绪。请使用手机端完成账号登录，媒体内容会自动出现在这里。'
+    : status === 'error'
+      ? error || '无法读取 Jellyfin 数据，请检查手机端登录状态与服务器网络。'
+      : '正在读取媒体库、观看进度与收藏状态。'
+
+  return (
+    <div className="runtime-gate page-enter">
+      <AmbientBackground tone={2} dim={0.62} />
+      <header className="runtime-gate__header"><Logo /></header>
+      <main className="runtime-gate__content glass-panel">
+        <div className={cx('runtime-gate__orb', busy && 'is-loading')}>
+          {busy ? <LoaderCircle className="is-spinning" size={38} /> : <Server size={38} />}
+        </div>
+        <small>{status === 'no-session' ? 'PHONE SIGN-IN REQUIRED' : busy ? 'SYNCING JELLYFIN' : 'CONNECTION INTERRUPTED'}</small>
+        <h1>{title}</h1>
+        <p>{description}</p>
+        {!busy && status === 'error' && (
+          <FocusButton variant="primary" autoFocusTarget icon={<RefreshCw size={20} />} onClick={onRetry}>重新连接</FocusButton>
+        )}
+        {status === 'no-session' && <div className="runtime-gate__signal"><span /> 手机端登录完成后自动刷新</div>}
+      </main>
+      <RemoteHint dark />
     </div>
   )
 }
 
 export default function App() {
+  const jellyfin = useJellyfin()
   const [page, setPage] = useState<Page>('home')
   const [history, setHistory] = useState<Page[]>([])
-  const [selected, setSelected] = useState<MediaItem>(featured)
-  const [backdropTone, setBackdropTone] = useState(featured.art)
+  const [selected, setSelected] = useState<MediaItem>(demoFeatured)
+  const [backdropItem, setBackdropItem] = useState<MediaItem>(demoFeatured)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | null>(null)
+
+  const serverName = jellyfin.runtime?.session?.serverName
+    || jellyfin.runtime?.session?.serverUrl.replace(/^https?:\/\//i, '')
+    || 'Jellyfin'
+  const userName = jellyfin.runtime?.session?.userName || 'Jellyfin 用户'
+
+  useEffect(() => {
+    const snapshot = jellyfin.snapshot
+    if (!snapshot) return
+    const available = [
+      snapshot.featured,
+      ...snapshot.libraries,
+      ...snapshot.allItems,
+      ...snapshot.favorites,
+      ...snapshot.shelves.flatMap((shelf) => shelf.items),
+    ]
+    setSelected((current) => available.find((item) => item.id === current.id) ?? snapshot.featured)
+    setBackdropItem((current) => available.find((item) => item.id === current.id) ?? snapshot.featured)
+  }, [jellyfin.snapshot])
 
   const navigate = useCallback((next: Page) => {
     if (next === page) return
@@ -1241,9 +1380,19 @@ export default function App() {
     toastTimer.current = window.setTimeout(() => setToast(null), 2200)
   }, [])
 
+  const refreshLibrary = useCallback(() => {
+    void jellyfin.refresh().then((succeeded) => {
+      showToast(succeeded ? '媒体库已刷新' : '刷新失败，请检查 Jellyfin 服务器')
+    })
+  }, [jellyfin.refresh, showToast])
+
+  const manageLogin = useCallback(() => {
+    showToast('请在手机端管理 Jellyfin 登录')
+  }, [showToast])
+
   const openItem = useCallback((item: MediaItem) => {
     setSelected(item)
-    setBackdropTone(item.art)
+    setBackdropItem(item)
     if (item.folder) navigate('browse')
     else navigate('detail')
   }, [navigate])
@@ -1273,7 +1422,7 @@ export default function App() {
         return
       }
 
-      if (['1', '2', '3', '4', '5'].includes(key)) {
+      if (import.meta.env.DEV && ['1', '2', '3', '4', '5'].includes(key)) {
         event.preventDefault()
         const pages: Page[] = ['home', 'browse', 'favorites', 'detail', 'player']
         navigateDirect(pages[Number(key) - 1])
@@ -1321,18 +1470,30 @@ export default function App() {
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
   }, [])
 
+  if (jellyfin.status !== 'ready' || !jellyfin.snapshot) {
+    return (
+      <RuntimeGate
+        status={jellyfin.status}
+        error={jellyfin.error}
+        onRetry={() => { void jellyfin.retry() }}
+      />
+    )
+  }
+
+  const snapshot = jellyfin.snapshot
+
   const pageNode = (() => {
-    if (page === 'home') return <HomePage onNavigate={navigate} onOpen={openItem} onPreview={(item) => setBackdropTone(item.art)} onRefresh={() => showToast('正在刷新 · 已是最新状态')} onExit={() => showToast('当前设备已保持配对')} />
+    if (page === 'home') return <HomePage featured={snapshot.featured} shelves={snapshot.shelves} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={navigate} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     if (page === 'browse' || page === 'favorites' || page === 'search') {
-      return <BrowsePage key={page} mode={page === 'browse' ? 'library' : page} onNavigate={navigate} onOpen={openItem} onPreview={(item) => setBackdropTone(item.art)} onRefresh={() => showToast('媒体库已刷新')} onExit={() => showToast('当前设备已保持配对')} />
+      return <BrowsePage key={page} mode={page === 'browse' ? 'library' : page} items={snapshot.libraries} favorites={snapshot.favorites} searchSeed={snapshot.allItems} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onSearch={jellyfin.search} onNavigate={navigate} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     }
-    if (page === 'detail') return <DetailPage key={selected.id} item={selected} onNavigate={(next) => next === 'home' ? goBack() : navigate(next)} onPlay={() => navigate('player')} onOpen={openItem} onPreview={(item) => setBackdropTone(item.art)} onRefresh={() => showToast('元数据已刷新')} onExit={() => showToast('当前设备已保持配对')} />
+    if (page === 'detail') return <DetailPage key={selected.id} item={selected} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigate(next)} onPlay={() => navigate('player')} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     return <PlayerPage item={selected} onBack={goBack} />
   })()
 
   return (
     <div className={cx('app', `app--${page}`)}>
-      {page !== 'player' && <AmbientBackground tone={backdropTone} dim={page === 'home' ? 0.72 : page === 'detail' ? 0.48 : 0.42} />}
+      {page !== 'player' && <AmbientBackground tone={backdropItem.art} imageUrl={backdropItem.backdropUrl} dim={page === 'home' ? 0.72 : page === 'detail' ? 0.48 : 0.42} />}
       {pageNode}
       {toast && <div className="toast"><span><Check size={18} /></span>{toast}</div>}
       <svg className="svg-filters" aria-hidden="true">
