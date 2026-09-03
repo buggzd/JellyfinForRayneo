@@ -53,6 +53,7 @@ namespace JellyfinForRayNeo
         private Image _toastSurface;
         private Image _toastAccent;
         private Image _toastStatusDot;
+        private VolumeOverlayView _volumeOverlay;
         private float _toastHideAt;
         private float _nextProgressCheck;
         private bool _stoppingPlayback;
@@ -89,6 +90,7 @@ namespace JellyfinForRayNeo
             _companionBridge.QuickConnectCancelRequested += HandleCompanionQuickConnectCancelRequested;
             _companionBridge.SessionAvailable += HandleCompanionSessionAvailable;
             _companionBridge.RemoteCommandReceived += HandleRemoteCommand;
+            _companionBridge.VolumeChanged += HandleVolumeChanged;
             _companionBridge.PublishState(
                 CompanionLoginState.Initializing,
                 "正在启动 Jellyfin 客户端…",
@@ -189,7 +191,8 @@ namespace JellyfinForRayNeo
             _browseView.HomeRequested += CloseBrowseToHome;
             _browseView.SearchModeRequested += OpenSearch;
             _browseView.FavoritesRequested += OpenFavorites;
-            _browseView.SearchSubmitted += query => SubmitSearchAsync(query).Forget(HandleFatalError);
+            _browseView.SearchInitialSelected += initial =>
+                SelectSearchInitialAsync(initial).Forget(HandleFatalError);
             _browseView.SortRequested += () => CycleBrowseSortAsync().Forget(HandleFatalError);
             _browseView.FilterRequested += () => CycleBrowseFilterAsync().Forget(HandleFatalError);
             _browseView.PreviousPageRequested += () => MoveBrowsePageAsync(-1).Forget(HandleFatalError);
@@ -225,6 +228,11 @@ namespace JellyfinForRayNeo
             }
 
             _focusNavigator?.Handle(command);
+        }
+
+        private void HandleVolumeChanged(int percentage)
+        {
+            _volumeOverlay?.Show(percentage);
         }
 
         private void SelectInScope(Transform scope, params string[] preferredNames)
@@ -286,7 +294,7 @@ namespace JellyfinForRayNeo
                 SelectInScope(
                     _browseView.FocusRoot,
                     "Poster Card",
-                    "Search Input",
+                    _browseView.PreferredSearchFocusName,
                     "Browse Back");
             }
             else
@@ -350,7 +358,11 @@ namespace JellyfinForRayNeo
                 : null;
             if (_browseView != null && _browseView.IsVisible && current != null && current.IsSearch)
             {
-                SelectInScope(_browseView.FocusRoot, "Search Input", "Submit Search");
+                SelectInScope(
+                    _browseView.FocusRoot,
+                    _browseView.PreferredSearchFocusName,
+                    "Search Initial A",
+                    "Browse Back");
                 return;
             }
 
@@ -397,8 +409,14 @@ namespace JellyfinForRayNeo
             SelectInScope(_homeView.FocusRoot, "Hero Action", "Poster Card", "Home Search");
         }
 
-        private async Task SubmitSearchAsync(string query)
+        private async Task SelectSearchInitialAsync(string initial)
         {
+            string normalized = JellyfinTitleInitials.NormalizeSelection(initial);
+            if (normalized == null)
+            {
+                return;
+            }
+
             JellyfinBrowseState state = _browseView != null
                 ? _browseView.CurrentState
                 : JellyfinBrowseState.ForSearch();
@@ -406,10 +424,11 @@ namespace JellyfinForRayNeo
             {
                 state = JellyfinBrowseState.ForSearch();
             }
-            state.SearchTerm = query != null ? query.Trim() : string.Empty;
-            state.Title = string.IsNullOrWhiteSpace(state.SearchTerm)
-                ? "搜索"
-                : "搜索 · " + state.SearchTerm;
+            state.SearchInitial = normalized;
+            state.SearchTerm = null;
+            state.Title = "搜索 · " + (normalized == JellyfinTitleInitials.All
+                ? "全部"
+                : normalized);
             state.StartIndex = 0;
             await ShowBrowseAsync(state, BrowseHistoryMode.Replace);
         }
@@ -477,7 +496,15 @@ namespace JellyfinForRayNeo
             }
 
             CancellationToken token = BeginOperation();
-            ShowLoading(true, state.IsSearch ? "正在搜索 Jellyfin…" : "正在加载媒体库…");
+            string selectedInitial = JellyfinTitleInitials.NormalizeSelection(
+                state.SearchInitial);
+            ShowLoading(
+                true,
+                state.IsSearch && selectedInitial != null
+                    ? "正在建立首字母索引并匹配媒体…"
+                    : state.IsSearch
+                        ? "正在打开眼镜端首字母搜索…"
+                        : "正在加载媒体库…");
             try
             {
                 JellyfinQueryResult result = await _browseCatalog.LoadPageAsync(state, token);
@@ -488,13 +515,24 @@ namespace JellyfinForRayNeo
                 _detailView.Hide();
                 _browseView.SetPage(state, result, _browseImages.Token);
                 _detailReturnsToBrowse = false;
-                SelectInScope(
-                    _browseView.FocusRoot,
-                    state.IsSearch && string.IsNullOrWhiteSpace(state.SearchTerm)
-                        ? "Search Input"
-                        : "Poster Card",
-                    "Search Input",
-                    "Browse Back");
+                if (state.IsSearch)
+                {
+                    SelectInScope(
+                        _browseView.FocusRoot,
+                        result.Items != null && result.Items.Count > 0
+                            ? "Poster Card"
+                            : _browseView.PreferredSearchFocusName,
+                        _browseView.PreferredSearchFocusName,
+                        "Search Initial A",
+                        "Browse Back");
+                }
+                else
+                {
+                    SelectInScope(
+                        _browseView.FocusRoot,
+                        "Poster Card",
+                        "Browse Back");
+                }
             }
             catch (OperationCanceledException)
             {
@@ -1646,6 +1684,7 @@ namespace JellyfinForRayNeo
         private void Update()
         {
             _companionBridge?.Pump();
+            _volumeOverlay?.Tick();
 
             if (_playerView == null)
             {
@@ -1703,6 +1742,7 @@ namespace JellyfinForRayNeo
                 _companionBridge.QuickConnectCancelRequested -= HandleCompanionQuickConnectCancelRequested;
                 _companionBridge.SessionAvailable -= HandleCompanionSessionAvailable;
                 _companionBridge.RemoteCommandReceived -= HandleRemoteCommand;
+                _companionBridge.VolumeChanged -= HandleVolumeChanged;
                 _companionBridge.PublishState(
                     CompanionLoginState.Offline,
                     "Jellyfin 客户端已停止。",
@@ -2045,6 +2085,7 @@ namespace JellyfinForRayNeo
             toastOutline.effectDistance = new Vector2(1f, -1f);
             _toastMotion = UiFactory.AddViewMotion(_toast, 24f, 0.98f);
             _toastMotion.SetVisibleImmediately(false);
+            _volumeOverlay = new VolumeOverlayView(parent);
         }
 
         private void ShowLoading(bool visible, string message = null)

@@ -28,6 +28,7 @@ namespace JellyfinForRayNeo
         public string ParentId;
         public string CollectionType;
         public string SearchTerm;
+        public string SearchInitial;
         public int StartIndex;
         public int PageSize = DefaultPageSize;
         public JellyfinBrowseFilter Filter;
@@ -81,12 +82,12 @@ namespace JellyfinForRayNeo
             };
         }
 
-        public static JellyfinBrowseState ForSearch(string searchTerm = null)
+        public static JellyfinBrowseState ForSearch(string searchInitial = null)
         {
             return new JellyfinBrowseState
             {
                 Title = "搜索",
-                SearchTerm = searchTerm ?? string.Empty,
+                SearchInitial = JellyfinTitleInitials.NormalizeSelection(searchInitial),
                 Recursive = true,
                 IsSearch = true,
                 PreferLandscape = false,
@@ -118,7 +119,12 @@ namespace JellyfinForRayNeo
     public sealed class BrowseCatalogService
     {
         private const string SearchItemTypes = "Movie,Series,Episode,Season,Video,BoxSet";
+        private const int InitialIndexBatchSize = 500;
+        private static readonly TimeSpan InitialIndexLifetime = TimeSpan.FromMinutes(5d);
         private readonly JellyfinApiClient _api;
+        private string _initialIndexKey;
+        private DateTime _initialIndexBuiltAtUtc;
+        private List<JellyfinItem> _initialIndex;
 
         public BrowseCatalogService(JellyfinApiClient api)
         {
@@ -134,12 +140,135 @@ namespace JellyfinForRayNeo
                 throw new ArgumentNullException(nameof(state));
             }
 
+            if (state.IsSearch
+                && JellyfinTitleInitials.NormalizeSelection(state.SearchInitial) != null)
+            {
+                return LoadInitialPageAsync(state, cancellationToken);
+            }
+
             if (state.IsSearch && string.IsNullOrWhiteSpace(state.SearchTerm))
             {
                 return Task.FromResult(new JellyfinQueryResult());
             }
 
             return _api.GetItemsAsync(BuildQuery(state), cancellationToken);
+        }
+
+        private async Task<JellyfinQueryResult> LoadInitialPageAsync(
+            JellyfinBrowseState state,
+            CancellationToken cancellationToken)
+        {
+            string selection = JellyfinTitleInitials.NormalizeSelection(state.SearchInitial);
+            List<JellyfinItem> catalog = await LoadInitialIndexAsync(state, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return BuildInitialPage(catalog, state, selection);
+        }
+
+        public static JellyfinQueryResult BuildInitialPage(
+            IEnumerable<JellyfinItem> catalog,
+            JellyfinBrowseState state,
+            string selection = null)
+        {
+            if (state == null)
+            {
+                throw new ArgumentNullException(nameof(state));
+            }
+
+            string normalized = JellyfinTitleInitials.NormalizeSelection(
+                selection ?? state.SearchInitial);
+            int requestedStart = Math.Max(0, state.StartIndex);
+            int pageSize = Math.Max(1, state.PageSize);
+            int matchCount = 0;
+            List<JellyfinItem> pageItems = new List<JellyfinItem>(pageSize);
+            foreach (JellyfinItem item in catalog ?? new JellyfinItem[0])
+            {
+                if (!JellyfinTitleInitials.Matches(item, normalized))
+                {
+                    continue;
+                }
+
+                if (matchCount >= requestedStart && pageItems.Count < pageSize)
+                {
+                    pageItems.Add(item);
+                }
+                matchCount++;
+            }
+
+            return new JellyfinQueryResult
+            {
+                Items = pageItems,
+                StartIndex = Math.Min(requestedStart, matchCount),
+                TotalRecordCount = matchCount
+            };
+        }
+
+        private async Task<List<JellyfinItem>> LoadInitialIndexAsync(
+            JellyfinBrowseState state,
+            CancellationToken cancellationToken)
+        {
+            string cacheKey = InitialIndexKey(state);
+            if (_initialIndex != null
+                && string.Equals(_initialIndexKey, cacheKey, StringComparison.Ordinal)
+                && DateTime.UtcNow - _initialIndexBuiltAtUtc < InitialIndexLifetime)
+            {
+                return _initialIndex;
+            }
+
+            JellyfinBrowseState indexState = state.Clone();
+            indexState.SearchInitial = null;
+            indexState.SearchTerm = null;
+            indexState.StartIndex = 0;
+            indexState.PageSize = InitialIndexBatchSize;
+            JellyfinItemsQuery query = BuildQuery(indexState);
+            List<JellyfinItem> items = new List<JellyfinItem>();
+            HashSet<string> seenIds = new HashSet<string>(StringComparer.Ordinal);
+            int nextIndex = 0;
+            int expectedTotal;
+            do
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                query.StartIndex = nextIndex;
+                JellyfinQueryResult page = await _api.GetItemsAsync(query, cancellationToken)
+                    ?? new JellyfinQueryResult();
+                List<JellyfinItem> pageItems = page.Items ?? new List<JellyfinItem>();
+                foreach (JellyfinItem item in pageItems)
+                {
+                    if (item == null)
+                    {
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(item.Id) || seenIds.Add(item.Id))
+                    {
+                        items.Add(item);
+                    }
+                }
+
+                nextIndex += pageItems.Count;
+                expectedTotal = Math.Max(nextIndex, page.TotalRecordCount);
+                if (pageItems.Count == 0)
+                {
+                    break;
+                }
+            }
+            while (nextIndex < expectedTotal);
+
+            cancellationToken.ThrowIfCancellationRequested();
+            _initialIndex = items;
+            _initialIndexKey = cacheKey;
+            _initialIndexBuiltAtUtc = DateTime.UtcNow;
+            return _initialIndex;
+        }
+
+        private string InitialIndexKey(JellyfinBrowseState state)
+        {
+            JellyfinSession session = _api.Session;
+            return string.Join(
+                "|",
+                session != null ? session.ServerUrl ?? string.Empty : string.Empty,
+                session != null ? session.UserId ?? string.Empty : string.Empty,
+                state.Filter.ToString(),
+                state.Sort.ToString());
         }
 
         public static JellyfinItemsQuery BuildQuery(JellyfinBrowseState state)

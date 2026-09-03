@@ -69,6 +69,7 @@ namespace JellyfinForRayNeo
     {
         public string Id;
         public string Name;
+        public string SortName;
         public string OriginalTitle;
         public string Type;
         public string MediaType;

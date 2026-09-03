@@ -85,7 +85,8 @@ namespace JellyfinForRayNeo.Tests
         [Test]
         public void BrowseQuery_UsesServerPagingSearchAndFavoriteFilter()
         {
-            JellyfinBrowseState state = JellyfinBrowseState.ForSearch(" 星球大战 ");
+            JellyfinBrowseState state = JellyfinBrowseState.ForSearch();
+            state.SearchTerm = " 星球大战 ";
             state.StartIndex = 30;
             state.Filter = JellyfinBrowseFilter.Favorite;
             state.Sort = JellyfinBrowseSort.CommunityRating;
@@ -99,6 +100,65 @@ namespace JellyfinForRayNeo.Tests
             StringAssert.Contains("Movie", query.IncludeItemTypes);
             Assert.AreEqual("IsFavorite", query.Filters);
             Assert.AreEqual("CommunityRating,SortName", query.SortBy);
+        }
+
+        [Test]
+        public void InitialSearch_MatchesEnglishAndChinesePinyinTitles()
+        {
+            JellyfinItem chinese = new JellyfinItem
+            {
+                Name = "星球大战",
+                OriginalTitle = "Star Wars"
+            };
+            JellyfinItem english = new JellyfinItem { Name = "Avatar" };
+            JellyfinItem numeric = new JellyfinItem { Name = "2046" };
+
+            Assert.AreEqual('X', JellyfinTitleInitials.InitialFor(chinese.Name));
+            Assert.AreEqual('C', JellyfinTitleInitials.InitialFor("重庆森林"));
+            Assert.AreEqual('C', JellyfinTitleInitials.InitialFor("长安三万里"));
+            Assert.AreEqual('P', JellyfinTitleInitials.InitialFor("便宜没好货"));
+            Assert.IsTrue(JellyfinTitleInitials.Matches(chinese, "x"));
+            Assert.IsTrue(JellyfinTitleInitials.Matches(chinese, "s"));
+            Assert.IsTrue(JellyfinTitleInitials.Matches(english, "A"));
+            Assert.IsTrue(JellyfinTitleInitials.Matches(numeric, "#"));
+            Assert.IsFalse(JellyfinTitleInitials.Matches(english, "B"));
+        }
+
+        [Test]
+        public void InitialSearch_NormalizesAlphabetAndAllSelection()
+        {
+            JellyfinBrowseState state = JellyfinBrowseState.ForSearch(" l ");
+
+            Assert.AreEqual("L", state.SearchInitial);
+            Assert.AreEqual("*", JellyfinTitleInitials.NormalizeSelection("*"));
+            Assert.IsNull(JellyfinTitleInitials.NormalizeSelection("星球"));
+            Assert.IsTrue(JellyfinTitleInitials.Matches(
+                new JellyfinItem { Name = "流浪地球" },
+                JellyfinTitleInitials.All));
+        }
+
+        [Test]
+        public void InitialSearch_PaginatesOnlyMatchingTitles()
+        {
+            JellyfinBrowseState state = JellyfinBrowseState.ForSearch("X");
+            state.StartIndex = 1;
+            state.PageSize = 1;
+            List<JellyfinItem> catalog = new List<JellyfinItem>
+            {
+                new JellyfinItem { Id = "a", Name = "Avatar" },
+                new JellyfinItem { Id = "x1", Name = "星球大战" },
+                new JellyfinItem { Id = "l", Name = "流浪地球" },
+                new JellyfinItem { Id = "x2", Name = "小时代" }
+            };
+
+            JellyfinQueryResult result = BrowseCatalogService.BuildInitialPage(
+                catalog,
+                state);
+
+            Assert.AreEqual(2, result.TotalRecordCount);
+            Assert.AreEqual(1, result.StartIndex);
+            Assert.AreEqual(1, result.Items.Count);
+            Assert.AreEqual("x2", result.Items[0].Id);
         }
 
         [Test]

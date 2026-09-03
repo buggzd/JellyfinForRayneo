@@ -18,25 +18,24 @@ namespace JellyfinForRayNeo
         private readonly Text _countLabel;
         private readonly Text _pageLabel;
         private readonly EmptyStateView _emptyState;
-        private readonly InputField _searchInput;
-        private readonly Button _searchSubmitButton;
+        private readonly Image _alphabetPanel;
+        private readonly Dictionary<string, Button> _initialButtons =
+            new Dictionary<string, Button>(StringComparer.Ordinal);
         private readonly Button _sortButton;
         private readonly Button _filterButton;
         private readonly Button _previousButton;
         private readonly Button _nextButton;
         private readonly ScrollRect _scroll;
+        private readonly RectTransform _viewport;
         private readonly RectTransform _grid;
         private readonly GridLayoutGroup _gridLayout;
         private JellyfinBrowseState _state;
-        private bool _updatingSearchText;
-        private string _lastSubmittedSearch;
-        private float _lastSearchSubmittedAt = -10f;
 
         public event Action BackRequested;
         public event Action HomeRequested;
         public event Action SearchModeRequested;
         public event Action FavoritesRequested;
-        public event Action<string> SearchSubmitted;
+        public event Action<string> SearchInitialSelected;
         public event Action SortRequested;
         public event Action FilterRequested;
         public event Action PreviousPageRequested;
@@ -148,42 +147,6 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, -126f),
                 new Vector2(-96f, 76f));
 
-            _searchInput = UiFactory.CreateInputField(
-                "Search Input",
-                toolbar,
-                "输入片名、剧集、演员或课程名称",
-                InputField.ContentType.Standard);
-            UiFactory.SetRect(
-                _searchInput.GetComponent<RectTransform>(),
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                Vector2.zero,
-                new Vector2(690f, 60f));
-            _searchInput.onEndEdit.AddListener(value =>
-            {
-                if (!_updatingSearchText)
-                {
-                    RequestSearch(value);
-                }
-            });
-
-            _searchSubmitButton = UiFactory.CreateButton(
-                "Submit Search",
-                toolbar,
-                "开始搜索",
-                UiTheme.Focus,
-                new Color(0.02f, 0.03f, 0.045f, 1f),
-                19);
-            UiFactory.SetRect(
-                _searchSubmitButton.GetComponent<RectTransform>(),
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                new Vector2(704f, 0f),
-                new Vector2(142f, 60f));
-            _searchSubmitButton.onClick.AddListener(() => RequestSearch(_searchInput.text));
-
             _countLabel = UiFactory.CreateText(
                 "Browse Count",
                 toolbar,
@@ -232,20 +195,52 @@ namespace JellyfinForRayNeo
                 new Vector2(-4f, -46f),
                 new Vector2(320f, 28f));
 
-            RectTransform viewport = UiFactory.CreateRect("Browse Viewport", rootImage.transform);
+            _alphabetPanel = UiFactory.CreateRoundedPanel(
+                "Search Alphabet",
+                rootImage.transform,
+                UiTheme.SurfaceGlass);
             UiFactory.SetRect(
-                viewport,
+                _alphabetPanel.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 1f),
+                new Vector2(0f, -198f),
+                new Vector2(-96f, 64f));
+            Outline alphabetOutline = _alphabetPanel.gameObject.AddComponent<Outline>();
+            alphabetOutline.effectColor = UiTheme.Border;
+            alphabetOutline.effectDistance = new Vector2(1f, -1f);
+            HorizontalLayoutGroup alphabetLayout =
+                _alphabetPanel.gameObject.AddComponent<HorizontalLayoutGroup>();
+            alphabetLayout.padding = new RectOffset(14, 14, 7, 7);
+            alphabetLayout.spacing = 7f;
+            alphabetLayout.childAlignment = TextAnchor.MiddleCenter;
+            alphabetLayout.childControlWidth = true;
+            alphabetLayout.childControlHeight = true;
+            alphabetLayout.childForceExpandWidth = false;
+            alphabetLayout.childForceExpandHeight = false;
+            CreateInitialButton(JellyfinTitleInitials.All, "全部", 70f, 0f);
+            for (char initial = 'A'; initial <= 'Z'; initial++)
+            {
+                string value = initial.ToString();
+                CreateInitialButton(value, value, 55f, (initial - 'A' + 1) * 0.008f);
+            }
+            CreateInitialButton(JellyfinTitleInitials.Other, "#", 55f, 0.22f);
+            _alphabetPanel.gameObject.SetActive(false);
+
+            _viewport = UiFactory.CreateRect("Browse Viewport", rootImage.transform);
+            UiFactory.SetRect(
+                _viewport,
                 new Vector2(0f, 0f),
                 new Vector2(1f, 1f),
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0f, -96f),
                 new Vector2(0f, -260f));
-            Image dragSurface = viewport.gameObject.AddComponent<Image>();
+            Image dragSurface = _viewport.gameObject.AddComponent<Image>();
             dragSurface.color = Color.clear;
             dragSurface.raycastTarget = true;
-            viewport.gameObject.AddComponent<RectMask2D>();
+            _viewport.gameObject.AddComponent<RectMask2D>();
 
-            _grid = UiFactory.CreateRect("Browse Grid", viewport);
+            _grid = UiFactory.CreateRect("Browse Grid", _viewport);
             _grid.anchorMin = new Vector2(0f, 1f);
             _grid.anchorMax = new Vector2(1f, 1f);
             _grid.pivot = new Vector2(0.5f, 1f);
@@ -262,7 +257,7 @@ namespace JellyfinForRayNeo
             gridFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
 
             _scroll = rootImage.gameObject.AddComponent<ScrollRect>();
-            _scroll.viewport = viewport;
+            _scroll.viewport = _viewport;
             _scroll.content = _grid;
             _scroll.horizontal = false;
             _scroll.vertical = true;
@@ -290,6 +285,17 @@ namespace JellyfinForRayNeo
             get { return _state != null ? _state.Clone() : null; }
         }
 
+        public string PreferredSearchFocusName
+        {
+            get
+            {
+                string selection = _state != null
+                    ? JellyfinTitleInitials.NormalizeSelection(_state.SearchInitial)
+                    : null;
+                return InitialButtonName(selection ?? "A");
+            }
+        }
+
         public void Show()
         {
             _root.transform.SetAsLastSibling();
@@ -312,20 +318,33 @@ namespace JellyfinForRayNeo
 
             _title.text = string.IsNullOrWhiteSpace(_state.Title) ? "浏览" : _state.Title;
             bool searchMode = _state.IsSearch;
-            _searchInput.gameObject.SetActive(searchMode);
-            _searchSubmitButton.gameObject.SetActive(searchMode);
-            _countLabel.gameObject.SetActive(!searchMode);
-            _updatingSearchText = true;
-            _searchInput.text = _state.SearchTerm ?? string.Empty;
-            _updatingSearchText = false;
+            string searchInitial = JellyfinTitleInitials.NormalizeSelection(
+                _state.SearchInitial);
+            _state.SearchInitial = searchInitial;
+            _alphabetPanel.gameObject.SetActive(searchMode);
+            ConfigureViewport(searchMode);
+            UpdateInitialSelection(searchInitial);
 
             int total = Math.Max(0, result.TotalRecordCount);
             int start = items.Count > 0 ? Math.Max(0, result.StartIndex) + 1 : 0;
             int end = items.Count > 0 ? start + items.Count - 1 : 0;
-            _countLabel.text = total > 0
-                ? "共 " + total + " 项"
-                : "此位置暂无内容";
-            _pageLabel.text = total + " 的 " + start + "–" + end;
+            if (searchMode && searchInitial == null)
+            {
+                _countLabel.text = "选择首字母  ·  中文拼音 / ENGLISH";
+                _pageLabel.text = string.Empty;
+            }
+            else
+            {
+                string initialLabel = searchInitial == JellyfinTitleInitials.All
+                    ? "全部"
+                    : searchInitial;
+                _countLabel.text = searchMode
+                    ? "首字母 " + initialLabel + "  ·  共 " + total + " 项"
+                    : total > 0
+                        ? "共 " + total + " 项"
+                        : "此位置暂无内容";
+                _pageLabel.text = total + " 的 " + start + "–" + end;
+            }
             _previousButton.interactable = _state.StartIndex > 0;
             _nextButton.interactable = end > 0 && end < total;
             _sortButton.GetComponentInChildren<Text>().text =
@@ -360,20 +379,23 @@ namespace JellyfinForRayNeo
             bool empty = items.Count == 0;
             if (empty)
             {
-                if (searchMode && string.IsNullOrWhiteSpace(_state.SearchTerm))
+                if (searchMode && searchInitial == null)
                 {
                     _emptyState.SetContent(
-                        "SEARCH  ·  DISCOVER",
-                        "从你的 Jellyfin 开始搜索",
-                        "在上方输入片名、剧集、演员或课程名称，然后选择“开始搜索”。",
+                        "SEARCH  ·  INITIAL INDEX",
+                        "选择一个首字母",
+                        "用手机触控板选择 A–Z；中文按拼音首字母，英文按标题首字母。",
                         UiTheme.AccentSecondary);
                 }
                 else if (searchMode)
                 {
+                    string initialLabel = searchInitial == JellyfinTitleInitials.All
+                        ? "全部"
+                        : searchInitial;
                     _emptyState.SetContent(
                         "SEARCH  ·  NO RESULTS",
-                        "没有找到匹配内容",
-                        "尝试更短的关键词，或检查当前媒体库与筛选条件。",
+                        "没有找到首字母为 " + initialLabel + " 的内容",
+                        "可选择其他字母，或调整当前排序与筛选条件。",
                         UiTheme.AccentSecondary);
                 }
                 else
@@ -406,18 +428,78 @@ namespace JellyfinForRayNeo
                 : new RectOffset(54, 54, 18, 44);
         }
 
-        private void RequestSearch(string value)
+        private void ConfigureViewport(bool searchMode)
         {
-            string query = value ?? string.Empty;
-            if (string.Equals(query, _lastSubmittedSearch, StringComparison.Ordinal)
-                && Time.unscaledTime - _lastSearchSubmittedAt < 0.25f)
-            {
-                return;
-            }
+            _viewport.anchoredPosition = new Vector2(
+                0f,
+                searchMode ? -115f : -96f);
+            _viewport.sizeDelta = new Vector2(
+                0f,
+                searchMode ? -330f : -260f);
+        }
 
-            _lastSubmittedSearch = query;
-            _lastSearchSubmittedAt = Time.unscaledTime;
-            SearchSubmitted?.Invoke(query);
+        private void CreateInitialButton(
+            string selection,
+            string label,
+            float width,
+            float revealDelay)
+        {
+            Button button = UiFactory.CreateButton(
+                InitialButtonName(selection),
+                _alphabetPanel.transform,
+                label,
+                UiTheme.SurfaceSoft,
+                UiTheme.TextPrimary,
+                18);
+            LayoutElement layout = button.gameObject.AddComponent<LayoutElement>();
+            layout.minWidth = width;
+            layout.preferredWidth = width;
+            layout.minHeight = 50f;
+            layout.preferredHeight = 50f;
+            Outline outline = button.gameObject.AddComponent<Outline>();
+            outline.effectColor = UiTheme.Border;
+            outline.effectDistance = new Vector2(1f, -1f);
+            button.onClick.AddListener(() => SearchInitialSelected?.Invoke(selection));
+            UiFactory.AddItemReveal(button.gameObject, revealDelay);
+            _initialButtons[selection] = button;
+        }
+
+        private void UpdateInitialSelection(string selection)
+        {
+            foreach (KeyValuePair<string, Button> entry in _initialButtons)
+            {
+                bool selected = string.Equals(
+                    entry.Key,
+                    selection,
+                    StringComparison.Ordinal);
+                Image image = entry.Value.GetComponent<Image>();
+                Text label = entry.Value.GetComponentInChildren<Text>();
+                Outline outline = entry.Value.GetComponent<Outline>();
+                image.color = selected ? UiTheme.AccentBright : UiTheme.SurfaceSoft;
+                label.color = selected
+                    ? new Color(0.02f, 0.035f, 0.05f, 1f)
+                    : UiTheme.TextPrimary;
+                outline.effectColor = selected
+                    ? new Color(
+                        UiTheme.AccentBright.r,
+                        UiTheme.AccentBright.g,
+                        UiTheme.AccentBright.b,
+                        0.72f)
+                    : UiTheme.Border;
+            }
+        }
+
+        private static string InitialButtonName(string selection)
+        {
+            if (selection == JellyfinTitleInitials.All)
+            {
+                return "Search Initial All";
+            }
+            if (selection == JellyfinTitleInitials.Other)
+            {
+                return "Search Initial Other";
+            }
+            return "Search Initial " + selection;
         }
 
         private static Button CreateHeaderButton(

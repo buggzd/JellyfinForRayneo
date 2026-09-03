@@ -1,5 +1,6 @@
 package com.jellyfinforrayneo.companion;
 
+import android.annotation.SuppressLint;
 import android.animation.LayoutTransition;
 import android.app.Presentation;
 import android.content.ClipData;
@@ -19,6 +20,7 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.hardware.display.DisplayManager;
+import android.media.AudioManager;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Build;
@@ -29,6 +31,7 @@ import android.text.TextUtils;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -39,6 +42,12 @@ import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.view.animation.DecelerateInterpolator;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -49,6 +58,7 @@ import android.widget.Toast;
 
 import com.tcl.unity.unityadapter.UnityXRSupportActivity;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -115,8 +125,17 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private static final int COLOR_ACCENT_BRIGHT = Color.rgb(115, 232, 220);
     private static final int COLOR_SUCCESS = Color.rgb(105, 226, 174);
     private static final int COLOR_ERROR = Color.rgb(255, 126, 151);
+    private static final int COLOR_WEB_BACKGROUND = Color.rgb(234, 247, 250);
+    private static final int COLOR_WEB_NAVIGATION = Color.rgb(229, 245, 249);
+    private static final String COMPANION_UI_URL =
+            "file:///android_asset/CompanionUI/index.html";
 
     private FrameLayout companionOverlay;
+    private WebView companionWebView;
+    private boolean companionWebReady;
+    private String lastPushedWebStateJson;
+    private boolean webTouchpadActive;
+    private String webScreen = "connect";
     private AmbientBackdropView ambientBackdropView;
     private ScrollView configurationScrollView;
     private TouchpadView touchpadView;
@@ -154,11 +173,19 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private boolean showingQuickConnectPanel;
     private String renderedStatusMessage = "";
     private boolean renderedStatusVisible;
+    private String latestDiscoveryMessage = "";
+    private boolean latestDiscoveryError;
+    private boolean discoveryScanning;
+    private final ArrayList<DiscoveredServer> latestDiscoveredServers =
+            new ArrayList<DiscoveredServer>();
+    private volatile String transientSessionJson = "";
+    private volatile boolean rememberNativeSession = true;
 
     private String latestState = "login_required";
     private String latestMessage = "Jellyfin 配置可先完成；浏览和播放需要连接 RayNeo Air。";
     private boolean latestIsError;
     private String latestServerUrl = "";
+    private String latestServerName = "";
     private String latestUsername = "";
     private String latestQuickConnectCode = "";
     private String requestedDisplayMode = DISPLAY_MODE_MIRROR_2D;
@@ -203,11 +230,21 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Unity renders the glasses through its own SurfaceView, while the phone
+        // companion is a Chromium WebView. Enable acceleration before the RayNeo
+        // base activity installs its content view so the phone window is not
+        // forced through Android's software canvas.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
         super.onCreate(savedInstanceState);
+        setVolumeControlStream(AudioManager.STREAM_MUSIC);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        getWindow().setStatusBarColor(COLOR_BACKGROUND_TOP);
-        getWindow().setNavigationBarColor(COLOR_BACKGROUND_BOTTOM);
+        getWindow().setStatusBarColor(COLOR_WEB_BACKGROUND);
+        getWindow().setNavigationBarColor(COLOR_WEB_NAVIGATION);
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                        | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
         companionDisplayManager =
                 (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
         if (companionDisplayManager != null) {
@@ -232,9 +269,19 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && showingTouchpad) {
+        if (hasFocus && (showingTouchpad || webTouchpadActive)) {
             applyOledRemoteSurface(true);
         }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        boolean volumeKey = event != null && isMediaVolumeKey(event.getKeyCode());
+        boolean handled = super.dispatchKeyEvent(event);
+        if (volumeKey && event.getAction() == KeyEvent.ACTION_DOWN) {
+            scheduleMediaVolumeFeedback();
+        }
+        return handled;
     }
 
     @Override
@@ -249,12 +296,35 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             companionDisplayManager.unregisterDisplayListener(companionDisplayListener);
             companionDisplayManager = null;
         }
+        if (companionWebView != null) {
+            companionWebView.removeJavascriptInterface("JellyfinNative");
+            companionWebView.stopLoading();
+            if (companionOverlay != null) {
+                companionOverlay.removeView(companionWebView);
+            }
+            companionWebView.destroy();
+            companionWebView = null;
+        }
         dismissFallbackPresentation();
         super.onDestroy();
     }
 
     @Override
     public void onBackPressed() {
+        if (companionWebReady
+                && companionWebView != null
+                && ("touchpad".equals(webScreen)
+                        || "settings".equals(webScreen)
+                        || "auth".equals(webScreen))) {
+            if ("touchpad".equals(webScreen)) {
+                enqueueRemoteCommand("back");
+                companionWebView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                webTouchpadActive = false;
+                applyOledRemoteSurface(false);
+            }
+            dispatchWebBack();
+            return;
+        }
         if (touchpadView != null && touchpadView.getVisibility() == View.VISIBLE) {
             enqueueRemoteCommand("back");
             touchpadView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
@@ -641,6 +711,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         companionOverlay.addView(touchpadView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+        installCompanionWebUi();
         content.addView(companionOverlay, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
@@ -656,6 +727,405 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 animateCompanionEntrance(page);
             }
         });
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void installCompanionWebUi() {
+        companionWebView = new WebView(this);
+        companionWebView.setBackgroundColor(COLOR_WEB_BACKGROUND);
+        companionWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        companionWebView.setSaveEnabled(false);
+        companionWebView.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        companionWebView.setVerticalScrollBarEnabled(false);
+        companionWebView.setHorizontalScrollBarEnabled(false);
+        companionWebView.setFocusable(true);
+        companionWebView.setFocusableInTouchMode(true);
+
+        WebSettings settings = companionWebView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(false);
+        // Vite emits ES modules beside index.html. Same-directory file access is
+        // required for those local modules; universal file-to-network access stays off.
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(false);
+        settings.setSupportMultipleWindows(false);
+        settings.setBuiltInZoomControls(false);
+        settings.setDisplayZoomControls(false);
+        settings.setSaveFormData(false);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            companionWebView.setRendererPriorityPolicy(
+                    WebView.RENDERER_PRIORITY_IMPORTANT,
+                    false);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        }
+
+        companionWebView.addJavascriptInterface(
+                new CompanionWebBridge(),
+                "JellyfinNative");
+        companionWebView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(
+                    WebView view,
+                    WebResourceRequest request) {
+                return request == null
+                        || request.getUrl() == null
+                        || !isCompanionAssetUrl(request.getUrl().toString());
+            }
+
+            @SuppressWarnings("deprecation")
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return !isCompanionAssetUrl(url);
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                if (!isCompanionAssetUrl(url)) {
+                    return;
+                }
+                companionWebReady = true;
+                lastPushedWebStateJson = null;
+                // The native layout is retained strictly as a load-error fallback.
+                // Keeping it visible below the WebView forces redundant drawing
+                // and layout work while the user scrolls the web interface.
+                configurationScrollView.setVisibility(View.GONE);
+                touchpadView.setVisibility(View.GONE);
+                touchpadView.setTouchpadActive(false);
+                applyOledRemoteSurface(webTouchpadActive);
+                pushWebState();
+            }
+
+            @Override
+            public void onReceivedError(
+                    WebView view,
+                    WebResourceRequest request,
+                    WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                if (request != null && request.isForMainFrame()) {
+                    companionWebReady = false;
+                    lastPushedWebStateJson = null;
+                    view.setVisibility(View.GONE);
+                    companionModeInitialized = false;
+                    applyCompanionState();
+                }
+            }
+        });
+        companionOverlay.addView(companionWebView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        companionWebView.loadUrl(COMPANION_UI_URL);
+    }
+
+    private boolean isCompanionAssetUrl(String url) {
+        return !TextUtils.isEmpty(url)
+                && url.startsWith("file:///android_asset/CompanionUI/");
+    }
+
+    private boolean isCompanionWebUiVisible() {
+        return companionWebReady
+                && companionWebView != null
+                && companionWebView.getVisibility() == View.VISIBLE;
+    }
+
+    private void dispatchWebBack() {
+        evaluateCompanionJavascript(
+                "window.LumaNative && window.LumaNative.handleBack && "
+                        + "window.LumaNative.handleBack();");
+    }
+
+    private void evaluateCompanionJavascript(String script) {
+        if (!companionWebReady
+                || companionWebView == null
+                || TextUtils.isEmpty(script)) {
+            return;
+        }
+        companionWebView.evaluateJavascript(script, null);
+    }
+
+    private JSONObject buildWebState() {
+        JSONObject state = new JSONObject();
+        boolean libraryReady = "ready".equals(latestState);
+        boolean sessionAvailable = libraryReady
+                || "session_ready".equals(latestState)
+                || hasNativeSession();
+        boolean busy = nativeOperationRunning
+                || "native_connecting".equals(latestState)
+                || "connecting".equals(latestState);
+
+        String serverName = latestServerName;
+        String serverVersion = "";
+        String sessionText = getPendingSessionJson();
+        if (isValidNativeSession(sessionText)) {
+            try {
+                JSONObject session = new JSONObject(sessionText);
+                serverName = session.optString("serverName", serverName);
+                serverVersion = session.optString("serverVersion", "");
+            } catch (Exception ignored) {
+            }
+        }
+
+        try {
+            state.put("state", latestState);
+            state.put("message", latestMessage == null ? "" : latestMessage);
+            state.put("isError", latestIsError);
+            state.put("serverUrl", latestServerUrl == null ? "" : latestServerUrl);
+            state.put("serverName", serverName);
+            state.put("serverVersion", serverVersion);
+            state.put("username", latestUsername == null ? "" : latestUsername);
+            state.put(
+                    "quickConnectCode",
+                    latestQuickConnectCode == null ? "" : latestQuickConnectCode);
+            state.put("sessionAvailable", sessionAvailable);
+            state.put(
+                    "sessionSaved",
+                    isValidNativeSession(getCompanionPreferences().getString(
+                            PREF_SESSION_JSON,
+                            "")));
+            state.put("busy", busy);
+            state.put(
+                    "webHardwareAccelerated",
+                    companionWebView != null && companionWebView.isHardwareAccelerated());
+            state.put("glassesConnected", glassesConnected);
+            state.put("glassesPresentationReady", glassesPresentationReady);
+            state.put("mediaReady", libraryReady);
+            state.put("touchpadReady", glassesPresentationReady && libraryReady);
+            state.put("displayMode", requestedDisplayMode);
+            state.put("activeDisplayMode", activeDisplayMode);
+            state.put("displayModeApplied", requestedDisplayModeApplied);
+            state.put(
+                    "displayMessage",
+                    displayModeMessage == null ? "" : displayModeMessage);
+            state.put("discoveryMessage", latestDiscoveryMessage);
+            state.put("discoveryError", latestDiscoveryError);
+            state.put("discoveryScanning", discoveryScanning);
+
+            JSONArray servers = new JSONArray();
+            synchronized (latestDiscoveredServers) {
+                for (DiscoveredServer server : latestDiscoveredServers) {
+                    JSONObject item = new JSONObject();
+                    item.put(
+                            "id",
+                            TextUtils.isEmpty(server.id) ? server.address : server.id);
+                    item.put("name", server.name);
+                    item.put("host", server.address);
+                    item.put("detail", "Jellyfin 服务器");
+                    item.put("latency", "局域网");
+                    item.put("strength", 3);
+                    servers.put(item);
+                }
+            }
+            state.put("servers", servers);
+        } catch (Exception ignored) {
+        }
+        return state;
+    }
+
+    private void pushWebState() {
+        if (!companionWebReady || companionWebView == null) {
+            return;
+        }
+        String stateJson = buildWebState().toString();
+        if (TextUtils.equals(lastPushedWebStateJson, stateJson)) {
+            return;
+        }
+        lastPushedWebStateJson = stateJson;
+        String payload = JSONObject.quote(stateJson);
+        evaluateCompanionJavascript(
+                "window.LumaNative && window.LumaNative.receiveState && "
+                        + "window.LumaNative.receiveState("
+                        + payload
+                        + ");");
+    }
+
+    private boolean isRemoteCommand(String command) {
+        return "up".equals(command)
+                || "down".equals(command)
+                || "left".equals(command)
+                || "right".equals(command)
+                || "submit".equals(command)
+                || "back".equals(command);
+    }
+
+    private final class CompanionWebBridge {
+        @JavascriptInterface
+        public String getState() {
+            return buildWebState().toString();
+        }
+
+        @JavascriptInterface
+        public void ready() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    companionWebReady = true;
+                    lastPushedWebStateJson = null;
+                    pushWebState();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void scan() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    discoverServers();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void selectServer(final String serverUrl, final String serverName) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    latestServerUrl = serverUrl == null ? "" : serverUrl.trim();
+                    latestServerName = serverName == null ? "" : serverName.trim();
+                    serverInput.setText(latestServerUrl);
+                    pushWebState();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void login(
+                final String serverUrl,
+                final String username,
+                final String password,
+                final boolean rememberSession) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    rememberNativeSession = rememberSession;
+                    serverInput.setText(serverUrl == null ? "" : serverUrl);
+                    usernameInput.setText(username == null ? "" : username);
+                    passwordInput.setText(password == null ? "" : password);
+                    submitLogin();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void startQuickConnect(final String serverUrl) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    rememberNativeSession = true;
+                    serverInput.setText(serverUrl == null ? "" : serverUrl);
+                    submitQuickConnect();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void cancelQuickConnect() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    JellyfinRayNeoActivity.this.cancelQuickConnect();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void clearSession() {
+            JellyfinRayNeoActivity.this.clearNativeSession();
+        }
+
+        @JavascriptInterface
+        public void selectDisplayMode(final String mode) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    JellyfinRayNeoActivity.this.selectDisplayMode(mode);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void copyQuickConnectCode() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    JellyfinRayNeoActivity.this.copyQuickConnectCode();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void openQuickConnectAuthorization() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    JellyfinRayNeoActivity.this.openQuickConnectAuthorization();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void remoteCommand(final String value, final boolean haptic) {
+            final String command = value == null
+                    ? ""
+                    : value.trim().toLowerCase(Locale.US);
+            if (!isRemoteCommand(command)) {
+                return;
+            }
+            enqueueRemoteCommand(command);
+            if (haptic) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (companionWebView != null) {
+                            companionWebView.performHapticFeedback(
+                                    "back".equals(command)
+                                            ? HapticFeedbackConstants.LONG_PRESS
+                                            : HapticFeedbackConstants.KEYBOARD_TAP);
+                        }
+                    }
+                });
+            }
+        }
+
+        @JavascriptInterface
+        public void previewHaptic() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (companionWebView != null) {
+                        companionWebView.performHapticFeedback(
+                                HapticFeedbackConstants.KEYBOARD_TAP);
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void screenChanged(final String screen) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (!"connect".equals(screen)
+                            && !"auth".equals(screen)
+                            && !"home".equals(screen)
+                            && !"settings".equals(screen)
+                            && !"touchpad".equals(screen)) {
+                        return;
+                    }
+                    webScreen = screen;
+                    webTouchpadActive = "touchpad".equals(screen);
+                    applyOledRemoteSurface(webTouchpadActive);
+                    if (webTouchpadActive && companionWebView != null) {
+                        companionWebView.requestFocus();
+                    }
+                }
+            });
+        }
     }
 
     private void animateCompanionEntrance(ViewGroup page) {
@@ -800,6 +1270,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     }
 
     private void renderDiscoveryStatus(String message, int color) {
+        latestDiscoveryMessage = message == null ? "" : message;
+        latestDiscoveryError = color == COLOR_ERROR;
+        pushWebState();
         if (discoveryStatusText == null) {
             return;
         }
@@ -968,20 +1441,43 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             }
         } else {
             getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            getWindow().setBackgroundDrawable(new ColorDrawable(COLOR_BACKGROUND_TOP));
-            companionOverlay.setBackground(backgroundGradient());
-            if (ambientBackdropView != null) {
-                ambientBackdropView.setVisibility(View.VISIBLE);
+            boolean webVisible = companionWebReady
+                    && companionWebView != null
+                    && companionWebView.getVisibility() == View.VISIBLE;
+            getWindow().setBackgroundDrawable(new ColorDrawable(
+                    webVisible ? COLOR_WEB_BACKGROUND : COLOR_BACKGROUND_TOP));
+            if (webVisible) {
+                companionOverlay.setBackgroundColor(COLOR_WEB_BACKGROUND);
+                if (ambientBackdropView != null) {
+                    ambientBackdropView.setVisibility(View.GONE);
+                }
+            } else {
+                companionOverlay.setBackground(backgroundGradient());
+                if (ambientBackdropView != null) {
+                    ambientBackdropView.setVisibility(View.VISIBLE);
+                }
             }
-            getWindow().setStatusBarColor(COLOR_BACKGROUND_TOP);
-            getWindow().setNavigationBarColor(COLOR_BACKGROUND_BOTTOM);
-            decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+            getWindow().setStatusBarColor(
+                    webVisible ? COLOR_WEB_BACKGROUND : COLOR_BACKGROUND_TOP);
+            getWindow().setNavigationBarColor(
+                    webVisible ? COLOR_WEB_NAVIGATION : COLOR_BACKGROUND_BOTTOM);
+            decorView.setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                            | (webVisible ? View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR : 0)
+                            | (webVisible ? View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 WindowInsetsController controller = decorView.getWindowInsetsController();
                 if (controller != null) {
                     controller.show(
                             WindowInsets.Type.statusBars()
                                     | WindowInsets.Type.navigationBars());
+                    controller.setSystemBarsAppearance(
+                            webVisible
+                                    ? WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                                            | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+                                    : 0,
+                            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                                    | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
                 }
             }
         }
@@ -1167,6 +1663,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         if (touchpadView != null) {
             touchpadView.invalidate();
         }
+        pushWebState();
     }
 
     private void toggleDisplayMode() {
@@ -1193,6 +1690,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     }
 
     private void updateDisplayModeUi() {
+        if (isCompanionWebUiVisible()) {
+            return;
+        }
         boolean stereoSelected = isStereoDisplayMode(requestedDisplayMode);
         if (mirror2DModeButton != null) {
             mirror2DModeButton.setTextColor(stereoSelected
@@ -1596,11 +2096,17 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             return;
         }
 
-        getCompanionPreferences().edit()
-                .putString(PREF_SESSION_JSON, session.toString())
+        String sessionValue = session.toString();
+        transientSessionJson = sessionValue;
+        SharedPreferences.Editor editor = getCompanionPreferences().edit()
                 .putString(PREF_SERVER_URL, session.optString("serverUrl", ""))
-                .putString(PREF_USERNAME, session.optString("userName", ""))
-                .apply();
+                .putString(PREF_USERNAME, session.optString("userName", ""));
+        if (rememberNativeSession) {
+            editor.putString(PREF_SESSION_JSON, sessionValue);
+        } else {
+            editor.remove(PREF_SESSION_JSON);
+        }
+        editor.apply();
 
         runOnUiThread(new Runnable() {
             @Override
@@ -1611,10 +2117,13 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 nativeOperationRunning = false;
                 latestState = "session_ready";
                 latestServerUrl = session.optString("serverUrl", "");
+                latestServerName = session.optString("serverName", "");
                 latestUsername = session.optString("userName", "");
                 latestQuickConnectCode = "";
                 latestIsError = false;
-                latestMessage = "Jellyfin 配置已保存。请连接 RayNeo Air 以浏览和播放。";
+                latestMessage = rememberNativeSession
+                        ? "Jellyfin 配置已保存。请连接 RayNeo Air 以浏览和播放。"
+                        : "Jellyfin 已连接；会话仅在本次运行期间保留。";
                 applyCompanionState();
             }
         });
@@ -1804,6 +2313,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     }
 
     public String getPendingSessionJson() {
+        if (isValidNativeSession(transientSessionJson)) {
+            return transientSessionJson;
+        }
         return getCompanionPreferences().getString(PREF_SESSION_JSON, "");
     }
 
@@ -1867,9 +2379,47 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         }
     }
 
+    private static boolean isMediaVolumeKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_VOLUME_UP
+                || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+                || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE;
+    }
+
+    private void scheduleMediaVolumeFeedback() {
+        View decorView = getWindow() == null ? null : getWindow().getDecorView();
+        if (decorView == null) {
+            enqueueCurrentMediaVolumePercent();
+            return;
+        }
+
+        decorView.post(new Runnable() {
+            @Override
+            public void run() {
+                enqueueCurrentMediaVolumePercent();
+            }
+        });
+    }
+
+    private void enqueueCurrentMediaVolumePercent() {
+        AudioManager audioManager =
+                (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager == null) {
+            return;
+        }
+
+        int maximum = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        int current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        int percentage = maximum <= 0
+                ? 0
+                : Math.round(Math.max(0, Math.min(current, maximum)) * 100f / maximum);
+        enqueueRemoteCommand("volume:" + percentage);
+    }
+
     public void clearNativeSession() {
         authenticationGeneration++;
         nativeOperationRunning = false;
+        transientSessionJson = "";
+        rememberNativeSession = true;
         getCompanionPreferences().edit().remove(PREF_SESSION_JSON).apply();
         runOnUiThread(new Runnable() {
             @Override
@@ -1888,6 +2438,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
 
     private void restoreNativeState() {
         SharedPreferences preferences = getCompanionPreferences();
+        transientSessionJson = "";
+        rememberNativeSession = true;
         requestedDisplayMode = normalizeDisplayMode(preferences.getString(
                 PREF_DISPLAY_MODE,
                 DISPLAY_MODE_MIRROR_2D));
@@ -1903,6 +2455,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             try {
                 JSONObject session = new JSONObject(sessionText);
                 latestServerUrl = session.optString("serverUrl", latestServerUrl);
+                latestServerName = session.optString("serverName", latestServerName);
                 latestUsername = session.optString("userName", latestUsername);
             } catch (Exception ignored) {
             }
@@ -1946,6 +2499,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         discoveryGeneration++;
         closeDiscoverySocket();
         final int generation = discoveryGeneration;
+        discoveryScanning = true;
+        synchronized (latestDiscoveredServers) {
+            latestDiscoveredServers.clear();
+        }
         discoverButton.setEnabled(false);
         discoverButton.setText("扫描中");
         renderDiscoveryStatus(
@@ -2151,6 +2708,11 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private void renderDiscoveredServers(
             List<DiscoveredServer> servers,
             String failure) {
+        discoveryScanning = false;
+        synchronized (latestDiscoveredServers) {
+            latestDiscoveredServers.clear();
+            latestDiscoveredServers.addAll(servers);
+        }
         discoveredServersContainer.removeAllViews();
         if (servers.isEmpty()) {
             renderDiscoveryStatus(
@@ -2182,6 +2744,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                     serverInput.setText(server.address);
                     serverInput.setSelection(serverInput.length());
                     latestServerUrl = server.address;
+                    latestServerName = server.name;
                     renderDiscoveryStatus("已选择 " + server.name, COLOR_ACCENT_BRIGHT);
                 }
             });
@@ -2205,8 +2768,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             serverInput.setText(server.address);
             serverInput.setSelection(serverInput.length());
             latestServerUrl = server.address;
+            latestServerName = server.name;
             renderDiscoveryStatus("已自动选择 " + server.name, COLOR_ACCENT_BRIGHT);
         }
+        pushWebState();
     }
 
     private void applyCompanionState() {
@@ -2226,6 +2791,32 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         boolean touchpadActive = glassesPresentationReady && libraryReady;
 
         companionOverlay.setVisibility(View.VISIBLE);
+        boolean companionWebVisible = isCompanionWebUiVisible();
+        if (companionWebVisible) {
+            configurationScrollView.setVisibility(View.GONE);
+            touchpadView.setVisibility(View.GONE);
+            touchpadView.setTouchpadActive(false);
+            if (sessionAvailable) {
+                cancelDiscovery();
+                if (passwordInput.length() > 0) {
+                    passwordInput.getText().clear();
+                }
+                hideKeyboard();
+            } else if (!busy && !automaticDiscoveryStarted) {
+                automaticDiscoveryStarted = true;
+                companionOverlay.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!nativeOperationRunning && !hasNativeSession()) {
+                            discoverServers();
+                        }
+                    }
+                });
+            }
+            pushWebState();
+            return;
+        }
+
         applyCompanionMode(touchpadActive);
         applyConfigurationContentState(sessionAvailable, waitingForQuickConnect);
         updateDisplayModeUi();
@@ -2360,6 +2951,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 }
             });
         }
+        pushWebState();
     }
 
     private void setControlsEnabled(boolean enabled) {
@@ -2598,6 +3190,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private void cancelDiscovery() {
         discoveryGeneration++;
         closeDiscoverySocket();
+        if (discoveryScanning) {
+            discoveryScanning = false;
+            pushWebState();
+        }
     }
 
     private void closeDiscoverySocket() {

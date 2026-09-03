@@ -166,6 +166,61 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [UnityTest]
+        public IEnumerator PhoneVolumeChange_ShowsReusableNonInteractiveGlassesOverlay()
+        {
+            Canvas canvas = Object.FindObjectOfType<Canvas>();
+            Assert.NotNull(canvas);
+            Transform overlay = FindDescendant(canvas.transform, "Volume Overlay");
+            Transform percentage = FindDescendant(canvas.transform, "Volume Percentage");
+            RectTransform fill = FindDescendant(canvas.transform, "Volume Fill") as RectTransform;
+            Assert.NotNull(overlay);
+            Assert.NotNull(percentage);
+            Assert.NotNull(fill);
+            Assert.IsFalse(overlay.gameObject.activeSelf);
+
+            GameObject focusSentinel = new GameObject(
+                "Volume Focus Sentinel",
+                typeof(RectTransform),
+                typeof(Image),
+                typeof(Button));
+            focusSentinel.transform.SetParent(canvas.transform, false);
+            EventSystem.current.SetSelectedGameObject(focusSentinel);
+
+            CompanionVolumeRuntime.Submit(47);
+            yield return null;
+            yield return null;
+
+            Assert.IsTrue(overlay.gameObject.activeInHierarchy);
+            Assert.AreEqual("47%", percentage.GetComponent<Text>().text);
+            Assert.AreSame(focusSentinel, EventSystem.current.currentSelectedGameObject);
+            Assert.That(fill.anchorMax.x, Is.GreaterThan(0f).And.LessThanOrEqualTo(0.47f));
+            CanvasGroup group = overlay.GetComponent<CanvasGroup>();
+            Assert.NotNull(group);
+            Assert.IsFalse(group.interactable);
+            Assert.IsFalse(group.blocksRaycasts);
+            Assert.IsTrue(
+                overlay.GetComponentsInChildren<Graphic>(true).All(graphic => !graphic.raycastTarget),
+                "Volume feedback must never intercept glasses navigation or playback input.");
+
+            int overlayInstanceId = overlay.gameObject.GetInstanceID();
+            CompanionVolumeRuntime.Submit(100);
+            yield return null;
+            yield return null;
+
+            Assert.AreEqual(overlayInstanceId, overlay.gameObject.GetInstanceID());
+            Assert.AreEqual("100%", percentage.GetComponent<Text>().text);
+            Assert.AreSame(focusSentinel, EventSystem.current.currentSelectedGameObject);
+
+            yield return new WaitForSecondsRealtime(2.8f);
+            yield return null;
+            Assert.IsFalse(overlay.gameObject.activeSelf);
+            Assert.AreSame(focusSentinel, EventSystem.current.currentSelectedGameObject);
+
+            Object.Destroy(focusSentinel);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator EmptyStates_UseSharedGlassCardsAndLayeredMotion()
         {
             GameObject host = new GameObject("Empty State Test Host", typeof(RectTransform));
@@ -677,6 +732,61 @@ namespace JellyfinForRayNeo.Tests
 
             cards[0].GetComponent<Button>().onClick.Invoke();
             Assert.AreSame(folder, selected);
+
+            browse.Hide();
+            imageCache.Dispose();
+            Object.Destroy(host);
+            yield return null;
+        }
+
+        [UnityTest]
+        public IEnumerator BrowseView_SearchUsesGlassesAlphabetWithoutTextInput()
+        {
+            GameObject host = new GameObject("Initial Search Test Host", typeof(RectTransform));
+            host.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
+            JellyfinApiClient api = new JellyfinApiClient("initial-search-device");
+            api.SetSession(new JellyfinSession
+            {
+                ServerUrl = "http://127.0.0.1:8096",
+                AccessToken = "initial-search-token",
+                UserId = "initial-search-user",
+                DeviceId = "initial-search-device"
+            });
+            JellyfinImageCache imageCache = new JellyfinImageCache();
+            BrowseView browse = new BrowseView(host.transform, api, imageCache);
+            string selectedInitial = null;
+            browse.SearchInitialSelected += initial => selectedInitial = initial;
+            browse.SetPage(
+                JellyfinBrowseState.ForSearch(),
+                new JellyfinQueryResult(),
+                CancellationToken.None);
+            yield return null;
+            Canvas.ForceUpdateCanvases();
+
+            Transform alphabet = FindDescendant(host.transform, "Search Alphabet");
+            Assert.NotNull(alphabet);
+            Assert.IsTrue(alphabet.gameObject.activeInHierarchy);
+            Assert.AreEqual(28, alphabet.GetComponentsInChildren<Button>(true).Length);
+            Assert.AreEqual(0, host.GetComponentsInChildren<InputField>(true).Length);
+            Assert.AreEqual(
+                "选择首字母  ·  中文拼音 / ENGLISH",
+                FindDescendant(host.transform, "Browse Count").GetComponent<Text>().text);
+            RectTransform alphabetRect = alphabet.GetComponent<RectTransform>();
+            RectTransform lastInitial = FindDescendant(host.transform, "Search Initial Other")
+                .GetComponent<RectTransform>();
+            Bounds lastInitialBounds = RectTransformUtility.CalculateRelativeRectTransformBounds(
+                alphabetRect,
+                lastInitial);
+            Assert.LessOrEqual(lastInitialBounds.max.x, alphabetRect.rect.xMax + 0.5f);
+
+            DirectionalFocusNavigator navigator = new DirectionalFocusNavigator();
+            navigator.SetScope(browse.FocusRoot);
+            Assert.IsTrue(navigator.SelectPreferred("Search Initial A"));
+            Assert.AreEqual("Search Initial A", EventSystem.current.currentSelectedGameObject.name);
+            Assert.IsTrue(navigator.Handle(CompanionRemoteCommand.Right));
+            Assert.AreEqual("Search Initial B", EventSystem.current.currentSelectedGameObject.name);
+            Assert.IsTrue(navigator.Handle(CompanionRemoteCommand.Submit));
+            Assert.AreEqual("B", selectedInitial);
 
             browse.Hide();
             imageCache.Dispose();

@@ -75,6 +75,74 @@ namespace JellyfinForRayNeo
         }
     }
 
+    public static class CompanionVolume
+    {
+        private const string NativeEventPrefix = "volume:";
+
+        public static int CalculatePercentage(int currentVolume, int maximumVolume)
+        {
+            if (maximumVolume <= 0)
+            {
+                return 0;
+            }
+
+            long clampedVolume = Math.Max(0L, Math.Min((long)currentVolume, maximumVolume));
+            return (int)((clampedVolume * 100L + maximumVolume / 2L) / maximumVolume);
+        }
+
+        public static int ClampPercentage(int percentage)
+        {
+            return Math.Max(0, Math.Min(100, percentage));
+        }
+
+        public static bool TryParseNativeEvent(string value, out int percentage)
+        {
+            percentage = 0;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return false;
+            }
+
+            string normalized = value.Trim();
+            if (!normalized.StartsWith(NativeEventPrefix, StringComparison.OrdinalIgnoreCase)
+                || !int.TryParse(
+                    normalized.Substring(NativeEventPrefix.Length),
+                    out int parsed)
+                || parsed < 0
+                || parsed > 100)
+            {
+                return false;
+            }
+
+            percentage = parsed;
+            return true;
+        }
+    }
+
+    public static class CompanionVolumeRuntime
+    {
+        private static readonly ConcurrentQueue<int> Pending =
+            new ConcurrentQueue<int>();
+
+        public static void Submit(int percentage)
+        {
+            Pending.Enqueue(CompanionVolume.ClampPercentage(percentage));
+        }
+
+        internal static bool TryDequeue(out int percentage)
+        {
+            return Pending.TryDequeue(out percentage);
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void Reset()
+        {
+            while (Pending.TryDequeue(out _))
+            {
+            }
+        }
+    }
+
     public enum CompanionLoginState
     {
         Offline,
@@ -430,6 +498,7 @@ namespace JellyfinForRayNeo
         public event Action QuickConnectCancelRequested;
         public event Action<CompanionSessionRequest> SessionAvailable;
         public event Action<CompanionRemoteCommand> RemoteCommandReceived;
+        public event Action<int> VolumeChanged;
 
         public static bool TryParsePayload(
             string payload,
@@ -572,6 +641,11 @@ namespace JellyfinForRayNeo
             while (CompanionRemoteInputRuntime.TryDequeue(out CompanionRemoteCommand command))
             {
                 RemoteCommandReceived?.Invoke(command);
+            }
+
+            while (CompanionVolumeRuntime.TryDequeue(out int percentage))
+            {
+                VolumeChanged?.Invoke(percentage);
             }
 
             while (_pendingValidationErrors.TryDequeue(out string validationMessage))
@@ -857,10 +931,17 @@ namespace JellyfinForRayNeo
                             _nativeRemoteReadErrorReported = false;
                             RemoteCommandReceived?.Invoke(command);
                         }
+                        else if (CompanionVolume.TryParseNativeEvent(
+                                     value,
+                                     out int percentage))
+                        {
+                            _nativeRemoteReadErrorReported = false;
+                            VolumeChanged?.Invoke(percentage);
+                        }
                         else if (!_nativeRemoteReadErrorReported)
                         {
                             _nativeRemoteReadErrorReported = true;
-                            Debug.LogWarning("Android companion sent an unknown remote command.");
+                            Debug.LogWarning("Android companion sent an unknown input event.");
                         }
                     }
                 }

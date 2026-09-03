@@ -144,6 +144,64 @@ namespace JellyfinForRayNeo.Tests
                 out _));
         }
 
+        [TestCase(0, 15, 0)]
+        [TestCase(7, 15, 47)]
+        [TestCase(15, 15, 100)]
+        [TestCase(-3, 15, 0)]
+        [TestCase(19, 15, 100)]
+        [TestCase(8, 0, 0)]
+        public void MediaVolumePercentage_IsRoundedAndClamped(
+            int currentVolume,
+            int maximumVolume,
+            int expectedPercentage)
+        {
+            Assert.AreEqual(
+                expectedPercentage,
+                CompanionVolume.CalculatePercentage(currentVolume, maximumVolume));
+        }
+
+        [TestCase("volume:0", 0)]
+        [TestCase(" VOLUME:47 ", 47)]
+        [TestCase("volume:100", 100)]
+        public void NativeMediaVolumeEvent_ParsesPercentage(
+            string value,
+            int expectedPercentage)
+        {
+            Assert.IsTrue(CompanionVolume.TryParseNativeEvent(value, out int percentage));
+            Assert.AreEqual(expectedPercentage, percentage);
+        }
+
+        [TestCase("volume:-1")]
+        [TestCase("volume:101")]
+        [TestCase("volume:loud")]
+        [TestCase("left")]
+        public void InvalidNativeMediaVolumeEvent_IsRejected(string value)
+        {
+            Assert.IsFalse(CompanionVolume.TryParseNativeEvent(value, out _));
+        }
+
+        [Test]
+        public void EditorVolumeSubmission_IsDeliveredOnlyWhenBridgePumps()
+        {
+            CompanionLoginBridge bridge = new CompanionLoginBridge();
+            int? delivered = null;
+            bridge.VolumeChanged += percentage => delivered = percentage;
+
+            try
+            {
+                CompanionVolumeRuntime.Submit(62);
+                Assert.IsNull(delivered);
+
+                bridge.Pump();
+
+                Assert.AreEqual(62, delivered);
+            }
+            finally
+            {
+                bridge.Dispose();
+            }
+        }
+
         [Test]
         public void EditorSubmission_IsDeliveredOnlyWhenBridgePumps()
         {

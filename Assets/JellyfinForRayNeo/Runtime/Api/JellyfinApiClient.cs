@@ -16,7 +16,7 @@ namespace JellyfinForRayNeo
         private const int TranscodeMaxBitrate = 20_000_000;
         private const int SubtitleRequestTimeoutSeconds = 300;
         private const string ListItemFields =
-            "PrimaryImageAspectRatio,Overview,OriginalTitle,Genres,DateCreated," +
+            "PrimaryImageAspectRatio,Overview,OriginalTitle,SortName,Genres,DateCreated," +
             "ChildCount,RecursiveItemCount,ParentId";
         private const string DetailItemFields =
             ListItemFields + ",Studios,People,ProviderIds,ExternalUrls,Tags,Taglines," +

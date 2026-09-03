@@ -43,6 +43,10 @@ local.properties
 .externalNativeBuild/
 .cxx/
 
+# Local dependencies for the embedded phone companion frontend.
+/CompanionUI/node_modules/
+/CompanionUI/.vite/
+
 # OS files
 .DS_Store
 Thumbs.db

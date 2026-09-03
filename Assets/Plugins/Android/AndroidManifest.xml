@@ -12,7 +12,7 @@
     <activity android:name="com.jellyfinforrayneo.companion.JellyfinRayNeoActivity"
               android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale|layoutDirection|density"
               android:exported="true"
-              android:hardwareAccelerated="false"
+              android:hardwareAccelerated="true"
               android:launchMode="singleTask"
               android:resizeableActivity="false"
               android:screenOrientation="portrait"
