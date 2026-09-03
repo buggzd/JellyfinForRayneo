@@ -11,6 +11,13 @@ namespace JellyfinForRayNeo
 {
     public sealed class DetailView
     {
+        private enum DetailSection
+        {
+            Episodes,
+            Related,
+            Information
+        }
+
         private readonly GameObject _root;
         private readonly UiViewMotion _motion;
         private readonly Image _backdrop;
@@ -47,6 +54,16 @@ namespace JellyfinForRayNeo
         private readonly Text _favoriteLabel;
         private readonly Button _playedButton;
         private readonly Text _playedLabel;
+        private readonly RectTransform _detailTabs;
+        private readonly Button _episodesTab;
+        private readonly Button _relatedTab;
+        private readonly Button _informationTab;
+        private readonly Image _episodesTabIndicator;
+        private readonly Image _relatedTabIndicator;
+        private readonly Image _informationTabIndicator;
+        private readonly GameObject _episodesPanel;
+        private readonly GameObject _relatedPanel;
+        private readonly GameObject _informationPanel;
         private readonly EpisodeShelfView _episodeShelf;
         private readonly ChapterShelfView _chapterShelf;
         private readonly DetailShelfView _seasonsShelf;
@@ -57,6 +74,7 @@ namespace JellyfinForRayNeo
         private bool _overviewExpanded;
         private string _fullOverview;
         private int _bindingVersion;
+        private DetailSection _activeSection;
 
         public event Action<JellyfinItem, long> PlayRequested;
         public event Action<JellyfinItem, bool> FavoriteStateChangeRequested;
@@ -85,17 +103,17 @@ namespace JellyfinForRayNeo
             heroBreath.CycleSeconds = 22f;
             UiFactory.SetRect(
                 _backdrop.rectTransform,
-                new Vector2(0f, 1f),
+                new Vector2(0.28f, 1f),
                 new Vector2(1f, 1f),
                 new Vector2(0.5f, 1f),
-                Vector2.zero,
-                new Vector2(0f, 720f));
+                new Vector2(36f, 0f),
+                new Vector2(72f, 790f));
 
             Image backdropShade = UiFactory.CreateGradientPanel(
                 "Backdrop Content Shade",
                 _backdrop.transform,
-                new Color(0.003f, 0.006f, 0.014f, 0.88f),
-                new Color(0.005f, 0.008f, 0.016f, 0.22f),
+                new Color(0.003f, 0.010f, 0.019f, 0.98f),
+                new Color(0.005f, 0.010f, 0.018f, 0.08f),
                 true);
             UiFactory.Stretch(backdropShade.rectTransform);
 
@@ -131,8 +149,8 @@ namespace JellyfinForRayNeo
             _content.sizeDelta = Vector2.zero;
 
             VerticalLayoutGroup contentLayout = _content.gameObject.AddComponent<VerticalLayoutGroup>();
-            contentLayout.padding = new RectOffset(88, 88, 64, 110);
-            contentLayout.spacing = 20f;
+            contentLayout.padding = new RectOffset(82, 72, 52, 110);
+            contentLayout.spacing = 18f;
             contentLayout.childAlignment = TextAnchor.UpperCenter;
             contentLayout.childControlWidth = true;
             contentLayout.childControlHeight = true;
@@ -154,31 +172,26 @@ namespace JellyfinForRayNeo
 
             RectTransform hero = UiFactory.CreateRect("Hero Section", _content);
             LayoutElement heroElement = hero.gameObject.AddComponent<LayoutElement>();
-            heroElement.minHeight = 560f;
-            heroElement.preferredHeight = 596f;
+            heroElement.minHeight = 680f;
+            heroElement.preferredHeight = 700f;
             heroElement.flexibleWidth = 1f;
             heroElement.flexibleHeight = 0f;
-
-            HorizontalLayoutGroup heroLayout = hero.gameObject.AddComponent<HorizontalLayoutGroup>();
-            heroLayout.spacing = 54f;
-            heroLayout.childAlignment = TextAnchor.UpperLeft;
-            heroLayout.childControlWidth = true;
-            heroLayout.childControlHeight = true;
-            heroLayout.childForceExpandWidth = false;
-            heroLayout.childForceExpandHeight = false;
 
             Image posterFrame = UiFactory.CreateRoundedPanel("Poster Frame", hero, UiTheme.SurfaceRaised);
             _posterFrame = posterFrame.gameObject;
             posterFrame.raycastTarget = false;
             LayoutElement posterElement = posterFrame.gameObject.AddComponent<LayoutElement>();
-            posterElement.minWidth = 330f;
-            posterElement.preferredWidth = 330f;
-            posterElement.minHeight = 495f;
-            posterElement.preferredHeight = 495f;
-            posterElement.flexibleWidth = 0f;
+            posterElement.ignoreLayout = true;
+            UiFactory.SetRect(
+                posterFrame.rectTransform,
+                new Vector2(0.33f, 0f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(72f, 0f),
+                new Vector2(144f, -8f));
             Shadow posterShadow = posterFrame.gameObject.AddComponent<Shadow>();
-            posterShadow.effectColor = new Color(0f, 0f, 0f, 0.62f);
-            posterShadow.effectDistance = new Vector2(0f, -13f);
+            posterShadow.effectColor = new Color(0f, 0f, 0f, 0.46f);
+            posterShadow.effectDistance = new Vector2(-18f, -12f);
             posterShadow.useGraphicAlpha = true;
             Outline posterOutline = posterFrame.gameObject.AddComponent<Outline>();
             posterOutline.effectColor = new Color(1f, 1f, 1f, 0.18f);
@@ -191,6 +204,30 @@ namespace JellyfinForRayNeo
             _poster.preserveAspect = false;
             _poster.raycastTarget = false;
             UiFactory.Stretch(_poster.rectTransform);
+
+            Image keyArtShade = UiFactory.CreateGradientPanel(
+                "Key Art Left Shade",
+                posterFrame.transform,
+                new Color(0.003f, 0.010f, 0.019f, 0.96f),
+                new Color(0.003f, 0.010f, 0.019f, 0.02f),
+                true);
+            UiFactory.Stretch(keyArtShade.rectTransform);
+            Image keyArtGlow = UiFactory.CreateGlowPanel(
+                "Key Art Spectrum",
+                posterFrame.transform,
+                new Color(UiTheme.Accent.r, UiTheme.Accent.g, UiTheme.Accent.b, 0.11f));
+            UiFactory.SetRect(
+                keyArtGlow.rectTransform,
+                new Vector2(0.68f, 0.48f),
+                new Vector2(0.68f, 0.48f),
+                new Vector2(0.5f, 0.5f),
+                Vector2.zero,
+                new Vector2(720f, 620f));
+            UiAmbientFloat keyArtMotion = keyArtGlow.gameObject.AddComponent<UiAmbientFloat>();
+            keyArtMotion.Amplitude = new Vector2(12f, 7f);
+            keyArtMotion.Speed = 0.04f;
+            keyArtMotion.ScalePulse = 0.018f;
+            UiFactory.CreateFilmGrain(posterFrame.transform, 0.022f);
 
             UiGradient posterFrameGradient = posterFrame.gameObject.AddComponent<UiGradient>();
             posterFrameGradient.StartColor = new Color(0.46f, 0.86f, 0.82f, 0.58f);
@@ -280,11 +317,17 @@ namespace JellyfinForRayNeo
             RectTransform heroInfo = UiFactory.CreateRect("Hero Information", hero);
             _heroInformation = heroInfo.gameObject;
             LayoutElement heroInfoElement = heroInfo.gameObject.AddComponent<LayoutElement>();
-            heroInfoElement.minWidth = 700f;
-            heroInfoElement.preferredHeight = 540f;
-            heroInfoElement.flexibleWidth = 1f;
+            heroInfoElement.ignoreLayout = true;
+            UiFactory.SetRect(
+                heroInfo,
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, -2f),
+                new Vector2(780f, 650f));
             VerticalLayoutGroup heroInfoLayout = heroInfo.gameObject.AddComponent<VerticalLayoutGroup>();
-            heroInfoLayout.spacing = 10f;
+            heroInfoLayout.padding = new RectOffset(22, 34, 20, 16);
+            heroInfoLayout.spacing = 8f;
             heroInfoLayout.childAlignment = TextAnchor.UpperLeft;
             heroInfoLayout.childControlWidth = true;
             heroInfoLayout.childControlHeight = true;
@@ -298,19 +341,19 @@ namespace JellyfinForRayNeo
             heroGlass.raycastTarget = false;
             UiFactory.SetRect(
                 heroGlass.rectTransform,
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(0.5f, 1f),
                 Vector2.zero,
-                new Vector2(48f, 470f));
+                Vector2.one,
+                new Vector2(0.5f, 0.5f),
+                new Vector2(-12f, 0f),
+                new Vector2(70f, 20f));
             LayoutElement heroGlassLayout = heroGlass.gameObject.AddComponent<LayoutElement>();
             heroGlassLayout.ignoreLayout = true;
             UiGradient heroGlassGradient = heroGlass.gameObject.AddComponent<UiGradient>();
-            heroGlassGradient.StartColor = new Color(1f, 1f, 1f, 0.92f);
-            heroGlassGradient.EndColor = new Color(1f, 1f, 1f, 0.54f);
+            heroGlassGradient.StartColor = new Color(1f, 1f, 1f, 0.78f);
+            heroGlassGradient.EndColor = new Color(1f, 1f, 1f, 0.20f);
             heroGlassGradient.Horizontal = true;
             Outline heroGlassOutline = heroGlass.gameObject.AddComponent<Outline>();
-            heroGlassOutline.effectColor = new Color(0.78f, 0.91f, 1f, 0.075f);
+            heroGlassOutline.effectColor = new Color(0.78f, 0.91f, 1f, 0.095f);
             heroGlassOutline.effectDistance = new Vector2(1f, -1f);
             heroGlassOutline.useGraphicAlpha = true;
             heroGlass.transform.SetAsFirstSibling();
@@ -324,8 +367,8 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, 1f),
                 new Vector2(0f, 1f),
                 new Vector2(0.5f, 0.5f),
-                new Vector2(210f, -116f),
-                new Vector2(720f, 360f));
+                new Vector2(220f, -148f),
+                new Vector2(760f, 430f));
             LayoutElement heroGlowLayout = heroGlow.gameObject.AddComponent<LayoutElement>();
             heroGlowLayout.ignoreLayout = true;
             UiAmbientFloat heroGlowMotion = heroGlow.gameObject.AddComponent<UiAmbientFloat>();
@@ -343,8 +386,8 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, 1f),
                 new Vector2(0f, 1f),
                 new Vector2(0.5f, 1f),
-                new Vector2(-17f, -18f),
-                new Vector2(4f, 108f));
+                new Vector2(5f, -24f),
+                new Vector2(3f, 118f));
             LayoutElement heroAccentLayout = heroAccent.gameObject.AddComponent<LayoutElement>();
             heroAccentLayout.ignoreLayout = true;
 
@@ -358,10 +401,10 @@ namespace JellyfinForRayNeo
             _title = CreateFlowText(
                 "Title",
                 heroInfo,
-                54,
+                62,
                 UiTheme.TextPrimary,
                 FontStyle.Bold,
-                66f);
+                76f);
             _title.lineSpacing = 0.95f;
             _originalTitle = CreateFlowText(
                 "Original Title",
@@ -551,7 +594,103 @@ namespace JellyfinForRayNeo
             _overviewToggleLabel = _overviewToggle.GetComponentInChildren<Text>();
             _overviewToggle.onClick.AddListener(ToggleOverview);
 
-            _expandedOverviewCard = CreateCard("Expanded Overview Card", _content);
+            _overview.transform.SetSiblingIndex(_tagline.transform.GetSiblingIndex() + 1);
+            overviewToggleRow.SetSiblingIndex(_overview.transform.GetSiblingIndex() + 1);
+
+            _detailTabs = UiFactory.CreateRect("Detail Tabs", _content);
+            LayoutElement detailTabsElement = _detailTabs.gameObject.AddComponent<LayoutElement>();
+            detailTabsElement.minHeight = 76f;
+            detailTabsElement.preferredHeight = 76f;
+            detailTabsElement.flexibleHeight = 0f;
+            HorizontalLayoutGroup detailTabsLayout =
+                _detailTabs.gameObject.AddComponent<HorizontalLayoutGroup>();
+            detailTabsLayout.padding = new RectOffset(0, 0, 7, 8);
+            detailTabsLayout.spacing = 8f;
+            detailTabsLayout.childAlignment = TextAnchor.MiddleLeft;
+            detailTabsLayout.childControlWidth = true;
+            detailTabsLayout.childControlHeight = true;
+            detailTabsLayout.childForceExpandWidth = false;
+            detailTabsLayout.childForceExpandHeight = false;
+
+            Image tabDivider = UiFactory.CreateGradientPanel(
+                "Detail Tabs Divider",
+                _detailTabs,
+                new Color(UiTheme.AccentBright.r, UiTheme.AccentBright.g, UiTheme.AccentBright.b, 0.20f),
+                Color.clear,
+                true);
+            UiFactory.SetRect(
+                tabDivider.rectTransform,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.5f, 0f),
+                Vector2.zero,
+                new Vector2(0f, 1f));
+            LayoutElement tabDividerElement = tabDivider.gameObject.AddComponent<LayoutElement>();
+            tabDividerElement.ignoreLayout = true;
+
+            Image episodesIndicator;
+            _episodesTab = CreateDetailTabButton(
+                _detailTabs,
+                "Detail Tab Episodes",
+                "剧集与章节",
+                out episodesIndicator);
+            _episodesTabIndicator = episodesIndicator;
+            _episodesTab.onClick.AddListener(() => SelectDetailSection(DetailSection.Episodes));
+
+            Image relatedIndicator;
+            _relatedTab = CreateDetailTabButton(
+                _detailTabs,
+                "Detail Tab Related",
+                "相关推荐",
+                out relatedIndicator);
+            _relatedTabIndicator = relatedIndicator;
+            _relatedTab.onClick.AddListener(() => SelectDetailSection(DetailSection.Related));
+
+            Image informationIndicator;
+            _informationTab = CreateDetailTabButton(
+                _detailTabs,
+                "Detail Tab Information",
+                "详细信息",
+                out informationIndicator);
+            _informationTabIndicator = informationIndicator;
+            _informationTab.onClick.AddListener(() => SelectDetailSection(DetailSection.Information));
+
+            Image detailTabStage = UiFactory.CreateRoundedPanel(
+                "Detail Tab Stage",
+                _content,
+                new Color(0.008f, 0.024f, 0.042f, 0.72f));
+            detailTabStage.raycastTarget = false;
+            Outline detailTabStageOutline = detailTabStage.gameObject.AddComponent<Outline>();
+            detailTabStageOutline.effectColor = new Color(0.72f, 0.93f, 1f, 0.09f);
+            detailTabStageOutline.effectDistance = new Vector2(1f, -1f);
+            VerticalLayoutGroup detailTabStageLayout =
+                detailTabStage.gameObject.AddComponent<VerticalLayoutGroup>();
+            detailTabStageLayout.padding = new RectOffset(22, 22, 24, 26);
+            detailTabStageLayout.childAlignment = TextAnchor.UpperLeft;
+            detailTabStageLayout.childControlWidth = true;
+            detailTabStageLayout.childControlHeight = true;
+            detailTabStageLayout.childForceExpandWidth = true;
+            detailTabStageLayout.childForceExpandHeight = false;
+            ContentSizeFitter detailTabStageFitter =
+                detailTabStage.gameObject.AddComponent<ContentSizeFitter>();
+            detailTabStageFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            detailTabStageFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            LayoutElement detailTabStageElement =
+                detailTabStage.gameObject.AddComponent<LayoutElement>();
+            detailTabStageElement.minHeight = 150f;
+            detailTabStageElement.flexibleHeight = 0f;
+
+            _episodesPanel = CreateDetailTabPanel(
+                "Detail Episodes Panel",
+                detailTabStage.transform);
+            _relatedPanel = CreateDetailTabPanel(
+                "Detail Related Panel",
+                detailTabStage.transform);
+            _informationPanel = CreateDetailTabPanel(
+                "Detail Information Panel",
+                detailTabStage.transform);
+
+            _expandedOverviewCard = CreateCard("Expanded Overview Card", _informationPanel.transform);
             CreateSectionHeading(_expandedOverviewCard.transform, "剧情简介", "OVERVIEW");
             _expandedOverview = CreateFlowText(
                 "Expanded Overview",
@@ -563,10 +702,10 @@ namespace JellyfinForRayNeo
             _expandedOverview.lineSpacing = 1.18f;
             _expandedOverviewCard.gameObject.SetActive(false);
 
-            _episodeShelf = new EpisodeShelfView(_content, _scroll);
+            _episodeShelf = new EpisodeShelfView(_episodesPanel.transform, _scroll);
             _episodeShelf.EpisodeSelected += episode => RequestPlayback(episode, true);
 
-            _chapterShelf = new ChapterShelfView(_content, _scroll);
+            _chapterShelf = new ChapterShelfView(_episodesPanel.transform, _scroll);
             _chapterShelf.ChapterSelected += startPosition =>
             {
                 if (_item != null && _item.IsPlayable)
@@ -575,16 +714,22 @@ namespace JellyfinForRayNeo
                 }
             };
 
-            _seasonsShelf = new DetailShelfView(_content, _scroll, "Seasons Shelf");
+            _seasonsShelf = new DetailShelfView(
+                _episodesPanel.transform,
+                _scroll,
+                "Seasons Shelf");
             _seasonsShelf.ItemSelected += item => RelatedItemSelected?.Invoke(item);
-            _similarShelf = new DetailShelfView(_content, _scroll, "Similar Shelf");
+            _similarShelf = new DetailShelfView(
+                _relatedPanel.transform,
+                _scroll,
+                "Similar Shelf");
             _similarShelf.ItemSelected += item => RelatedItemSelected?.Invoke(item);
 
-            _factsCard = CreateCard("Details Card", _content);
+            _factsCard = CreateCard("Details Card", _informationPanel.transform);
             CreateSectionHeading(_factsCard.transform, "详细信息", "ABOUT");
             _factsContainer = CreateFactContainer("Detail Facts", _factsCard.transform);
 
-            _mediaCard = CreateCard("Media Card", _content);
+            _mediaCard = CreateCard("Media Card", _informationPanel.transform);
             CreateSectionHeading(_mediaCard.transform, "媒体规格", "TECHNICAL");
             _mediaContainer = CreateFactContainer("Media Facts", _mediaCard.transform);
 
@@ -597,13 +742,14 @@ namespace JellyfinForRayNeo
                 22);
             UiFactory.SetRect(
                 close.GetComponent<RectTransform>(),
-                new Vector2(1f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(-46f, -38f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(42f, -34f),
                 new Vector2(126f, 58f));
             close.onClick.AddListener(() => CloseRequested?.Invoke());
 
+            SelectDetailSection(DetailSection.Information, false);
             _motion.SetVisibleImmediately(false);
         }
 
@@ -693,6 +839,20 @@ namespace JellyfinForRayNeo
                 api,
                 imageCache,
                 cancellationToken);
+
+            bool hasEpisodeSection = HasItems(episodes)
+                || HasItems(seasons)
+                || (item != null && item.Chapters != null && item.Chapters.Any(chapter => chapter != null));
+            bool hasRelatedSection = HasItems(similarItems);
+            _episodesTab.gameObject.SetActive(true);
+            _relatedTab.gameObject.SetActive(true);
+            _informationTab.gameObject.SetActive(true);
+            _episodesTab.interactable = hasEpisodeSection;
+            _relatedTab.interactable = hasRelatedSection;
+            _informationTab.interactable = true;
+            SelectDetailSection(
+                hasEpisodeSection ? DetailSection.Episodes : DetailSection.Information,
+                false);
             if (_factsCard.gameObject.activeSelf)
             {
                 UiFactory.AddScrollReveal(_factsCard.gameObject, _scroll, 0.04f);
@@ -710,11 +870,16 @@ namespace JellyfinForRayNeo
             _backdrop.sprite = null;
             _backdrop.color = new Color(0.07f, 0.075f, 0.10f, 1f);
 
-            string posterUrl = item != null && api != null
-                ? api.BuildPrimaryImageUrl(item, 560)
-                : null;
-            string backdropUrl = item != null && api != null
+            bool hasBackdrop = item != null
+                && ((!string.IsNullOrWhiteSpace(item.ParentBackdropItemId))
+                    || (item.BackdropImageTags != null && item.BackdropImageTags.Count > 0));
+            string backdropUrl = item != null && api != null && hasBackdrop
                 ? api.BuildBackdropImageUrl(item, 1920)
+                : null;
+            string posterUrl = item != null && api != null
+                ? hasBackdrop
+                    ? api.BuildBackdropImageUrl(item, 1600)
+                    : api.BuildPrimaryImageUrl(item, 1280)
                 : null;
             bool loadingPoster = imageCache != null && !string.IsNullOrWhiteSpace(posterUrl);
             _posterPlaceholder.text = BuildPosterPlaceholderLabel(item);
@@ -799,6 +964,10 @@ namespace JellyfinForRayNeo
 
             _overviewExpanded = !_overviewExpanded;
             UpdateOverview();
+            if (_overviewExpanded)
+            {
+                SelectDetailSection(DetailSection.Information);
+            }
             RebuildLayout();
         }
 
@@ -1168,13 +1337,146 @@ namespace JellyfinForRayNeo
                 : UiTheme.SurfaceSoft;
         }
 
+        private void SelectDetailSection(DetailSection section, bool reveal = true)
+        {
+            if (section == DetailSection.Episodes && !_episodesTab.interactable)
+            {
+                section = DetailSection.Information;
+            }
+            if (section == DetailSection.Related && !_relatedTab.interactable)
+            {
+                section = DetailSection.Information;
+            }
+
+            bool sectionChanged = _activeSection != section;
+            _activeSection = section;
+            bool episodesActive = section == DetailSection.Episodes;
+            bool relatedActive = section == DetailSection.Related;
+            bool informationActive = section == DetailSection.Information;
+            _episodesPanel.SetActive(episodesActive);
+            _relatedPanel.SetActive(relatedActive);
+            _informationPanel.SetActive(informationActive);
+            SetDetailTabState(_episodesTab, _episodesTabIndicator, episodesActive);
+            SetDetailTabState(_relatedTab, _relatedTabIndicator, relatedActive);
+            SetDetailTabState(_informationTab, _informationTabIndicator, informationActive);
+
+            if (reveal && sectionChanged)
+            {
+                GameObject activePanel = episodesActive
+                    ? _episodesPanel
+                    : relatedActive ? _relatedPanel : _informationPanel;
+                UiFactory.AddItemReveal(activePanel, 0f);
+                RebuildLayout();
+            }
+        }
+
+        private static void SetDetailTabState(Button button, Image indicator, bool active)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            button.targetGraphic.color = active
+                ? new Color(0.53f, 0.86f, 0.96f, 0.10f)
+                : Color.clear;
+            Text label = button.GetComponentInChildren<Text>();
+            if (label != null)
+            {
+                label.color = !button.interactable
+                    ? UiTheme.TextMuted
+                    : active ? UiTheme.TextPrimary : UiTheme.TextSecondary;
+            }
+            if (indicator != null)
+            {
+                indicator.color = active ? UiTheme.AccentBright : Color.clear;
+            }
+        }
+
         private void RebuildLayout()
         {
             Canvas.ForceUpdateCanvases();
             LayoutRebuilder.ForceRebuildLayoutImmediate(_factsContainer);
             LayoutRebuilder.ForceRebuildLayoutImmediate(_mediaContainer);
+            RectTransform activePanel = (_activeSection == DetailSection.Episodes
+                ? _episodesPanel.transform
+                : _activeSection == DetailSection.Related
+                    ? _relatedPanel.transform
+                    : _informationPanel.transform) as RectTransform;
+            if (activePanel != null)
+            {
+                LayoutRebuilder.ForceRebuildLayoutImmediate(activePanel);
+                RectTransform stage = activePanel.parent as RectTransform;
+                if (stage != null)
+                {
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(stage);
+                }
+            }
             LayoutRebuilder.ForceRebuildLayoutImmediate(_content);
             Canvas.ForceUpdateCanvases();
+        }
+
+        private static Button CreateDetailTabButton(
+            Transform parent,
+            string name,
+            string label,
+            out Image indicator)
+        {
+            Button button = UiFactory.CreateButton(
+                name,
+                parent,
+                label,
+                Color.clear,
+                UiTheme.TextSecondary,
+                20);
+            LayoutElement element = button.gameObject.AddComponent<LayoutElement>();
+            element.minWidth = 178f;
+            element.preferredWidth = 178f;
+            element.minHeight = 58f;
+            element.preferredHeight = 58f;
+            element.flexibleWidth = 0f;
+            element.flexibleHeight = 0f;
+            indicator = UiFactory.CreateRoundedPanel(
+                "Tab Indicator",
+                button.transform,
+                Color.clear);
+            indicator.raycastTarget = false;
+            UiFactory.SetRect(
+                indicator.rectTransform,
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 1f),
+                new Vector2(112f, 3f));
+            Shadow glow = indicator.gameObject.AddComponent<Shadow>();
+            glow.effectColor = new Color(0.36f, 0.86f, 1f, 0.54f);
+            glow.effectDistance = Vector2.zero;
+            return button;
+        }
+
+        private static GameObject CreateDetailTabPanel(string name, Transform parent)
+        {
+            RectTransform panel = UiFactory.CreateRect(name, parent);
+            VerticalLayoutGroup layout = panel.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.spacing = 18f;
+            layout.childAlignment = TextAnchor.UpperLeft;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            ContentSizeFitter fitter = panel.gameObject.AddComponent<ContentSizeFitter>();
+            fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            LayoutElement element = panel.gameObject.AddComponent<LayoutElement>();
+            element.minHeight = 1f;
+            element.flexibleWidth = 1f;
+            element.flexibleHeight = 0f;
+            return panel.gameObject;
+        }
+
+        private static bool HasItems(IList<JellyfinItem> items)
+        {
+            return items != null && items.Any(item => item != null);
         }
 
         private static Image CreateCard(string name, Transform parent)

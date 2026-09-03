@@ -652,6 +652,9 @@ namespace JellyfinForRayNeo.Tests
             Transform actions = FindDescendant(host.transform, "Detail Actions");
             Transform continueButton = FindDescendant(host.transform, "Continue");
             Transform metadataChips = FindDescendant(host.transform, "Metadata Chips");
+            Transform detailTabs = FindDescendant(host.transform, "Detail Tabs");
+            Transform tabStage = FindDescendant(host.transform, "Detail Tab Stage");
+            Transform informationPanel = FindDescendant(host.transform, "Detail Information Panel");
             Assert.NotNull(scrollTransform);
             Assert.NotNull(viewport);
             Assert.NotNull(content);
@@ -659,6 +662,10 @@ namespace JellyfinForRayNeo.Tests
             Assert.NotNull(actions);
             Assert.NotNull(continueButton);
             Assert.NotNull(metadataChips);
+            Assert.NotNull(detailTabs);
+            Assert.NotNull(tabStage);
+            Assert.NotNull(tabStage.GetComponent<Outline>());
+            Assert.NotNull(informationPanel);
 
             ScrollRect scroll = scrollTransform.GetComponent<ScrollRect>();
             Assert.NotNull(scroll);
@@ -676,10 +683,10 @@ namespace JellyfinForRayNeo.Tests
                 overview.GetComponent<Text>().verticalOverflow,
                 "The hero summary must stay compact like Jellyfin Web.");
             Assert.AreEqual("Hero Information", overview.parent.name);
-            Assert.Greater(
+            Assert.Less(
                 overview.GetSiblingIndex(),
                 actions.GetSiblingIndex(),
-                "The compact summary must appear immediately after the playback actions.");
+                "The compact summary must lead into progress and playback actions like the template.");
             Assert.IsTrue(
                 actions.GetComponent<HorizontalLayoutGroup>().childControlWidth,
                 "Action buttons must use their LayoutElement widths instead of Unity's 100 px default.");
@@ -687,6 +694,10 @@ namespace JellyfinForRayNeo.Tests
             Assert.AreEqual(420f, continueButton.GetComponent<LayoutElement>().preferredWidth);
             Assert.IsTrue(metadataChips.GetComponent<HorizontalLayoutGroup>().childControlWidth);
             Assert.AreEqual(0f, metadataChips.GetComponent<LayoutElement>().flexibleHeight);
+            Assert.NotNull(detailTabs.GetComponent<HorizontalLayoutGroup>());
+            Assert.AreEqual(
+                ContentSizeFitter.FitMode.PreferredSize,
+                informationPanel.GetComponent<ContentSizeFitter>().verticalFit);
             Assert.NotNull(FindDescendant(host.transform, "Favorite"));
             Assert.NotNull(FindDescendant(host.transform, "Played"));
 
@@ -983,7 +994,11 @@ namespace JellyfinForRayNeo.Tests
             Canvas.ForceUpdateCanvases();
 
             Assert.IsTrue(FindDescendant(host.transform, "Seasons Shelf").gameObject.activeInHierarchy);
-            Assert.IsTrue(FindDescendant(host.transform, "Similar Shelf").gameObject.activeInHierarchy);
+            Assert.IsTrue(
+                FindDescendant(host.transform, "Detail Episodes Panel").gameObject.activeInHierarchy);
+            Assert.IsFalse(
+                FindDescendant(host.transform, "Detail Related Panel").gameObject.activeInHierarchy);
+            Assert.IsFalse(FindDescendant(host.transform, "Similar Shelf").gameObject.activeInHierarchy);
             Button chapter = FindDescendant(host.transform, "Chapter - 1").GetComponent<Button>();
             Assert.AreEqual("6:43  ·  第二幕", chapter.GetComponentInChildren<Text>().text);
             chapter.onClick.Invoke();
@@ -992,7 +1007,14 @@ namespace JellyfinForRayNeo.Tests
             Assert.IsTrue(overviewToggle.gameObject.activeInHierarchy);
             overviewToggle.onClick.Invoke();
             Assert.IsTrue(FindDescendant(host.transform, "Expanded Overview Card").gameObject.activeInHierarchy);
+            Assert.IsTrue(
+                FindDescendant(host.transform, "Detail Information Panel").gameObject.activeInHierarchy,
+                "Expanding the full overview should reveal its information tab panel.");
 
+            FindDescendant(host.transform, "Detail Tab Related").GetComponent<Button>().onClick.Invoke();
+            Assert.IsTrue(
+                FindDescendant(host.transform, "Detail Related Panel").gameObject.activeInHierarchy);
+            Assert.IsTrue(FindDescendant(host.transform, "Similar Shelf").gameObject.activeInHierarchy);
             PosterCardView similarCard = FindDescendant(host.transform, "Similar Shelf")
                 .GetComponentInChildren<PosterCardView>(true);
             similarCard.GetComponent<Button>().onClick.Invoke();
@@ -1389,6 +1411,12 @@ namespace JellyfinForRayNeo.Tests
                 detailRoot,
                 "Poster Placeholder Layer");
             Transform information = FindDescendant(detailRoot, "Hero Information");
+            Transform keyArtShade = FindDescendant(detailRoot, "Key Art Left Shade");
+            Transform keyArtSpectrum = FindDescendant(detailRoot, "Key Art Spectrum");
+            Transform detailTabs = FindDescendant(detailRoot, "Detail Tabs");
+            Transform tabStage = FindDescendant(detailRoot, "Detail Tab Stage");
+            Transform episodesPanel = FindDescendant(detailRoot, "Detail Episodes Panel");
+            Transform informationPanel = FindDescendant(detailRoot, "Detail Information Panel");
             Transform facts = FindDescendant(detailRoot, "Details Card");
             Transform continueButton = FindDescendant(detailRoot, "Continue");
             Assert.NotNull(backdrop);
@@ -1405,9 +1433,39 @@ namespace JellyfinForRayNeo.Tests
             Assert.NotNull(poster.GetComponent<Shadow>());
             Assert.NotNull(poster.GetComponent<UiItemReveal>());
             Assert.NotNull(poster.GetComponent<UiArtworkPlaceholderMotion>());
+            Assert.IsTrue(poster.GetComponent<LayoutElement>().ignoreLayout);
             Assert.NotNull(posterPlaceholder);
             Assert.IsTrue(posterPlaceholder.gameObject.activeSelf);
             Assert.NotNull(information.GetComponent<UiItemReveal>());
+            Assert.IsTrue(information.GetComponent<LayoutElement>().ignoreLayout);
+            Assert.Less(
+                ((RectTransform)information).anchoredPosition.x,
+                ((RectTransform)poster).anchoredPosition.x,
+                "The information stack must stay on the left of the full key art.");
+            Assert.GreaterOrEqual(((RectTransform)poster).anchorMin.x, 0.3f);
+            Assert.NotNull(keyArtShade);
+            Assert.NotNull(keyArtShade.GetComponent<UiGradient>());
+            Assert.NotNull(keyArtSpectrum);
+            Assert.NotNull(keyArtSpectrum.GetComponent<UiAmbientFloat>());
+            Assert.NotNull(detailTabs);
+            Assert.NotNull(FindDescendant(detailTabs, "Detail Tab Episodes"));
+            Assert.NotNull(FindDescendant(detailTabs, "Detail Tab Related"));
+            Assert.NotNull(FindDescendant(detailTabs, "Detail Tab Information"));
+            Assert.IsFalse(
+                FindDescendant(detailTabs, "Detail Tab Episodes").GetComponent<Button>().interactable);
+            Assert.IsFalse(
+                FindDescendant(detailTabs, "Detail Tab Related").GetComponent<Button>().interactable);
+            Assert.IsTrue(
+                FindDescendant(detailTabs, "Detail Tab Information").GetComponent<Button>().interactable);
+            Assert.NotNull(tabStage);
+            Assert.IsFalse(episodesPanel.gameObject.activeInHierarchy);
+            Assert.IsTrue(informationPanel.gameObject.activeInHierarchy);
+            Assert.Greater(
+                FindDescendant(
+                        FindDescendant(detailTabs, "Detail Tab Information"),
+                        "Tab Indicator")
+                    .GetComponent<Image>().color.a,
+                0.5f);
             Assert.NotNull(facts.GetComponent<UiScrollReveal>());
             Assert.NotNull(continueButton);
             Assert.AreEqual(
