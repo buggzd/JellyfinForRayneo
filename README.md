@@ -17,7 +17,7 @@
 - 通用文件夹逐层浏览，支持网课库中目录和普通视频混排，并保留返回栈
 - 海报、背景图和用户观看进度展示，带内存图片缓存与并发限制
 - 电影/剧集/季/单集详情、按季选集、相似内容、收藏和看过状态同步
-- WebView 原生支持的 MP4/H.264 等格式直接播放；MKV/HEVC 等不兼容路径由 Jellyfin 输出 H.264/AAC HLS，并在直放失败时自动降级
+- Android 硬件解码器与 System WebView 共同支持的 MP4/H.264、MP4/HEVC、WebM/VP9 或 WebM/AV1 优先直放；仅软件解码或容器不兼容的路径由 Jellyfin 输出 H.264/AAC HLS
 - 播放、暂停、拖动进度、遥控快退/快进、上一集/下一集和音轨/字幕切换；文字字幕统一请求为 WebVTT 并由 Lucent 自绘字幕层显示，位图字幕由服务器烧录
 - 向 Jellyfin 同步播放开始、进度和停止事件，用于继续观看与历史记录
 - 眼镜播放状态、标题和进度实时同步到手机触控板；眼镜上的“管理登录”可直接打开手机设置页
@@ -194,13 +194,13 @@ EditMode 测试覆盖 URL、认证响应、浏览查询、媒体元数据、会�
 
 ## 播放降级策略
 
-1. `GlassesUI` 向 Jellyfin 请求 `PlaybackInfo`，携带适合 Android WebView 的直放、HLS 和字幕能力描述。
-2. MP4/H.264 等 WebView 兼容媒体优先使用 HTML `<video>` 直接播放。播放器顶部显示“直接播放”及实际编码信息。
-3. MKV/HEVC 等不兼容组合使用 Jellyfin H.264/AAC HLS 转码；浏览器支持 MSE 时由 `hls.js` 播放，致命媒体错误只尝试恢复一次。
+1. Android 宿主通过 `MediaCodecList` 收集硬件视频解码器；API 29+ 使用 `isHardwareAccelerated`，旧系统排除已知软件实现。`GlassesUI` 再与 `HTMLVideoElement.canPlayType` 的结果取交集，并用该结果生成本机专属的 Jellyfin `DeviceProfile`。
+2. 符合硬解集合、浏览器容器、分辨率和位深约束的媒体优先使用 HTML `<video>` 直接播放。H.264 与 VP8 限 8-bit，HEVC、VP9 与 AV1 限 10-bit；播放器顶部显示“直接播放”及实际编码信息。
+3. 仅有软件解码器、能力无法确认、容器不兼容或超出限制的组合使用 Jellyfin H.264/AAC HLS。浏览器支持 MSE 时，`hls.js` 只负责下载、解复用和送入 MSE，压缩视频仍由 Chromium 调用 Android `MediaCodec` 解码；致命媒体错误只尝试恢复一次。
 4. 直放在运行中失败时保留当前位置并切换到服务器返回的 HLS 备用计划，不循环重试失败路径。
 5. 音轨或字幕切换会停止旧播放会话、保留当前位置并重新协商。可外置的文字字幕统一请求为 WebVTT，由 React 字幕层按当前时间自绘；必须烧录的位图字幕随转码视频输出。
 
-直放协商上限为 120 Mbps；服务器回退限制为 24 Mbps、双声道。实际可用路径仍取决于 Android System WebView、设备硬件解码能力和 Jellyfin FFmpeg 配置。Unity/LibVLC 播放代码继续保留为原生回退，但 Lucent WebView 是当前眼镜端主路径。
+直放协商上限为 120 Mbps；服务器回退限制为 24 Mbps、双声道。Activity 的 `hardwareAccelerated` 与 WebView 的硬件 Layer 保证 GPU 合成，但它们不是视频硬解开关；Android WebView 没有公开 API 强制指定某个解码器，最终组件由 Chromium/MediaCodec 选择。实际可用路径仍取决于 System WebView、设备解码器和 Jellyfin FFmpeg 配置。Unity/LibVLC 播放代码继续保留为原生回退，但 Lucent WebView 是当前眼镜端主路径。
 
 ## 代码结构
 
@@ -233,7 +233,7 @@ Assets/Plugins/Android/
 - Android Manifest 允许明文 HTTP，以支持常见局域网 Jellyfin 部署；公网环境请使用受信任的 HTTPS 反向代理。
 - 图片缓存仅在内存中，默认最多 192 张、最多 4 个并发下载；选集页只加载当前季海报。
 - 单次选集请求最多加载 500 集，超大型剧集库后续需要分页。
-- 播放能力受 Android System WebView、设备解码器和 Jellyfin 转码配置影响；字幕自绘只覆盖文本字幕，位图字幕需要服务器烧录。
+- 播放能力受 Android System WebView、设备解码器和 Jellyfin 转码配置影响；公开 API 只能筛选硬解路径，不能绝对保证 Chromium 不回退。真机播放时可用 `adb shell dumpsys media.player` 或过滤 `MediaCodec` 日志确认组件名；例如本机的 `c2.qti.avc.decoder` 是硬件组件，而 `c2.android.avc.decoder` 是软件实现。字幕自绘只覆盖文本字幕，位图字幕需要服务器烧录。
 - RayNeo 官方导入指南要求将 `Active Input Handling` 设为 `Both`；SDK `1.0.3` 的 XR 输入模块同时使用旧版 `StandaloneInputModule` 与新版触摸处理，因此 Unity 会在 Android 构建时提示 `Both` 性能警告。在替换官方输入模块前不要改为单一后端。
 - RayNeo SDK `1.0.3` 的 `EnvFix` 在版本未变化时会遗留每帧资产扫描回调。本项目仅在 Editor 中运行一次检查并解除该回调；升级官方 SDK 后需重新验证此兼容层。
 

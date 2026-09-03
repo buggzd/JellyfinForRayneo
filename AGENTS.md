@@ -10,6 +10,8 @@ The phone owns discovery, credentials, Quick Connect, login settings, and the OL
 
 Preserve both modes managed by `Air3SDisplayController`. `Mirror2D` displays one full-width WebView frame. `StereoVirtualScreen` measures one WebView at per-eye width and replays that same render into both SBS halves; do not create two player WebViews, because that duplicates decoding, audio, and Jellyfin playback reports. During hardware mode transitions the WebView stays hidden behind Unity's black transition frame.
 
+The glasses player uses HTML `<video>` as the decode surface. `hls.js` downloads and demuxes HLS into MSE; it does not decode video. Chromium selects an Android `MediaCodec` component. Keep the Activity and WebView hardware-accelerated for composition, but do not describe those flags as forcing video hardware decode. The native bridge must enumerate hardware-accelerated video codecs, and `GlassesUI` must intersect that set with WebView support before advertising Jellyfin direct play. Keep H.264/VP8 at 8-bit and HEVC/VP9/AV1 at 10-bit unless a future profile-aware probe proves broader hardware support. Unknown, software-only, or out-of-limit sources must use the H.264/AAC HLS fallback. Verify real playback with the selected `MediaCodec` component; do not rely only on `canPlayType` or the WebView layer type.
+
 Directional input goes to the active glasses WebView first and uses its scoped DOM focus logic. Android-injected keyboard events must originate from `document.activeElement` (falling back to `document.body`) so they bubble with an element target, and DOM handlers must type-check `EventTarget` before calling element APIs. The native Unity fallback still uses `DirectionalFocusNavigator`. While video is active, underlying pages must remain non-interactable in either path.
 
 ## Build, Test, and Development Commands
@@ -49,7 +51,7 @@ Use four-space indentation and Allman braces in C# and Java. Use `PascalCase` fo
 
 ## Testing Guidelines
 
-Tests use NUnit and the Unity Test Framework. Name fixtures `*Tests` and methods after observable behavior, for example `PlayerSeek_PreservesRewindTargetUntilEngineConfirms`. Use EditMode for parsing/state logic and PlayMode for scenes, focus scopes, scrolling, layout, and lifecycle. For WebView changes, run the glasses TypeScript check, build both frontends, refresh Unity, inspect the Console, and run relevant Unity tests. Android Java changes also require an APK build because Editor compilation does not compile plugin Java.
+Tests use NUnit and the Unity Test Framework. Name fixtures `*Tests` and methods after observable behavior, for example `PlayerSeek_PreservesRewindTargetUntilEngineConfirms`. Use EditMode for parsing/state logic and PlayMode for scenes, focus scopes, scrolling, layout, and lifecycle. For WebView changes, run the glasses TypeScript check, build both frontends, refresh Unity, inspect the Console, and run relevant Unity tests. Android Java changes also require an APK build because Editor compilation does not compile plugin Java. Decoder-capability changes require a device check of the advertised codec set and the active `MediaCodec` component while representative media is playing.
 
 ## Commit & Pull Request Guidelines
 
