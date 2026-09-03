@@ -12,6 +12,7 @@ type JellyfinUserData = {
 type JellyfinMediaStream = {
   Type?: string
   Codec?: string
+  Title?: string
   DisplayTitle?: string
   Width?: number
   Height?: number
@@ -19,15 +20,38 @@ type JellyfinMediaStream = {
   Channels?: number
   Language?: string
   IsDefault?: boolean
+  IsForced?: boolean
+  IsHearingImpaired?: boolean
   IsExternal?: boolean
+  SupportsExternalStream?: boolean
+  DeliveryUrl?: string
   Index?: number
 }
 
 type JellyfinMediaSource = {
+  Protocol?: string
+  Id?: string
+  Name?: string
+  Path?: string
   Container?: string
   Bitrate?: number
   RunTimeTicks?: number
   MediaStreams?: JellyfinMediaStream[]
+  SupportsTranscoding?: boolean
+  SupportsDirectStream?: boolean
+  SupportsDirectPlay?: boolean
+  DirectStreamUrl?: string
+  TranscodingUrl?: string
+  TranscodingContainer?: string
+  TranscodingSubProtocol?: string
+  DefaultAudioStreamIndex?: number
+  DefaultSubtitleStreamIndex?: number
+}
+
+type JellyfinPlaybackInfoResponse = {
+  MediaSources?: JellyfinMediaSource[]
+  PlaySessionId?: string
+  ErrorCode?: string
 }
 
 export type JellyfinItemDto = {
@@ -88,6 +112,52 @@ export type DetailSnapshot = {
   extras: MediaItem[]
 }
 
+export type PlaybackTrack = {
+  index: number
+  label: string
+  language: string
+  codec: string
+  channels?: number
+  default: boolean
+  forced: boolean
+  external: boolean
+  text: boolean
+}
+
+export type PlaybackEndpoint = {
+  url: string
+  playSessionId: string
+  playMethod: 'DirectPlay' | 'DirectStream' | 'Transcode'
+  transcoding: boolean
+  subtitleBurnedIn: boolean
+}
+
+export type PlaybackPlan = PlaybackEndpoint & {
+  itemId: string
+  mediaSourceId: string
+  startPositionTicks: number
+  durationTicks: number
+  canSeek: boolean
+  container: string
+  videoCodec: string
+  audioCodec: string
+  width?: number
+  height?: number
+  audioTracks: PlaybackTrack[]
+  subtitleTracks: PlaybackTrack[]
+  audioStreamIndex?: number
+  subtitleStreamIndex: number
+  subtitleUrl?: string
+  fallback?: PlaybackEndpoint
+}
+
+export type PlaybackSelection = {
+  mediaSourceId?: string
+  audioStreamIndex?: number
+  subtitleStreamIndex?: number
+  forceTranscode?: boolean
+}
+
 const itemFields = [
   'Overview',
   'Genres',
@@ -104,6 +174,140 @@ const itemFields = [
   'Path',
   'Taglines',
 ].join(',')
+
+const directPlayMaxBitrate = 120_000_000
+const transcodeMaxBitrate = 24_000_000
+
+const webViewDeviceProfile = {
+  Name: 'Lucent Android WebView',
+  MaxStreamingBitrate: directPlayMaxBitrate,
+  MaxStaticBitrate: directPlayMaxBitrate,
+  DirectPlayProfiles: [
+    {
+      Container: 'mp4,m4v,mov',
+      Type: 'Video',
+      VideoCodec: 'h264,hevc',
+      AudioCodec: 'aac,mp3,ac3,eac3,opus',
+    },
+    {
+      Container: 'webm',
+      Type: 'Video',
+      VideoCodec: 'vp8,vp9,av1',
+      AudioCodec: 'vorbis,opus',
+    },
+  ],
+  TranscodingProfiles: [
+    {
+      Container: 'ts',
+      Type: 'Video',
+      VideoCodec: 'h264',
+      AudioCodec: 'aac,mp3',
+      Protocol: 'hls',
+      Context: 'Streaming',
+      MaxAudioChannels: '2',
+      MinSegments: 2,
+      SegmentLength: 6,
+      EnableSubtitlesInManifest: true,
+    },
+  ],
+  ContainerProfiles: [],
+  CodecProfiles: [
+    {
+      Type: 'Video',
+      Codec: 'h264,hevc,vp8,vp9,av1',
+      Conditions: [
+        { Condition: 'LessThanEqual', Property: 'Width', Value: '3840', IsRequired: false },
+        { Condition: 'LessThanEqual', Property: 'Height', Value: '2160', IsRequired: false },
+        { Condition: 'LessThanEqual', Property: 'VideoBitDepth', Value: '10', IsRequired: false },
+      ],
+      ApplyConditions: [],
+    },
+  ],
+  SubtitleProfiles: [
+    { Format: 'vtt', Method: 'External' },
+    { Format: 'webvtt', Method: 'External' },
+    { Format: 'srt', Method: 'External' },
+    { Format: 'subrip', Method: 'External' },
+    { Format: 'ass', Method: 'External' },
+    { Format: 'ssa', Method: 'External' },
+    { Format: 'mov_text', Method: 'External' },
+    { Format: 'pgssub', Method: 'Encode' },
+    { Format: 'dvdsub', Method: 'Encode' },
+    { Format: 'dvbsub', Method: 'Encode' },
+  ],
+}
+
+function normalizeCodec(value: string | undefined) {
+  const codec = value?.trim().toLocaleLowerCase() ?? ''
+  if (['avc', 'avc1'].includes(codec)) return 'h264'
+  if (['h265', 'hev1', 'hvc1'].includes(codec)) return 'hevc'
+  if (codec === 'subrip') return 'srt'
+  return codec
+}
+
+function normalizeContainer(value: string | undefined) {
+  const container = value?.split(',')[0]?.trim().toLocaleLowerCase() ?? ''
+  if (['m4v', 'mov'].includes(container)) return 'mp4'
+  return container
+}
+
+function isTextSubtitle(value: string | undefined) {
+  return [
+    'vtt',
+    'webvtt',
+    'srt',
+    'subrip',
+    'ass',
+    'ssa',
+    'mov_text',
+    'tx3g',
+    'text',
+  ].includes(normalizeCodec(value))
+}
+
+function streamsOfType(source: JellyfinMediaSource, type: 'Audio' | 'Subtitle' | 'Video') {
+  return (source.MediaStreams ?? []).filter((stream) => stream.Type === type)
+}
+
+function resolveStream(
+  source: JellyfinMediaSource,
+  type: 'Audio' | 'Subtitle',
+  requestedIndex: number | undefined,
+) {
+  const streams = streamsOfType(source, type)
+  if (type === 'Subtitle' && requestedIndex !== undefined && requestedIndex < 0) return undefined
+  const sourceDefault = type === 'Audio'
+    ? source.DefaultAudioStreamIndex
+    : source.DefaultSubtitleStreamIndex
+  const selected = requestedIndex ?? sourceDefault
+  return streams.find((stream) => stream.Index === selected)
+    ?? streams.find((stream) => stream.IsDefault)
+    ?? (type === 'Audio' ? streams[0] : undefined)
+}
+
+function trackLabel(stream: JellyfinMediaStream, type: 'Audio' | 'Subtitle') {
+  const language = stream.Language?.trim() || (type === 'Audio' ? '未知语言' : '字幕')
+  const codec = normalizeCodec(stream.Codec).toLocaleUpperCase()
+  const channels = type === 'Audio' && stream.Channels ? `${stream.Channels} 声道` : ''
+  const forced = stream.IsForced ? '强制' : ''
+  return stream.DisplayTitle?.trim()
+    || stream.Title?.trim()
+    || [language, codec, channels, forced].filter(Boolean).join(' · ')
+}
+
+function mapTrack(stream: JellyfinMediaStream, type: 'Audio' | 'Subtitle'): PlaybackTrack {
+  return {
+    index: stream.Index ?? 0,
+    label: trackLabel(stream, type),
+    language: stream.Language?.trim() || '',
+    codec: normalizeCodec(stream.Codec).toLocaleUpperCase(),
+    channels: stream.Channels,
+    default: Boolean(stream.IsDefault),
+    forced: Boolean(stream.IsForced),
+    external: Boolean(stream.IsExternal || stream.SupportsExternalStream),
+    text: type === 'Audio' || isTextSubtitle(stream.Codec),
+  }
+}
 
 function hash(value: string) {
   let result = 2166136261
@@ -278,6 +482,89 @@ export class JellyfinClient {
       quality: 88,
       api_key: this.session.accessToken,
     })
+  }
+
+  private absoluteUrl(path: string) {
+    if (/^https?:\/\//i.test(path)) return path
+    return `${this.session.serverUrl}/${path.replace(/^\/+/, '')}`
+  }
+
+  private authenticatedUrl(path: string, query: Record<string, string | number | boolean | undefined> = {}) {
+    const url = new URL(this.absoluteUrl(path))
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') url.searchParams.set(key, String(value))
+    })
+    url.searchParams.set('api_key', this.session.accessToken)
+    return url.toString()
+  }
+
+  private playbackRequest(
+    startPositionTicks: number,
+    selection: PlaybackSelection,
+    forceTranscode: boolean,
+  ) {
+    return {
+      UserId: this.session.userId,
+      StartTimeTicks: Math.max(0, Math.round(startPositionTicks)),
+      MediaSourceId: selection.mediaSourceId,
+      AudioStreamIndex: selection.audioStreamIndex,
+      SubtitleStreamIndex: selection.subtitleStreamIndex,
+      MaxStreamingBitrate: forceTranscode ? transcodeMaxBitrate : directPlayMaxBitrate,
+      MaxAudioChannels: forceTranscode ? 2 : 8,
+      EnableDirectPlay: !forceTranscode,
+      EnableDirectStream: !forceTranscode,
+      EnableTranscoding: true,
+      AllowVideoStreamCopy: !forceTranscode,
+      AllowAudioStreamCopy: !forceTranscode,
+      AlwaysBurnInSubtitleWhenTranscoding: false,
+      DeviceProfile: {
+        ...webViewDeviceProfile,
+        MaxStreamingBitrate: forceTranscode ? transcodeMaxBitrate : directPlayMaxBitrate,
+        MaxStaticBitrate: forceTranscode ? transcodeMaxBitrate : directPlayMaxBitrate,
+      },
+    }
+  }
+
+  private directStreamUrl(
+    itemId: string,
+    source: JellyfinMediaSource,
+    startPositionTicks: number,
+    audioStreamIndex: number | undefined,
+    subtitleStreamIndex: number,
+    playSessionId: string,
+  ) {
+    if (source.DirectStreamUrl) {
+      return this.authenticatedUrl(source.DirectStreamUrl)
+    }
+
+    const container = normalizeContainer(source.Container)
+    const extension = container === 'webm' ? 'webm' : 'mp4'
+    return this.authenticatedUrl(`/Videos/${encodeURIComponent(itemId)}/stream.${extension}`, {
+      static: true,
+      deviceId: this.session.deviceId,
+      mediaSourceId: source.Id,
+      startTimeTicks: startPositionTicks > 0 ? startPositionTicks : undefined,
+      audioStreamIndex,
+      subtitleStreamIndex: subtitleStreamIndex >= 0 ? subtitleStreamIndex : undefined,
+      playSessionId,
+    })
+  }
+
+  private subtitleUrl(
+    itemId: string,
+    source: JellyfinMediaSource,
+    stream: JellyfinMediaStream | undefined,
+  ) {
+    if (!stream || stream.Index === undefined || !source.Id) return undefined
+    if (stream.DeliveryUrl) return this.authenticatedUrl(stream.DeliveryUrl)
+    return this.authenticatedUrl(
+      `/Videos/${encodeURIComponent(itemId)}/${encodeURIComponent(source.Id)}/Subtitles/${stream.Index}/Stream.vtt`,
+      {
+        copyTimestamps: false,
+        addVttTimeMap: false,
+        startPositionTicks: 0,
+      },
+    )
   }
 
   mapItem = (source: JellyfinItemDto): MediaItem => {
@@ -534,6 +821,194 @@ export class JellyfinClient {
       similar: similarDtos.map(this.mapItem),
       extras: unique([...specialFeatureDtos, ...trailerDtos].map(this.mapItem)),
     }
+  }
+
+  async preparePlayback(
+    item: MediaItem,
+    startPositionTicks = 0,
+    selection: PlaybackSelection = {},
+  ): Promise<PlaybackPlan> {
+    if (!item.id || !item.canPlay) throw new Error('这个项目没有可播放的媒体源。')
+
+    const startTicks = Math.max(0, Math.round(startPositionTicks))
+    const path = `/Items/${encodeURIComponent(item.id)}/PlaybackInfo`
+    const directResponse = await this.request<JellyfinPlaybackInfoResponse>(
+      path,
+      {},
+      {
+        method: 'POST',
+        body: JSON.stringify(this.playbackRequest(startTicks, selection, false)),
+      },
+    )
+    const sources = directResponse.MediaSources ?? []
+    const source = selection.mediaSourceId
+      ? sources.find((candidate) => candidate.Id === selection.mediaSourceId) ?? sources[0]
+      : sources[0]
+    if (!source) {
+      throw new Error(directResponse.ErrorCode
+        ? `Jellyfin 没有返回可播放源：${directResponse.ErrorCode}`
+        : 'Jellyfin 没有返回可播放源。')
+    }
+
+    const audioTracks = streamsOfType(source, 'Audio').map((stream) => mapTrack(stream, 'Audio'))
+    const subtitleTracks = streamsOfType(source, 'Subtitle').map((stream) => mapTrack(stream, 'Subtitle'))
+    const selectedAudio = resolveStream(source, 'Audio', selection.audioStreamIndex)
+    const selectedSubtitle = resolveStream(source, 'Subtitle', selection.subtitleStreamIndex)
+    const audioStreamIndex = selectedAudio?.Index
+    const subtitleStreamIndex = selectedSubtitle?.Index ?? -1
+    const video = streamsOfType(source, 'Video')[0]
+    const container = normalizeContainer(source.Container)
+    const videoCodec = normalizeCodec(video?.Codec)
+    const audioCodec = normalizeCodec(selectedAudio?.Codec)
+    const browserContainer = ['mp4', 'm4v', 'mov', 'webm'].includes(container)
+    const browserVideo = ['h264', 'hevc', 'vp8', 'vp9', 'av1'].includes(videoCodec)
+    const browserAudio = !audioCodec
+      || ['aac', 'mp3', 'ac3', 'eac3', 'opus', 'vorbis'].includes(audioCodec)
+    const firstAudioIndex = streamsOfType(source, 'Audio')[0]?.Index
+    const nonDefaultAudioSelection = selection.audioStreamIndex !== undefined
+      && selection.audioStreamIndex !== firstAudioIndex
+    const subtitleRequiresBurnIn = Boolean(selectedSubtitle && !isTextSubtitle(selectedSubtitle.Codec))
+    const canDirectPlay = !selection.forceTranscode
+      && !nonDefaultAudioSelection
+      && !subtitleRequiresBurnIn
+      && Boolean(source.SupportsDirectPlay)
+      && browserContainer
+      && browserVideo
+      && browserAudio
+
+    let transcodeResponse: JellyfinPlaybackInfoResponse | undefined
+    try {
+      const forcedSelection: PlaybackSelection = {
+        ...selection,
+        mediaSourceId: source.Id,
+        audioStreamIndex,
+        subtitleStreamIndex,
+      }
+      const transcodeRequest = this.playbackRequest(startTicks, forcedSelection, true)
+      transcodeRequest.AlwaysBurnInSubtitleWhenTranscoding = subtitleRequiresBurnIn
+      transcodeResponse = await this.request<JellyfinPlaybackInfoResponse>(
+        path,
+        {},
+        { method: 'POST', body: JSON.stringify(transcodeRequest) },
+      )
+    } catch {
+      // A direct-playable item may still work when server-side transcoding is unavailable.
+    }
+
+    const transcodedSource = transcodeResponse?.MediaSources?.find(
+      (candidate) => candidate.Id === source.Id,
+    ) ?? transcodeResponse?.MediaSources?.[0]
+    const transcodePath = transcodedSource?.TranscodingUrl
+      ?? (!canDirectPlay ? source.TranscodingUrl : undefined)
+    const transcodeEndpoint: PlaybackEndpoint | undefined = transcodePath
+      ? {
+          url: this.authenticatedUrl(transcodePath),
+          playSessionId: transcodeResponse?.PlaySessionId || directResponse.PlaySessionId || '',
+          playMethod: 'Transcode',
+          transcoding: true,
+          subtitleBurnedIn: subtitleRequiresBurnIn,
+        }
+      : undefined
+    const directEndpoint: PlaybackEndpoint | undefined = canDirectPlay
+      ? {
+          url: this.directStreamUrl(
+            item.id,
+            source,
+            startTicks,
+            audioStreamIndex,
+            subtitleStreamIndex,
+            directResponse.PlaySessionId ?? '',
+          ),
+          playSessionId: directResponse.PlaySessionId ?? '',
+          playMethod: 'DirectPlay',
+          transcoding: false,
+          subtitleBurnedIn: false,
+        }
+      : undefined
+    const endpoint = directEndpoint ?? transcodeEndpoint
+    if (!endpoint) {
+      throw new Error(transcodeResponse?.ErrorCode || directResponse.ErrorCode
+        ? `当前设备与服务器没有可用的播放路径：${transcodeResponse?.ErrorCode || directResponse.ErrorCode}`
+        : '当前设备与服务器没有可用的播放路径。')
+    }
+
+    return {
+      ...endpoint,
+      itemId: item.id,
+      mediaSourceId: source.Id ?? item.id,
+      startPositionTicks: startTicks,
+      durationTicks: source.RunTimeTicks ?? item.runtimeTicks ?? 0,
+      canSeek: true,
+      container: container.toLocaleUpperCase(),
+      videoCodec: videoCodec.toLocaleUpperCase(),
+      audioCodec: audioCodec.toLocaleUpperCase(),
+      width: video?.Width,
+      height: video?.Height,
+      audioTracks,
+      subtitleTracks,
+      audioStreamIndex,
+      subtitleStreamIndex,
+      subtitleUrl: !endpoint.subtitleBurnedIn && selectedSubtitle && isTextSubtitle(selectedSubtitle.Codec)
+        ? this.subtitleUrl(item.id, source, selectedSubtitle)
+        : undefined,
+      fallback: directEndpoint ? transcodeEndpoint : undefined,
+    }
+  }
+
+  async reportPlaybackStarted(plan: PlaybackPlan, paused: boolean, positionTicks: number) {
+    await this.reportPlayback('/Sessions/Playing', plan, paused, positionTicks)
+  }
+
+  async reportPlaybackProgress(plan: PlaybackPlan, paused: boolean, positionTicks: number) {
+    await this.reportPlayback('/Sessions/Playing/Progress', plan, paused, positionTicks)
+  }
+
+  async reportPlaybackStopped(plan: PlaybackPlan, positionTicks: number, failed = false) {
+    await this.request<unknown>(
+      '/Sessions/Playing/Stopped',
+      {},
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ItemId: plan.itemId,
+          MediaSourceId: plan.mediaSourceId,
+          PositionTicks: Math.max(0, Math.round(positionTicks)),
+          PlaySessionId: plan.playSessionId,
+          Failed: failed,
+        }),
+        keepalive: true,
+      },
+    )
+  }
+
+  private async reportPlayback(
+    path: string,
+    plan: PlaybackPlan,
+    paused: boolean,
+    positionTicks: number,
+  ) {
+    await this.request<unknown>(
+      path,
+      {},
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          CanSeek: plan.canSeek,
+          ItemId: plan.itemId,
+          MediaSourceId: plan.mediaSourceId,
+          IsPaused: paused,
+          IsMuted: false,
+          PositionTicks: Math.max(0, Math.round(positionTicks)),
+          PlayMethod: plan.playMethod,
+          PlaySessionId: plan.playSessionId,
+          AudioStreamIndex: plan.audioStreamIndex,
+          SubtitleStreamIndex: plan.subtitleStreamIndex,
+          RepeatMode: 'RepeatNone',
+          PlaybackOrder: 'Default',
+        }),
+        keepalive: true,
+      },
+    )
   }
 
   async setFavorite(itemId: string, favorite: boolean) {

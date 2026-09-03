@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MediaItem } from './data'
-import { JellyfinClient, type CatalogSnapshot } from './jellyfin'
+import {
+  JellyfinClient,
+  type CatalogSnapshot,
+  type PlaybackPlan,
+  type PlaybackSelection,
+} from './jellyfin'
 import {
   discoverRuntime,
   subscribeRuntime,
@@ -151,6 +156,33 @@ export function useJellyfin() {
     return true
   }, [client])
 
+  const preparePlayback = useCallback((
+    item: MediaItem,
+    startPositionTicks: number,
+    selection?: PlaybackSelection,
+  ) => {
+    if (!client) throw new Error('Jellyfin 会话不可用。')
+    return client.preparePlayback(item, startPositionTicks, selection)
+  }, [client])
+
+  const reportPlaybackStarted = useCallback((
+    plan: PlaybackPlan,
+    paused: boolean,
+    positionTicks: number,
+  ) => client?.reportPlaybackStarted(plan, paused, positionTicks) ?? Promise.resolve(), [client])
+
+  const reportPlaybackProgress = useCallback((
+    plan: PlaybackPlan,
+    paused: boolean,
+    positionTicks: number,
+  ) => client?.reportPlaybackProgress(plan, paused, positionTicks) ?? Promise.resolve(), [client])
+
+  const reportPlaybackStopped = useCallback((
+    plan: PlaybackPlan,
+    positionTicks: number,
+    failed = false,
+  ) => client?.reportPlaybackStopped(plan, positionTicks, failed) ?? Promise.resolve(), [client])
+
   const refresh = useCallback(() => loadCatalog(true), [loadCatalog])
   const retry = useCallback(() => loadCatalog(false), [loadCatalog])
 
@@ -167,5 +199,9 @@ export function useJellyfin() {
     loadDetail,
     setFavorite,
     setPlayed,
+    preparePlayback,
+    reportPlaybackStarted,
+    reportPlaybackProgress,
+    reportPlaybackStopped,
   }
 }

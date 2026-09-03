@@ -35,6 +35,7 @@ import {
   Volume2,
   X,
 } from 'lucide-react'
+import Hls from 'hls.js'
 import {
   type CSSProperties,
   type ReactNode,
@@ -49,11 +50,20 @@ import {
   type MediaItem,
   type MediaShelf,
 } from './data'
-import type { DetailSnapshot } from './jellyfin'
+import type {
+  DetailSnapshot,
+  PlaybackPlan,
+  PlaybackSelection,
+} from './jellyfin'
 import { useJellyfin, type JellyfinUiStatus } from './useJellyfin'
 
 type Page = 'home' | 'browse' | 'favorites' | 'search' | 'detail' | 'player'
 type Direction = 'up' | 'down' | 'left' | 'right'
+type PlaybackRequest = {
+  item: MediaItem
+  startPositionTicks: number
+  key: number
+}
 
 const focusableSelector = '[data-focusable="true"]:not([disabled])'
 let sideNavigationReturnTarget: HTMLElement | null = null
@@ -1125,28 +1135,345 @@ function formatTime(totalSeconds: number) {
   return `${hours ? `${hours}:` : ''}${String(minutes).padStart(hours ? 2 : 1, '0')}:${String(remainder).padStart(2, '0')}`
 }
 
-function PlayerPage({ item, onBack }: { item: MediaItem; onBack: () => void }) {
-  const total = 52 * 60 + 14
-  const [playing, setPlaying] = useState(true)
-  const [current, setCurrent] = useState(Math.round(total * ((item.progress ?? 32) / 100)))
+type SubtitleCue = {
+  start: number
+  end: number
+  text: string
+}
+
+function subtitleMarkupText(source: string) {
+  if (!source) return ''
+
+  const parsed = new DOMParser().parseFromString(
+    `<body>${source.replace(/<br\s*\/?>/gi, '\n')}</body>`,
+    'text/html',
+  )
+  return (parsed.body.textContent ?? '')
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
+function subtitleTimestamp(value: string) {
+  const parts = value.replace(',', '.').split(':')
+  const seconds = Number(parts.pop())
+  const minutes = Number(parts.pop())
+  const hours = Number(parts.pop() ?? 0)
+  if (![hours, minutes, seconds].every(Number.isFinite)) return Number.NaN
+  return hours * 3600 + minutes * 60 + seconds
+}
+
+function parseWebVtt(source: string) {
+  const cues: SubtitleCue[] = []
+  const lines = source.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').split('\n')
+  const timing = /^((?:\d+:)?\d{2}:\d{2}[.,]\d{3})\s+-->\s+((?:\d+:)?\d{2}:\d{2}[.,]\d{3})(?:\s|$)/
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].trim().match(timing)
+    if (!match) continue
+
+    const start = subtitleTimestamp(match[1])
+    const end = subtitleTimestamp(match[2])
+    const text: string[] = []
+    index += 1
+    while (index < lines.length && lines[index].trim()) {
+      text.push(lines[index])
+      index += 1
+    }
+
+    const content = subtitleMarkupText(text.join('\n'))
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start && content) {
+      cues.push({ start, end, text: content })
+    }
+  }
+
+  return cues
+}
+
+const jellyfinTicksPerSecond = 10_000_000
+
+type PlayerStatus = 'preparing' | 'buffering' | 'playing' | 'paused' | 'ended' | 'error'
+
+function PlayerPage({
+  item,
+  startPositionTicks,
+  previousItem,
+  nextItem,
+  preparePlayback,
+  reportPlaybackStarted,
+  reportPlaybackProgress,
+  reportPlaybackStopped,
+  onPlayItem,
+  onBack,
+}: {
+  item: MediaItem
+  startPositionTicks: number
+  previousItem?: MediaItem
+  nextItem?: MediaItem
+  preparePlayback: (item: MediaItem, positionTicks: number, selection?: PlaybackSelection) => Promise<PlaybackPlan>
+  reportPlaybackStarted: (plan: PlaybackPlan, paused: boolean, positionTicks: number) => Promise<void>
+  reportPlaybackProgress: (plan: PlaybackPlan, paused: boolean, positionTicks: number) => Promise<void>
+  reportPlaybackStopped: (plan: PlaybackPlan, positionTicks: number, failed?: boolean) => Promise<void>
+  onPlayItem: (item: MediaItem, fromStart?: boolean) => void
+  onBack: () => void
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const hlsRef = useRef<Hls | null>(null)
+  const planRef = useRef<PlaybackPlan | null>(null)
+  const statusRef = useRef<PlayerStatus>('preparing')
+  const prepareGeneration = useRef(0)
+  const desiredPlaying = useRef(true)
+  const seekAppliedKey = useRef('')
+  const fallbackUsed = useRef(false)
+  const startedPlans = useRef(new Set<string>())
+  const stoppedPlans = useRef(new Set<string>())
+  const currentRef = useRef(startPositionTicks / jellyfinTicksPerSecond)
+  const [plan, setPlan] = useState<PlaybackPlan | null>(null)
+  const [status, setStatus] = useState<PlayerStatus>('preparing')
+  const [error, setError] = useState('')
+  const [current, setCurrent] = useState(startPositionTicks / jellyfinTicksPerSecond)
+  const [total, setTotal] = useState((item.runtimeTicks ?? 0) / jellyfinTicksPerSecond)
   const [controls, setControls] = useState(true)
   const [panel, setPanel] = useState<'audio' | 'subtitles' | null>(null)
-  const [audio, setAudio] = useState('中文 · TrueHD Atmos 7.1')
-  const [subtitle, setSubtitle] = useState('简体中文 · ASS 特效')
   const [feedback, setFeedback] = useState<{ direction: 'backward' | 'forward'; id: number } | null>(null)
+  const [volume, setVolume] = useState(100)
+  const [volumeVisible, setVolumeVisible] = useState(false)
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([])
+  const [subtitleLoadError, setSubtitleLoadError] = useState(false)
   const hideTimer = useRef<number | null>(null)
   const feedbackTimer = useRef<number | null>(null)
+  const volumeTimer = useRef<number | null>(null)
   const feedbackId = useRef(0)
+  const playing = status === 'playing' || status === 'buffering'
+
+  useEffect(() => {
+    statusRef.current = status
+  }, [status])
+
+  useEffect(() => {
+    currentRef.current = current
+  }, [current])
+
+  useEffect(() => {
+    const url = plan?.subtitleUrl
+    setSubtitleCues([])
+    setSubtitleLoadError(false)
+    if (!url || (plan?.subtitleStreamIndex ?? -1) < 0) return
+
+    const controller = new AbortController()
+    void fetch(url, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.text()
+      })
+      .then((source) => {
+        const cues = parseWebVtt(source)
+        if (!cues.length) throw new Error('WebVTT 没有可显示的字幕内容')
+        setSubtitleCues(cues)
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return
+        setSubtitleLoadError(true)
+      })
+
+    return () => controller.abort()
+  }, [plan?.playSessionId, plan?.subtitleStreamIndex, plan?.subtitleUrl])
+
+  const planKey = useCallback((value: PlaybackPlan) => (
+    `${value.itemId}:${value.playSessionId}:${value.playMethod}`
+  ), [])
+
+  const positionTicks = useCallback(() => {
+    const video = videoRef.current
+    const seconds = video && Number.isFinite(video.currentTime) ? video.currentTime : currentRef.current
+    return Math.max(0, Math.round(seconds * jellyfinTicksPerSecond))
+  }, [])
+
+  const stopPlan = useCallback((value: PlaybackPlan | null, failed = false) => {
+    if (!value) return
+    const key = planKey(value)
+    if (stoppedPlans.current.has(key)) return
+    stoppedPlans.current.add(key)
+    void reportPlaybackStopped(value, positionTicks(), failed).catch(() => undefined)
+  }, [planKey, positionTicks, reportPlaybackStopped])
+
+  const prepare = useCallback(async (
+    requestedPositionTicks: number,
+    selection: PlaybackSelection = {},
+    shouldPlay = true,
+  ) => {
+    const generation = ++prepareGeneration.current
+    desiredPlaying.current = shouldPlay
+    fallbackUsed.current = false
+    seekAppliedKey.current = ''
+    hlsRef.current?.destroy()
+    hlsRef.current = null
+    videoRef.current?.pause()
+    setPanel(null)
+    setError('')
+    setStatus('preparing')
+    currentRef.current = requestedPositionTicks / jellyfinTicksPerSecond
+    setCurrent(requestedPositionTicks / jellyfinTicksPerSecond)
+
+    try {
+      const next = await preparePlayback(item, requestedPositionTicks, selection)
+      if (generation !== prepareGeneration.current) return
+      planRef.current = next
+      setPlan(next)
+      setTotal((next.durationTicks || item.runtimeTicks || 0) / jellyfinTicksPerSecond)
+      setStatus('buffering')
+    } catch (reason) {
+      if (generation !== prepareGeneration.current) return
+      planRef.current = null
+      setPlan(null)
+      setError(reason instanceof Error ? reason.message : '无法准备 Jellyfin 播放。')
+      setStatus('error')
+      setControls(true)
+    }
+  }, [item, preparePlayback])
+
+  useEffect(() => {
+    startedPlans.current.clear()
+    stoppedPlans.current.clear()
+    planRef.current = null
+    setPlan(null)
+    void prepare(startPositionTicks)
+    return () => {
+      prepareGeneration.current += 1
+    }
+  }, [prepare, startPositionTicks])
+
+  const failPlayback = useCallback((message: string) => {
+    const active = planRef.current
+    if (active?.fallback && !fallbackUsed.current) {
+      fallbackUsed.current = true
+      stopPlan(active, true)
+      const fallback: PlaybackPlan = {
+        ...active,
+        ...active.fallback,
+        startPositionTicks: positionTicks(),
+        fallback: undefined,
+      }
+      seekAppliedKey.current = ''
+      planRef.current = fallback
+      setPlan(fallback)
+      setStatus('buffering')
+      setError('')
+      setControls(true)
+      return
+    }
+
+    stopPlan(active, true)
+    setError(message || '媒体流无法播放，请返回后重试。')
+    setStatus('error')
+    setControls(true)
+  }, [positionTicks, stopPlan])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !plan) return
+
+    video.pause()
+    video.removeAttribute('src')
+    video.load()
+    hlsRef.current?.destroy()
+    hlsRef.current = null
+    seekAppliedKey.current = ''
+    const hlsMedia = plan.transcoding || /\.m3u8(?:$|\?)/i.test(plan.url)
+
+    if (hlsMedia && Hls.isSupported()) {
+      let mediaRecoveryAttempted = false
+      const hls = new Hls({
+        enableWorker: true,
+        backBufferLength: 90,
+        maxBufferLength: 45,
+        maxMaxBufferLength: 90,
+      })
+      hlsRef.current = hls
+      hls.attachMedia(video)
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(plan.url))
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (!data.fatal) return
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !mediaRecoveryAttempted) {
+          mediaRecoveryAttempted = true
+          try {
+            hls.recoverMediaError()
+            return
+          } catch {
+            // Fall through to the user-visible playback failure.
+          }
+        }
+        failPlayback('Jellyfin HLS 媒体流已中断。')
+      })
+    } else {
+      video.src = plan.url
+      video.load()
+    }
+
+    return () => {
+      hlsRef.current?.destroy()
+      hlsRef.current = null
+    }
+  }, [failPlayback, plan])
+
+  const applyInitialSeek = useCallback(() => {
+    const video = videoRef.current
+    const active = planRef.current
+    if (!video || !active) return
+    const key = planKey(active)
+    if (seekAppliedKey.current === key) return
+    seekAppliedKey.current = key
+    const startSeconds = active.startPositionTicks / jellyfinTicksPerSecond
+    if (startSeconds > 0 && Number.isFinite(video.duration)) {
+      video.currentTime = Math.min(startSeconds, Math.max(0, video.duration - .15))
+    }
+    if (Number.isFinite(video.duration) && video.duration > 0) setTotal(video.duration)
+    currentRef.current = video.currentTime || startSeconds
+    setCurrent(video.currentTime || startSeconds)
+  }, [planKey])
+
+  const attemptPlay = useCallback(() => {
+    const video = videoRef.current
+    if (!video || !desiredPlaying.current) return
+    applyInitialSeek()
+    void video.play().catch(() => {
+      desiredPlaying.current = false
+      setStatus('paused')
+      setControls(true)
+    })
+  }, [applyInitialSeek])
+
+  const togglePlayback = useCallback(() => {
+    const video = videoRef.current
+    if (!video) return
+    if (status === 'error') {
+      void prepare(positionTicks(), {
+        mediaSourceId: planRef.current?.mediaSourceId,
+        audioStreamIndex: planRef.current?.audioStreamIndex,
+        subtitleStreamIndex: planRef.current?.subtitleStreamIndex,
+      })
+      return
+    }
+    if (video.ended) video.currentTime = 0
+    if (video.paused) {
+      desiredPlaying.current = true
+      void video.play().catch(() => setStatus('paused'))
+    } else {
+      desiredPlaying.current = false
+      video.pause()
+    }
+  }, [positionTicks, prepare, status])
 
   const scheduleHide = useCallback(() => {
     if (hideTimer.current) window.clearTimeout(hideTimer.current)
-    if (playing && !panel) {
+    if (status === 'playing' && !panel) {
       hideTimer.current = window.setTimeout(() => {
         document.querySelector<HTMLElement>('.player-progress__bar')?.focus({ preventScroll: true })
         setControls(false)
       }, 3200)
     }
-  }, [panel, playing])
+  }, [panel, status])
 
   const reveal = useCallback(() => {
     setControls(true)
@@ -1154,12 +1481,17 @@ function PlayerPage({ item, onBack }: { item: MediaItem; onBack: () => void }) {
   }, [scheduleHide])
 
   const seek = useCallback((seconds: number, showControls = true) => {
-    setCurrent((value) => Math.max(0, Math.min(total, value + seconds)))
+    const video = videoRef.current
+    if (!video || !Number.isFinite(video.duration) || !planRef.current?.canSeek) return
+    const next = Math.max(0, Math.min(video.duration, video.currentTime + seconds))
+    video.currentTime = next
+    currentRef.current = next
+    setCurrent(next)
     setFeedback({ direction: seconds > 0 ? 'forward' : 'backward', id: ++feedbackId.current })
     if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current)
     feedbackTimer.current = window.setTimeout(() => setFeedback(null), 920)
     if (showControls) reveal()
-  }, [reveal, total])
+  }, [reveal])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1169,18 +1501,42 @@ function PlayerPage({ item, onBack }: { item: MediaItem; onBack: () => void }) {
   }, [])
 
   useEffect(() => {
-    if (!playing) return
-    const timer = window.setInterval(() => setCurrent((value) => Math.min(total, value + 1)), 1000)
-    return () => window.clearInterval(timer)
-  }, [playing, total])
-
-  useEffect(() => {
     scheduleHide()
     return () => {
       if (hideTimer.current) window.clearTimeout(hideTimer.current)
       if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current)
+      if (volumeTimer.current) window.clearTimeout(volumeTimer.current)
     }
   }, [scheduleHide])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const video = videoRef.current
+      const active = planRef.current
+      if (!video || !active || !startedPlans.current.has(planKey(active))) return
+      void reportPlaybackProgress(active, video.paused, positionTicks()).catch(() => undefined)
+    }, 10_000)
+    return () => window.clearInterval(timer)
+  }, [planKey, positionTicks, reportPlaybackProgress])
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      const active = planRef.current
+      if (!active || !document.hidden || !startedPlans.current.has(planKey(active))) return
+      void reportPlaybackProgress(active, true, positionTicks()).catch(() => undefined)
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [planKey, positionTicks, reportPlaybackProgress])
+
+  useEffect(() => {
+    const onPageHide = () => stopPlan(planRef.current, statusRef.current === 'error')
+    window.addEventListener('pagehide', onPageHide)
+    return () => {
+      window.removeEventListener('pagehide', onPageHide)
+      stopPlan(planRef.current, statusRef.current === 'error')
+    }
+  }, [stopPlan])
 
   useEffect(() => {
     const listener = (event: Event) => {
@@ -1225,37 +1581,177 @@ function PlayerPage({ item, onBack }: { item: MediaItem; onBack: () => void }) {
         if (controls && document.activeElement instanceof HTMLElement && document.activeElement.matches(focusableSelector)) {
           document.activeElement.click()
         } else {
-          setPlaying((value) => !value)
+          togglePlayback()
           reveal()
+        }
+        return
+      }
+      if (key === 'back') {
+        if (panel) {
+          setPanel(null)
+          reveal()
+        } else {
+          onBack()
         }
       }
     }
     window.addEventListener('lucent-player-key', listener)
     return () => window.removeEventListener('lucent-player-key', listener)
-  }, [controls, reveal, seek])
+  }, [controls, onBack, panel, reveal, seek, togglePlayback])
 
-  const progress = (current / total) * 100
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const command = String((event as CustomEvent<string>).detail ?? '')
+      if (!command.startsWith('volume:')) return
+      const next = Number(command.slice('volume:'.length))
+      if (!Number.isFinite(next)) return
+      setVolume(Math.max(0, Math.min(100, Math.round(next))))
+      setVolumeVisible(true)
+      if (volumeTimer.current) window.clearTimeout(volumeTimer.current)
+      volumeTimer.current = window.setTimeout(() => setVolumeVisible(false), 1350)
+    }
+    window.addEventListener('rayneo-remote-command', listener)
+    return () => window.removeEventListener('rayneo-remote-command', listener)
+  }, [])
+
+  const chooseTrack = useCallback((kind: 'audio' | 'subtitles', index: number) => {
+    const active = planRef.current
+    const video = videoRef.current
+    if (!active || !video) return
+    const shouldPlay = !video.paused
+    const nextSelection: PlaybackSelection = {
+      mediaSourceId: active.mediaSourceId,
+      audioStreamIndex: kind === 'audio' ? index : active.audioStreamIndex,
+      subtitleStreamIndex: kind === 'subtitles' ? index : active.subtitleStreamIndex,
+    }
+    stopPlan(active)
+    void prepare(positionTicks(), nextSelection, shouldPlay)
+  }, [positionTicks, prepare, stopPlan])
+
+  const handlePlaying = useCallback(() => {
+    const active = planRef.current
+    setStatus('playing')
+    setError('')
+    if (active) {
+      const key = planKey(active)
+      if (!startedPlans.current.has(key)) {
+        startedPlans.current.add(key)
+        void reportPlaybackStarted(active, false, positionTicks()).catch(() => undefined)
+      }
+    }
+    scheduleHide()
+  }, [planKey, positionTicks, reportPlaybackStarted, scheduleHide])
+
+  const handlePause = useCallback(() => {
+    const video = videoRef.current
+    const active = planRef.current
+    if (!video || video.ended || statusRef.current === 'preparing' || statusRef.current === 'error') return
+    setStatus('paused')
+    setControls(true)
+    if (active && startedPlans.current.has(planKey(active))) {
+      void reportPlaybackProgress(active, true, positionTicks()).catch(() => undefined)
+    }
+  }, [planKey, positionTicks, reportPlaybackProgress])
+
+  const handleEnded = useCallback(() => {
+    desiredPlaying.current = false
+    setStatus('ended')
+    setControls(true)
+    stopPlan(planRef.current)
+  }, [stopPlan])
+
+  const progress = total > 0 ? Math.min(100, Math.max(0, current / total * 100)) : 0
+  const subtitleText = useMemo(() => subtitleCues
+    .filter((cue) => current >= cue.start && current < cue.end)
+    .map((cue) => cue.text)
+    .join('\n'), [current, subtitleCues])
+  const titleDetail = item.original && item.original !== item.title ? item.original : item.subtitle
+  const episodeLabel = item.sourceType === 'Episode'
+    ? `S${String(item.parentIndexNumber ?? 0).padStart(2, '0')} E${String(item.indexNumber ?? 0).padStart(2, '0')}`
+    : item.kind
+  const playbackMethod = plan?.playMethod === 'Transcode'
+    ? '服务器转码'
+    : plan?.playMethod === 'DirectStream'
+      ? '直接串流'
+      : '直接播放'
+  const formatLabel = [
+    plan?.width && plan?.height ? `${plan.width}×${plan.height}` : item.resolution,
+    plan?.videoCodec,
+  ].filter(Boolean).join(' · ')
+  const audioTracks = plan?.audioTracks ?? []
+  const subtitleTracks = plan?.subtitleTracks ?? []
 
   return (
     <div className="player-page page-enter" onMouseMove={reveal} onClick={reveal}>
       <div className="player-visual" aria-hidden="true">
-        <div className="player-visual__image" />
+        <div className="player-visual__image" style={item.backdropUrl || item.imageUrl ? { backgroundImage: `url(${item.backdropUrl || item.imageUrl})` } : undefined} />
         <div className="player-visual__caustics" />
         <div className="player-visual__vignette" />
         <div className="player-visual__grain" />
       </div>
 
+      <video
+        ref={videoRef}
+        className="player-video"
+        crossOrigin="anonymous"
+        playsInline
+        preload="auto"
+        onLoadedMetadata={applyInitialSeek}
+        onCanPlay={attemptPlay}
+        onPlaying={handlePlaying}
+        onPause={handlePause}
+        onWaiting={() => statusRef.current !== 'preparing' && setStatus('buffering')}
+        onTimeUpdate={(event) => { currentRef.current = event.currentTarget.currentTime; setCurrent(event.currentTarget.currentTime) }}
+        onDurationChange={(event) => Number.isFinite(event.currentTarget.duration) && setTotal(event.currentTarget.duration)}
+        onEnded={handleEnded}
+        onError={() => failPlayback('浏览器无法解码当前 Jellyfin 媒体流。')}
+      />
+
       <div className={cx('player-chrome', !controls && 'is-hidden')}>
         <header className="player-topbar">
           <FocusButton variant="round" label="退出播放器" onClick={onBack}><ArrowLeft size={22} /></FocusButton>
-          <div className="player-title"><small>正在播放 · S01 E03</small><strong>{item.title} <span>·</span> 潮汐记忆</strong></div>
-          <div className="player-direct"><span /> 直接播放 <i /> 4K HEVC</div>
-          <FocusButton variant="glass" icon={<AudioLines size={19} />} active={panel === 'audio'} onClick={() => { setPanel((value) => value === 'audio' ? null : 'audio'); setControls(true) }}>音轨</FocusButton>
-          <FocusButton variant="glass" icon={<Captions size={19} />} active={panel === 'subtitles'} onClick={() => { setPanel((value) => value === 'subtitles' ? null : 'subtitles'); setControls(true) }}>字幕</FocusButton>
+          <div className="player-title"><small>正在播放 · {episodeLabel}</small><strong>{item.title} <span>·</span> {titleDetail}</strong></div>
+          {plan && <div className="player-direct"><span /> {playbackMethod} <i /> {formatLabel}</div>}
+          <FocusButton variant="glass" disabled={!audioTracks.length || status === 'preparing'} icon={<AudioLines size={19} />} active={panel === 'audio'} onClick={() => { setPanel((value) => value === 'audio' ? null : 'audio'); setControls(true) }}>音轨</FocusButton>
+          <FocusButton variant="glass" disabled={!subtitleTracks.length || status === 'preparing'} icon={<Captions size={19} />} active={panel === 'subtitles'} onClick={() => { setPanel((value) => value === 'subtitles' ? null : 'subtitles'); setControls(true) }}>字幕</FocusButton>
         </header>
       </div>
 
-      <div className={cx('screen-subtitle', subtitle.startsWith('关闭') && 'is-hidden')}>当海水开始记得，我们便学会遗忘。</div>
+      {(status === 'preparing' || status === 'buffering') && (
+        <div className="player-state" role="status">
+          <LoaderCircle className="is-spinning" size={34} />
+          <strong>{status === 'preparing' ? '正在准备 Jellyfin 媒体流' : '正在缓冲'}</strong>
+          <small>{status === 'preparing' ? '分析设备能力、音轨与字幕' : playbackMethod}</small>
+        </div>
+      )}
+
+      {status === 'error' && (
+        <div className="player-error glass-panel" role="alert">
+          <Info size={30} />
+          <small>PLAYBACK INTERRUPTED</small>
+          <h2>播放暂时中断</h2>
+          <p>{error}</p>
+          <div>
+            <FocusButton variant="primary" autoFocusTarget icon={<RefreshCw size={18} />} onClick={() => { void prepare(positionTicks(), { mediaSourceId: plan?.mediaSourceId, audioStreamIndex: plan?.audioStreamIndex, subtitleStreamIndex: plan?.subtitleStreamIndex }) }}>重新尝试</FocusButton>
+            <FocusButton variant="glass" onClick={onBack}>返回详情</FocusButton>
+          </div>
+        </div>
+      )}
+
+      {volumeVisible && (
+        <div className="player-volume glass-panel" role="status" aria-label={`媒体音量 ${volume}%`}>
+          <Volume2 size={24} />
+          <span><small>媒体音量</small><strong>{volume}%</strong></span>
+          <i><b style={{ width: `${volume}%` }} /></i>
+        </div>
+      )}
+
+      {subtitleLoadError && (
+        <div className="player-subtitle-error glass-panel" role="status">
+          <Captions size={18} />
+          <span>字幕加载失败，请重新选择字幕轨</span>
+        </div>
+      )}
 
       {feedback && (
         <div
@@ -1284,11 +1780,13 @@ function PlayerPage({ item, onBack }: { item: MediaItem; onBack: () => void }) {
           <header><div><small>PLAYBACK OPTIONS</small><h2>{panel === 'audio' ? '选择音轨' : '选择字幕'}</h2></div><FocusButton variant="round" label="关闭面板" onClick={() => setPanel(null)}><X size={20} /></FocusButton></header>
           <div className="track-list">
             {(panel === 'audio'
-              ? ['中文 · TrueHD Atmos 7.1', '中文 · AAC 2.0', 'English · EAC3 5.1']
-              : ['简体中文 · ASS 特效', '繁體中文 · SRT', 'English · SRT', '关闭字幕']
+              ? audioTracks
+              : [{ index: -1, label: '关闭字幕', language: '', codec: '', default: false, forced: false, external: false, text: true }, ...subtitleTracks]
             ).map((track) => {
-              const selected = panel === 'audio' ? audio === track : subtitle === track
-              return <FocusButton key={track} variant="glass" active={selected} trailing={selected ? <Check size={19} /> : undefined} onClick={() => panel === 'audio' ? setAudio(track) : setSubtitle(track)}>{track}</FocusButton>
+              const selected = panel === 'audio'
+                ? plan?.audioStreamIndex === track.index
+                : plan?.subtitleStreamIndex === track.index
+              return <FocusButton key={`${panel}-${track.index}`} variant="glass" active={selected} trailing={selected ? <Check size={19} /> : undefined} onClick={() => chooseTrack(panel, track.index)}>{track.label}</FocusButton>
             })}
           </div>
         </aside>
@@ -1304,19 +1802,20 @@ function PlayerPage({ item, onBack }: { item: MediaItem; onBack: () => void }) {
           <div className="player-control-row">
             <div className="player-control-group">
               <FocusButton variant="round" label="后退十秒" onClick={() => seek(-10)}><RotateCcw size={22} /></FocusButton>
-              <FocusButton variant="round" className="player-play" autoFocusTarget label={playing ? '暂停' : '播放'} onClick={() => { setPlaying((value) => !value); reveal() }}>{playing ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" />}</FocusButton>
+              <FocusButton variant="round" disabled={status === 'preparing'} className="player-play" autoFocusTarget label={playing ? '暂停' : status === 'ended' ? '重新播放' : '播放'} onClick={() => { togglePlayback(); reveal() }}>{playing ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" />}</FocusButton>
               <FocusButton variant="round" label="前进十秒" onClick={() => seek(10)}><FastForward size={22} /></FocusButton>
             </div>
-            <div className="player-now"><span className={cx('playing-bars', !playing && 'is-paused')}><i /><i /><i /></span><div><small>{playing ? 'NOW PLAYING' : 'PAUSED'}</small><strong>潮汐记忆</strong></div></div>
+            <div className="player-now"><span className={cx('playing-bars', !playing && 'is-paused')}><i /><i /><i /></span><div><small>{status === 'ended' ? 'PLAYBACK ENDED' : playing ? 'NOW PLAYING' : 'PAUSED'}</small><strong>{titleDetail}</strong></div></div>
             <div className="player-control-group player-control-group--right">
-              <FocusButton variant="round" label="上一集"><SkipBack size={21} /></FocusButton>
-              <FocusButton variant="round" label="下一集"><SkipForward size={21} /></FocusButton>
-              <FocusButton variant="round" label="音量"><Volume2 size={21} /></FocusButton>
+              <FocusButton variant="round" disabled={!previousItem} label="上一集" onClick={() => previousItem && onPlayItem(previousItem, true)}><SkipBack size={21} /></FocusButton>
+              <FocusButton variant="round" disabled={!nextItem} label="下一集" onClick={() => nextItem && onPlayItem(nextItem, true)}><SkipForward size={21} /></FocusButton>
+              <FocusButton variant="round" label="音量" onClick={() => { setVolumeVisible(true); if (volumeTimer.current) window.clearTimeout(volumeTimer.current); volumeTimer.current = window.setTimeout(() => setVolumeVisible(false), 1350) }}><Volume2 size={21} /></FocusButton>
             </div>
           </div>
           <div className="player-hints"><span><kbd>←</kbd><kbd>→</kbd> 进度焦点快退 / 快进 10 秒</span><span><kbd>↓</kbd> 显示 / 进入控制栏</span><span><kbd>ENTER</kbd> 确认</span><span><kbd>ESC</kbd> 返回详情</span></div>
         </section>
       </div>
+      <div className={cx('screen-subtitle', !subtitleText && 'is-hidden')} aria-live="off">{subtitleText}</div>
     </div>
   )
 }
@@ -1383,9 +1882,11 @@ export default function App() {
   const [detail, setDetail] = useState<DetailSnapshot | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
+  const [playback, setPlayback] = useState<PlaybackRequest | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | null>(null)
   const detailGeneration = useRef(0)
+  const playbackKey = useRef(0)
 
   const serverName = jellyfin.runtime?.session?.serverName
     || jellyfin.runtime?.session?.serverUrl.replace(/^https?:\/\//i, '')
@@ -1489,8 +1990,12 @@ export default function App() {
     })
   }, [jellyfin.loadDetail, selected.id])
 
-  const playItem = useCallback((item: MediaItem) => {
-    setSelected(item)
+  const playItem = useCallback((item: MediaItem, fromStart = false) => {
+    setPlayback({
+      item,
+      startPositionTicks: fromStart ? 0 : item.playbackPositionTicks ?? 0,
+      key: ++playbackKey.current,
+    })
     setBackdropItem(item)
     navigate('player')
   }, [navigate])
@@ -1513,7 +2018,7 @@ export default function App() {
       if (key === 'escape' || key === 'backspace') {
         event.preventDefault()
         if (page === 'player') {
-          goBack()
+          window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: 'back' }))
         } else {
           goBack()
         }
@@ -1586,7 +2091,15 @@ export default function App() {
       return <BrowsePage key={page} mode={page === 'browse' ? 'library' : page} items={snapshot.libraries} favorites={snapshot.favorites} searchSeed={snapshot.allItems} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onSearch={jellyfin.search} onNavigate={navigate} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     }
     if (page === 'detail') return <DetailPage key={selected.id} item={selected} detail={detail} loading={detailLoading} error={detailError} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigate(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? '已加入收藏' : '已取消收藏'); return saved } catch { showToast('收藏状态更新失败'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? '已标记为看过' : '已标记为未看'); return saved } catch { showToast('观看状态更新失败'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
-    return <PlayerPage item={selected} onBack={goBack} />
+    const request = playback ?? {
+      item: selected.canPlay
+        ? selected
+        : snapshot.allItems.find((item) => item.canPlay) ?? snapshot.featured,
+      startPositionTicks: selected.playbackPositionTicks ?? 0,
+      key: 0,
+    }
+    const episodeIndex = detail?.episodes.findIndex((episode) => episode.id === request.item.id) ?? -1
+    return <PlayerPage key={request.key} item={request.item} startPositionTicks={request.startPositionTicks} previousItem={episodeIndex > 0 ? detail?.episodes[episodeIndex - 1] : undefined} nextItem={episodeIndex >= 0 ? detail?.episodes[episodeIndex + 1] : undefined} preparePlayback={jellyfin.preparePlayback} reportPlaybackStarted={jellyfin.reportPlaybackStarted} reportPlaybackProgress={jellyfin.reportPlaybackProgress} reportPlaybackStopped={jellyfin.reportPlaybackStopped} onPlayItem={playItem} onBack={goBack} />
   })()
 
   return (
