@@ -8,17 +8,22 @@ namespace JellyfinForRayNeo
 {
     public sealed class BrowseView
     {
-        private const float HeaderSideMargin = 44f;
-
         private readonly GameObject _root;
         private readonly UiViewMotion _motion;
+        private readonly LucentSideNavigation _navigation;
         private readonly JellyfinApiClient _api;
         private readonly JellyfinImageCache _imageCache;
+        private readonly Text _breadcrumb;
+        private readonly Text _eyebrow;
         private readonly Text _title;
+        private readonly Text _summary;
         private readonly Text _countLabel;
         private readonly Text _pageLabel;
         private readonly EmptyStateView _emptyState;
         private readonly Image _alphabetPanel;
+        private readonly RectTransform _alphabetGrid;
+        private readonly Text _searchSelectionValue;
+        private readonly RectTransform _toolbar;
         private readonly Dictionary<string, Button> _initialButtons =
             new Dictionary<string, Button>(StringComparer.Ordinal);
         private readonly Button _sortButton;
@@ -33,8 +38,11 @@ namespace JellyfinForRayNeo
 
         public event Action BackRequested;
         public event Action HomeRequested;
+        public event Action LibraryRequested;
         public event Action SearchModeRequested;
         public event Action FavoritesRequested;
+        public event Action RefreshRequested;
+        public event Action LogoutRequested;
         public event Action<string> SearchInitialSelected;
         public event Action SortRequested;
         public event Action FilterRequested;
@@ -55,13 +63,14 @@ namespace JellyfinForRayNeo
             Image rootImage = UiFactory.CreatePanel("Browse Screen", parent, UiTheme.Background);
             UiFactory.Stretch(rootImage.rectTransform);
             _root = rootImage.gameObject;
-            _motion = UiFactory.AddViewMotion(_root, 24f, 0.99f);
+            _motion = UiFactory.AddViewMotion(_root, 18f, 0.995f);
             UiFactory.CreateAmbientBackdrop(rootImage.transform);
+            UiFactory.CreateFilmGrain(rootImage.transform, 0.018f);
 
             Image glow = UiFactory.CreateGradientPanel(
                 "Browse Ambient Glow",
                 rootImage.transform,
-                new Color(0.08f, 0.26f, 0.31f, 0.20f),
+                new Color(0.15f, 0.54f, 0.68f, 0.13f),
                 new Color(UiTheme.Background.r, UiTheme.Background.g, UiTheme.Background.b, 0f),
                 true);
             UiFactory.SetRect(
@@ -72,159 +81,283 @@ namespace JellyfinForRayNeo
                 Vector2.zero,
                 Vector2.zero);
 
-            Image header = UiFactory.CreateRoundedPanel(
-                "Browse Header",
+            Button back = UiFactory.CreateButton(
+                "Browse Back",
                 rootImage.transform,
-                UiTheme.SurfaceGlass);
+                "返回",
+                new Color(0.24f, 0.46f, 0.56f, 0.16f),
+                UiTheme.TextPrimary,
+                17);
             UiFactory.SetRect(
-                header.rectTransform,
+                back.GetComponent<RectTransform>(),
                 new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(0.5f, 1f),
-                new Vector2(0f, -28f),
-                new Vector2(-HeaderSideMargin * 2f, 84f));
-            Outline headerOutline = header.gameObject.AddComponent<Outline>();
-            headerOutline.effectColor = UiTheme.Border;
-            headerOutline.effectDistance = new Vector2(1f, -1f);
-
-            Button back = CreateHeaderButton("Browse Back", header.transform, "返回", 20);
-            SetHeaderButtonRect(back, 18f, 96f);
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(UiTheme.ContentLeft, -34f),
+                new Vector2(92f, 50f));
             back.onClick.AddListener(() => BackRequested?.Invoke());
 
-            Button home = CreateHeaderButton("Browse Home", header.transform, "首页", 20);
-            SetHeaderButtonRect(home, 124f, 96f);
+            Button home = UiFactory.CreateButton(
+                "Browse Home",
+                rootImage.transform,
+                "首页",
+                Color.clear,
+                UiTheme.TextSecondary,
+                16);
+            UiFactory.SetRect(
+                home.GetComponent<RectTransform>(),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(UiTheme.ContentLeft + 110f, -34f),
+                new Vector2(74f, 50f));
             home.onClick.AddListener(() => HomeRequested?.Invoke());
 
-            Text eyebrow = UiFactory.CreateText(
-                "Browse Eyebrow",
-                header.transform,
-                "JELLYFIN  ·  AIR BROWSE",
-                14,
-                UiTheme.AccentBright,
-                TextAnchor.UpperLeft,
-                FontStyle.Bold);
+            Text divider = UiFactory.CreateText(
+                "Browse Breadcrumb Divider",
+                rootImage.transform,
+                "/",
+                15,
+                UiTheme.TextMuted,
+                TextAnchor.MiddleCenter,
+                FontStyle.Normal);
             UiFactory.SetRect(
-                eyebrow.rectTransform,
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                new Vector2(244f, 15f),
-                new Vector2(460f, 24f));
+                divider.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(UiTheme.ContentLeft + 192f, -34f),
+                new Vector2(24f, 50f));
+
+            _breadcrumb = UiFactory.CreateText(
+                "Browse Breadcrumb",
+                rootImage.transform,
+                "媒体库",
+                15,
+                UiTheme.TextSecondary,
+                TextAnchor.MiddleLeft,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                _breadcrumb.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(UiTheme.ContentLeft + 222f, -34f),
+                new Vector2(520f, 50f));
+
+            _eyebrow = UiFactory.CreateText(
+                "Browse Eyebrow",
+                rootImage.transform,
+                "ALL JELLYFIN LIBRARIES",
+                12,
+                UiTheme.AccentBright,
+                TextAnchor.MiddleLeft,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                _eyebrow.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(UiTheme.ContentLeft, -94f),
+                new Vector2(700f, 26f));
 
             _title = UiFactory.CreateText(
                 "Browse Title",
-                header.transform,
+                rootImage.transform,
                 "媒体库",
-                29,
+                54,
                 UiTheme.TextPrimary,
-                TextAnchor.LowerLeft,
-                FontStyle.Bold);
+                TextAnchor.MiddleLeft,
+                FontStyle.Normal);
             _title.resizeTextForBestFit = true;
-            _title.resizeTextMinSize = 20;
-            _title.resizeTextMaxSize = 29;
+            _title.resizeTextMinSize = 34;
+            _title.resizeTextMaxSize = 54;
             UiFactory.SetRect(
                 _title.rectTransform,
-                new Vector2(0f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(-96f, -13f),
-                new Vector2(-820f, 38f));
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(UiTheme.ContentLeft - 2f, -122f),
+                new Vector2(980f, 66f));
 
-            Button favorites = CreateHeaderButton("Browse Favorites", header.transform, "收藏", 19);
-            SetRightHeaderButtonRect(favorites, 138f, 104f);
-            favorites.onClick.AddListener(() => FavoritesRequested?.Invoke());
-
-            Button search = CreateHeaderButton("Browse Search", header.transform, "搜索", 19);
-            SetRightHeaderButtonRect(search, 24f, 104f);
-            search.onClick.AddListener(() => SearchModeRequested?.Invoke());
-
-            RectTransform toolbar = UiFactory.CreateRect("Browse Toolbar", rootImage.transform);
+            _summary = UiFactory.CreateText(
+                "Browse Summary",
+                rootImage.transform,
+                string.Empty,
+                16,
+                UiTheme.TextMuted,
+                TextAnchor.MiddleLeft,
+                FontStyle.Normal);
             UiFactory.SetRect(
-                toolbar,
+                _summary.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(UiTheme.ContentLeft, -184f),
+                new Vector2(980f, 30f));
+
+            Image layoutIndicator = UiFactory.CreateRoundedPanel(
+                "Browse Layout Indicator",
+                rootImage.transform,
+                new Color(0.30f, 0.54f, 0.64f, 0.12f));
+            layoutIndicator.raycastTarget = false;
+            UiFactory.SetRect(
+                layoutIndicator.rectTransform,
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(-UiTheme.ContentRight, -132f),
+                new Vector2(178f, 46f));
+            Text layoutLabel = UiFactory.CreateText(
+                "Browse Layout Label",
+                layoutIndicator.transform,
+                "▦  海报网格",
+                14,
+                UiTheme.TextSecondary,
+                TextAnchor.MiddleCenter,
+                FontStyle.Normal);
+            UiFactory.Stretch(layoutLabel.rectTransform, 12f, 12f, 4f, 4f);
+
+            Image toolbarImage = UiFactory.CreateGlassPanel(
+                "Browse Toolbar",
+                rootImage.transform,
+                new Color(0.055f, 0.125f, 0.169f, 0.54f),
+                new Vector2(0f, -8f));
+            _toolbar = toolbarImage.rectTransform;
+            UiFactory.SetRect(
+                _toolbar,
                 new Vector2(0f, 1f),
                 new Vector2(1f, 1f),
                 new Vector2(0.5f, 1f),
-                new Vector2(0f, -126f),
-                new Vector2(-96f, 76f));
+                new Vector2((UiTheme.ContentLeft - UiTheme.ContentRight) * 0.5f, -224f),
+                new Vector2(-UiTheme.ContentLeft - UiTheme.ContentRight, 76f));
 
             _countLabel = UiFactory.CreateText(
                 "Browse Count",
-                toolbar,
+                _toolbar,
                 string.Empty,
-                20,
+                16,
                 UiTheme.TextSecondary,
                 TextAnchor.MiddleLeft,
-                FontStyle.Bold);
+                FontStyle.Normal);
             UiFactory.SetRect(
                 _countLabel.rectTransform,
                 new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f),
                 new Vector2(0f, 0.5f),
-                Vector2.zero,
-                new Vector2(620f, 60f));
+                new Vector2(24f, 0f),
+                new Vector2(500f, 56f));
 
-            _sortButton = CreateToolbarButton("Browse Sort", toolbar, "排序：名称 A–Z", 232f);
-            SetToolbarRightRect(_sortButton, 518f, 232f);
+            _sortButton = CreateToolbarButton("Browse Sort", _toolbar, "排序：名称 A–Z", 212f);
+            SetToolbarRightRect(_sortButton, 530f, 212f);
             _sortButton.onClick.AddListener(() => SortRequested?.Invoke());
 
-            _filterButton = CreateToolbarButton("Browse Filter", toolbar, "筛选：全部", 188f);
-            SetToolbarRightRect(_filterButton, 320f, 188f);
+            _filterButton = CreateToolbarButton("Browse Filter", _toolbar, "筛选：全部", 174f);
+            SetToolbarRightRect(_filterButton, 344f, 174f);
             _filterButton.onClick.AddListener(() => FilterRequested?.Invoke());
 
-            _previousButton = CreateToolbarButton("Previous Page", toolbar, "上一页", 110f);
-            SetToolbarRightRect(_previousButton, 200f, 110f);
+            _previousButton = CreateToolbarButton("Previous Page", _toolbar, "‹", 54f);
+            SetToolbarRightRect(_previousButton, 84f, 54f);
             _previousButton.onClick.AddListener(() => PreviousPageRequested?.Invoke());
 
-            _nextButton = CreateToolbarButton("Next Page", toolbar, "下一页", 110f);
-            SetToolbarRightRect(_nextButton, 80f, 110f);
+            _nextButton = CreateToolbarButton("Next Page", _toolbar, "›", 54f);
+            SetToolbarRightRect(_nextButton, 20f, 54f);
             _nextButton.onClick.AddListener(() => NextPageRequested?.Invoke());
 
             _pageLabel = UiFactory.CreateText(
                 "Page Range",
-                toolbar,
+                _toolbar,
                 string.Empty,
-                17,
+                13,
                 UiTheme.TextMuted,
-                TextAnchor.MiddleRight,
-                FontStyle.Bold);
+                TextAnchor.MiddleCenter,
+                FontStyle.Normal);
             UiFactory.SetRect(
                 _pageLabel.rectTransform,
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
                 new Vector2(1f, 0.5f),
-                new Vector2(-4f, -46f),
-                new Vector2(320f, 28f));
+                new Vector2(-148f, 0f),
+                new Vector2(180f, 42f));
 
-            _alphabetPanel = UiFactory.CreateRoundedPanel(
+            _alphabetPanel = UiFactory.CreateGlassPanel(
                 "Search Alphabet",
                 rootImage.transform,
-                UiTheme.SurfaceGlass);
+                new Color(0.055f, 0.125f, 0.169f, 0.62f),
+                new Vector2(0f, -12f));
             UiFactory.SetRect(
                 _alphabetPanel.rectTransform,
                 new Vector2(0f, 1f),
                 new Vector2(1f, 1f),
                 new Vector2(0.5f, 1f),
-                new Vector2(0f, -198f),
-                new Vector2(-96f, 64f));
-            Outline alphabetOutline = _alphabetPanel.gameObject.AddComponent<Outline>();
-            alphabetOutline.effectColor = UiTheme.Border;
-            alphabetOutline.effectDistance = new Vector2(1f, -1f);
-            HorizontalLayoutGroup alphabetLayout =
-                _alphabetPanel.gameObject.AddComponent<HorizontalLayoutGroup>();
-            alphabetLayout.padding = new RectOffset(14, 14, 7, 7);
-            alphabetLayout.spacing = 7f;
-            alphabetLayout.childAlignment = TextAnchor.MiddleCenter;
-            alphabetLayout.childControlWidth = true;
-            alphabetLayout.childControlHeight = true;
-            alphabetLayout.childForceExpandWidth = false;
-            alphabetLayout.childForceExpandHeight = false;
-            CreateInitialButton(JellyfinTitleInitials.All, "全部", 70f, 0f);
+                new Vector2((UiTheme.ContentLeft - UiTheme.ContentRight) * 0.5f, -224f),
+                new Vector2(-UiTheme.ContentLeft - UiTheme.ContentRight, 286f));
+
+            Text searchMark = UiFactory.CreateText(
+                "Search Console Mark",
+                _alphabetPanel.transform,
+                "⌕",
+                28,
+                UiTheme.Focus,
+                TextAnchor.MiddleCenter,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                searchMark.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(24f, -18f),
+                new Vector2(42f, 48f));
+
+            Text searchEyebrow = UiFactory.CreateText(
+                "Search Console Eyebrow",
+                _alphabetPanel.transform,
+                "SEARCH ALL JELLYFIN LIBRARIES",
+                10,
+                UiTheme.TextMuted,
+                TextAnchor.LowerLeft,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                searchEyebrow.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(76f, -13f),
+                new Vector2(520f, 22f));
+
+            _searchSelectionValue = UiFactory.CreateText(
+                "Search Console Value",
+                _alphabetPanel.transform,
+                "选择首字母",
+                22,
+                UiTheme.TextPrimary,
+                TextAnchor.UpperLeft,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                _searchSelectionValue.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(76f, -36f),
+                new Vector2(720f, 34f));
+
+            _alphabetGrid = UiFactory.CreateRect("Search Keyboard", _alphabetPanel.transform);
+            UiFactory.Stretch(_alphabetGrid, 24f, 24f, 80f, 16f);
+            GridLayoutGroup alphabetLayout = _alphabetGrid.gameObject.AddComponent<GridLayoutGroup>();
+            alphabetLayout.startCorner = GridLayoutGroup.Corner.UpperLeft;
+            alphabetLayout.startAxis = GridLayoutGroup.Axis.Horizontal;
+            alphabetLayout.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            alphabetLayout.constraintCount = 10;
+            alphabetLayout.cellSize = new Vector2(142f, 54f);
+            alphabetLayout.spacing = new Vector2(12f, 10f);
+            alphabetLayout.childAlignment = TextAnchor.UpperCenter;
+            CreateInitialButton(JellyfinTitleInitials.All, "全部", 0f);
             for (char initial = 'A'; initial <= 'Z'; initial++)
             {
                 string value = initial.ToString();
-                CreateInitialButton(value, value, 55f, (initial - 'A' + 1) * 0.008f);
+                CreateInitialButton(value, value, (initial - 'A' + 1) * 0.008f);
             }
-            CreateInitialButton(JellyfinTitleInitials.Other, "#", 55f, 0.22f);
+            CreateInitialButton(JellyfinTitleInitials.Other, "#", 0.22f);
             _alphabetPanel.gameObject.SetActive(false);
 
             _viewport = UiFactory.CreateRect("Browse Viewport", rootImage.transform);
@@ -233,8 +366,8 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, 0f),
                 new Vector2(1f, 1f),
                 new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -96f),
-                new Vector2(0f, -260f));
+                new Vector2(0f, -154f),
+                new Vector2(0f, -332f));
             Image dragSurface = _viewport.gameObject.AddComponent<Image>();
             dragSurface.color = Color.clear;
             dragSurface.raycastTarget = true;
@@ -269,8 +402,18 @@ namespace JellyfinForRayNeo
             _emptyState = new EmptyStateView(
                 rootImage.transform,
                 "Browse Empty State",
-                new Vector2(0f, -45f),
+                new Vector2(42f, -128f),
                 new Vector2(1080f, 330f));
+
+            _navigation = new LucentSideNavigation(
+                rootImage.transform,
+                LucentSideNavigation.Section.Library);
+            _navigation.HomeRequested += () => HomeRequested?.Invoke();
+            _navigation.LibraryRequested += () => LibraryRequested?.Invoke();
+            _navigation.SearchRequested += () => SearchModeRequested?.Invoke();
+            _navigation.FavoritesRequested += () => FavoritesRequested?.Invoke();
+            _navigation.RefreshRequested += () => RefreshRequested?.Invoke();
+            _navigation.LogoutRequested += () => LogoutRequested?.Invoke();
 
             _motion.SetVisibleImmediately(false);
         }
@@ -317,10 +460,25 @@ namespace JellyfinForRayNeo
             List<JellyfinItem> items = result.Items ?? new List<JellyfinItem>();
 
             _title.text = string.IsNullOrWhiteSpace(_state.Title) ? "浏览" : _state.Title;
+            _breadcrumb.text = _title.text;
             bool searchMode = _state.IsSearch;
             string searchInitial = JellyfinTitleInitials.NormalizeSelection(
                 _state.SearchInitial);
             _state.SearchInitial = searchInitial;
+            _eyebrow.text = searchMode
+                ? "SEARCH EVERYWHERE"
+                : _state.IsFavorites
+                    ? "SAVED MOMENTS"
+                    : string.IsNullOrWhiteSpace(_state.ParentId)
+                        ? "ALL JELLYFIN LIBRARIES"
+                        : "LIBRARY / FOLDER VIEW";
+            _navigation.SetIdentity(_api.Session);
+            _navigation.SetActive(
+                searchMode
+                    ? LucentSideNavigation.Section.Search
+                    : _state.IsFavorites
+                        ? LucentSideNavigation.Section.Favorites
+                        : LucentSideNavigation.Section.Library);
             _alphabetPanel.gameObject.SetActive(searchMode);
             ConfigureViewport(searchMode);
             UpdateInitialSelection(searchInitial);
@@ -332,6 +490,8 @@ namespace JellyfinForRayNeo
             {
                 _countLabel.text = "选择首字母  ·  中文拼音 / ENGLISH";
                 _pageLabel.text = string.Empty;
+                _searchSelectionValue.text = "选择首字母";
+                _summary.text = "使用遥控器与首字母键盘搜索全部媒体库";
             }
             else
             {
@@ -343,7 +503,16 @@ namespace JellyfinForRayNeo
                     : total > 0
                         ? "共 " + total + " 项"
                         : "此位置暂无内容";
-                _pageLabel.text = total + " 的 " + start + "–" + end;
+                _pageLabel.text = start + "–" + end + "  /  " + total;
+                _searchSelectionValue.text = searchMode
+                    ? "当前索引  ·  " + initialLabel
+                    : string.Empty;
+                _summary.text = searchMode
+                    ? "正在全部媒体库中查找首字母 “" + initialLabel + "”"
+                    : total + " 个项目  ·  JELLYFIN / "
+                        + (_api.Session != null && !string.IsNullOrWhiteSpace(_api.Session.ServerName)
+                            ? _api.Session.ServerName
+                            : "SERVER");
             }
             _previousButton.interactable = _state.StartIndex > 0;
             _nextButton.interactable = end > 0 && end < total;
@@ -377,6 +546,10 @@ namespace JellyfinForRayNeo
             }
 
             bool empty = items.Count == 0;
+            RectTransform emptyRect = _emptyState.Root.GetComponent<RectTransform>();
+            emptyRect.anchoredPosition = searchMode
+                ? new Vector2(42f, -316f)
+                : new Vector2(42f, -128f);
             if (empty)
             {
                 if (searchMode && searchInitial == null)
@@ -418,47 +591,55 @@ namespace JellyfinForRayNeo
 
         private void ConfigureGrid(bool landscape)
         {
-            _gridLayout.constraintCount = landscape ? 5 : 7;
+            _gridLayout.constraintCount = landscape ? 4 : 6;
             _gridLayout.cellSize = new Vector2(
                 landscape ? PosterCardView.LandscapeWidth : PosterCardView.PosterWidth,
                 landscape ? PosterCardView.LandscapeHeight : PosterCardView.PosterHeight);
-            _gridLayout.spacing = new Vector2(landscape ? 22f : 27f, landscape ? 26f : 30f);
+            _gridLayout.spacing = new Vector2(landscape ? 26f : 28f, landscape ? 34f : 38f);
             _gridLayout.padding = landscape
-                ? new RectOffset(44, 44, 18, 44)
-                : new RectOffset(54, 54, 18, 44);
+                ? new RectOffset(
+                    Mathf.RoundToInt(UiTheme.ContentLeft),
+                    Mathf.RoundToInt(UiTheme.ContentRight),
+                    28,
+                    58)
+                : new RectOffset(
+                    Mathf.RoundToInt(UiTheme.ContentLeft),
+                    Mathf.RoundToInt(UiTheme.ContentRight),
+                    28,
+                    58);
         }
 
         private void ConfigureViewport(bool searchMode)
         {
-            _viewport.anchoredPosition = new Vector2(
+            Vector2 toolbarPosition = _toolbar.anchoredPosition;
+            toolbarPosition.y = searchMode ? -530f : -224f;
+            _toolbar.anchoredPosition = toolbarPosition;
+            UiFactory.Stretch(
+                _viewport,
                 0f,
-                searchMode ? -115f : -96f);
-            _viewport.sizeDelta = new Vector2(
                 0f,
-                searchMode ? -330f : -260f);
+                searchMode ? 626f : 318f,
+                0f);
         }
 
         private void CreateInitialButton(
             string selection,
             string label,
-            float width,
             float revealDelay)
         {
             Button button = UiFactory.CreateButton(
                 InitialButtonName(selection),
-                _alphabetPanel.transform,
+                _alphabetGrid,
                 label,
-                UiTheme.SurfaceSoft,
+                new Color(0.24f, 0.48f, 0.58f, 0.16f),
                 UiTheme.TextPrimary,
                 18);
-            LayoutElement layout = button.gameObject.AddComponent<LayoutElement>();
-            layout.minWidth = width;
-            layout.preferredWidth = width;
-            layout.minHeight = 50f;
-            layout.preferredHeight = 50f;
             Outline outline = button.gameObject.AddComponent<Outline>();
             outline.effectColor = UiTheme.Border;
             outline.effectDistance = new Vector2(1f, -1f);
+            FocusScale focus = button.GetComponent<FocusScale>();
+            focus.FocusedScale = 1.045f;
+            focus.LocalDepthOffset = -8f;
             button.onClick.AddListener(() => SearchInitialSelected?.Invoke(selection));
             UiFactory.AddItemReveal(button.gameObject, revealDelay);
             _initialButtons[selection] = button;
@@ -502,21 +683,6 @@ namespace JellyfinForRayNeo
             return "Search Initial " + selection;
         }
 
-        private static Button CreateHeaderButton(
-            string name,
-            Transform parent,
-            string label,
-            int fontSize)
-        {
-            return UiFactory.CreateButton(
-                name,
-                parent,
-                label,
-                UiTheme.SurfaceSoft,
-                UiTheme.TextPrimary,
-                fontSize);
-        }
-
         private static Button CreateToolbarButton(
             string name,
             Transform parent,
@@ -534,28 +700,6 @@ namespace JellyfinForRayNeo
             button.GetComponentInChildren<Text>().resizeTextMinSize = 14;
             button.GetComponentInChildren<Text>().resizeTextMaxSize = 17;
             return button;
-        }
-
-        private static void SetHeaderButtonRect(Button button, float left, float width)
-        {
-            UiFactory.SetRect(
-                button.GetComponent<RectTransform>(),
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                new Vector2(left, 0f),
-                new Vector2(width, 52f));
-        }
-
-        private static void SetRightHeaderButtonRect(Button button, float right, float width)
-        {
-            UiFactory.SetRect(
-                button.GetComponent<RectTransform>(),
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(-right, 0f),
-                new Vector2(width, 52f));
         }
 
         private static void SetToolbarRightRect(Button button, float right, float width)

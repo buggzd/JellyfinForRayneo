@@ -192,8 +192,12 @@ namespace JellyfinForRayNeo
             _browseView.ItemSelected += OpenItem;
             _browseView.BackRequested += NavigateBrowseBack;
             _browseView.HomeRequested += CloseBrowseToHome;
+            _browseView.LibraryRequested += OpenLibrary;
             _browseView.SearchModeRequested += OpenSearch;
             _browseView.FavoritesRequested += OpenFavorites;
+            _browseView.RefreshRequested += () =>
+                RefreshBrowseAsync().Forget(HandleFatalError);
+            _browseView.LogoutRequested += Logout;
             _browseView.SearchInitialSelected += initial =>
                 SelectSearchInitialAsync(initial).Forget(HandleFatalError);
             _browseView.SortRequested += () => CycleBrowseSortAsync().Forget(HandleFatalError);
@@ -471,8 +475,7 @@ namespace JellyfinForRayNeo
                 return;
             }
 
-            if (string.Equals(state.Title, "我的收藏", StringComparison.Ordinal)
-                && state.Filter == JellyfinBrowseFilter.Favorite)
+            if (state.IsFavorites && state.Filter == JellyfinBrowseFilter.Favorite)
             {
                 ShowToast("收藏页已经只显示收藏内容。", false);
                 return;
@@ -497,6 +500,20 @@ namespace JellyfinForRayNeo
                 0,
                 state.StartIndex + Math.Sign(direction) * Math.Max(1, state.PageSize));
             await ShowBrowseAsync(state, BrowseHistoryMode.Replace);
+        }
+
+        private async Task RefreshBrowseAsync()
+        {
+            JellyfinBrowseState state = _browseView != null
+                ? _browseView.CurrentState
+                : null;
+            if (state == null)
+            {
+                return;
+            }
+
+            await ShowBrowseAsync(state, BrowseHistoryMode.Replace);
+            ShowToast("当前内容已刷新", false);
         }
 
         private async Task ShowBrowseAsync(

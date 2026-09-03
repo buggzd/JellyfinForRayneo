@@ -35,6 +35,7 @@ namespace JellyfinForRayNeo
         public JellyfinBrowseSort Sort;
         public bool Recursive;
         public bool IsSearch;
+        public bool IsFavorites;
         public bool PreferLandscape;
 
         public JellyfinBrowseState Clone()
@@ -114,6 +115,7 @@ namespace JellyfinForRayNeo
             {
                 Title = "我的收藏",
                 Recursive = true,
+                IsFavorites = true,
                 PreferLandscape = false,
                 Sort = JellyfinBrowseSort.Name,
                 Filter = JellyfinBrowseFilter.Favorite

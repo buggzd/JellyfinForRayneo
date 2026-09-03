@@ -816,7 +816,7 @@ namespace JellyfinForRayNeo.Tests
             PosterCardView[] cards = host.GetComponentsInChildren<PosterCardView>(true);
             Assert.NotNull(viewport);
             AssertTransparentDragSurface(viewport);
-            Assert.AreEqual(5, grid.constraintCount);
+            Assert.AreEqual(4, grid.constraintCount);
             Assert.AreEqual(PosterCardView.LandscapeWidth, grid.cellSize.x);
             Assert.AreEqual(2, cards.Length);
             Assert.IsTrue(cards.All(card =>
@@ -864,8 +864,15 @@ namespace JellyfinForRayNeo.Tests
             Canvas.ForceUpdateCanvases();
 
             Transform alphabet = FindDescendant(host.transform, "Search Alphabet");
+            Transform keyboard = FindDescendant(alphabet, "Search Keyboard");
+            Transform navigation = FindDescendant(host.transform, "Lucent Side Navigation");
             Assert.NotNull(alphabet);
             Assert.IsTrue(alphabet.gameObject.activeInHierarchy);
+            Assert.NotNull(alphabet.GetComponent<UiGradient>());
+            Assert.NotNull(alphabet.GetComponent<Outline>());
+            Assert.NotNull(alphabet.GetComponent<Shadow>());
+            Assert.NotNull(keyboard);
+            Assert.AreEqual(10, keyboard.GetComponent<GridLayoutGroup>().constraintCount);
             Assert.AreEqual(28, alphabet.GetComponentsInChildren<Button>(true).Length);
             Assert.AreEqual(0, host.GetComponentsInChildren<InputField>(true).Length);
             Assert.AreEqual(
@@ -878,6 +885,19 @@ namespace JellyfinForRayNeo.Tests
                 alphabetRect,
                 lastInitial);
             Assert.LessOrEqual(lastInitialBounds.max.x, alphabetRect.rect.xMax + 0.5f);
+            Assert.Less(
+                lastInitialBounds.center.y,
+                RectTransformUtility.CalculateRelativeRectTransformBounds(
+                    alphabetRect,
+                    FindDescendant(host.transform, "Search Initial A") as RectTransform).center.y,
+                "The initials should read as a remote-first keyboard instead of one compressed row.");
+            Assert.NotNull(navigation);
+            Assert.Greater(
+                FindDescendant(
+                    FindDescendant(navigation, "Navigation Search"),
+                    "Active Indicator")
+                    .GetComponent<Image>().color.a,
+                0.5f);
 
             DirectionalFocusNavigator navigator = new DirectionalFocusNavigator();
             navigator.SetScope(browse.FocusRoot);
