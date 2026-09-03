@@ -49,6 +49,52 @@ namespace JellyfinForRayNeo.Tests
             Assert.AreEqual(expected, GlassesWebViewPresenter.ToWebCommand(command));
         }
 
+        [Test]
+        public void ValidWebMessages_AreParsedAndPublished()
+        {
+            GameObject owner = new GameObject("Glasses WebView Message Test");
+            GlassesWebViewPresenter presenter =
+                owner.AddComponent<GlassesWebViewPresenter>();
+            GlassesWebMessage received = null;
+            presenter.MessageReceived += message => received = message;
+
+            presenter.OnGlassesWebMessage(
+                "{\"type\":\"playback_state\",\"state\":\"playing\","
+                + "\"itemId\":\"episode-7\",\"title\":\"Violet\","
+                + "\"subtitle\":\"Episode 7\",\"playMethod\":\"Transcode\","
+                + "\"positionTicks\":123000000,\"durationTicks\":456000000}");
+
+            Assert.IsNotNull(received);
+            Assert.AreEqual(GlassesWebMessageType.PlaybackState, received.Type);
+            Assert.AreEqual("playing", received.State);
+            Assert.AreEqual("episode-7", received.ItemId);
+            Assert.AreEqual("Violet", received.Title);
+            Assert.AreEqual("Episode 7", received.Subtitle);
+            Assert.AreEqual("Transcode", received.PlayMethod);
+            Assert.AreEqual(123000000L, received.PositionTicks);
+            Assert.AreEqual(456000000L, received.DurationTicks);
+
+            Object.DestroyImmediate(owner);
+        }
+
+        [TestCase("{\"type\":\"manage_login\"}", "ManageLogin")]
+        [TestCase("{\"type\":\"logout\"}", "Logout")]
+        public void ControlWebMessages_AreRecognized(
+            string payload,
+            string expected)
+        {
+            Assert.IsTrue(GlassesWebMessage.TryParse(payload, out GlassesWebMessage message));
+            Assert.AreEqual(expected, message.Type.ToString());
+        }
+
+        [TestCase("")]
+        [TestCase("{\"type\":\"unknown\"}")]
+        [TestCase("{\"type\":\"playback_state\",\"state\":\"invalid\"}")]
+        public void InvalidWebMessages_AreRejected(string payload)
+        {
+            Assert.IsFalse(GlassesWebMessage.TryParse(payload, out _));
+        }
+
         private sealed class FakeGlassesWebViewHost : IGlassesWebViewHost
         {
             public bool IsSupported => true;

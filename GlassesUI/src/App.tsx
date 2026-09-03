@@ -55,6 +55,7 @@ import type {
   PlaybackPlan,
   PlaybackSelection,
 } from './jellyfin'
+import { postNativeMessage } from './runtime'
 import { useJellyfin, type JellyfinUiStatus } from './useJellyfin'
 
 type Page = 'home' | 'browse' | 'favorites' | 'search' | 'detail' | 'player'
@@ -1247,9 +1248,10 @@ function PlayerPage({
   const feedbackId = useRef(0)
   const playing = status === 'playing' || status === 'buffering'
 
-  useEffect(() => {
-    statusRef.current = status
-  }, [status])
+  const updateStatus = useCallback((nextStatus: PlayerStatus) => {
+    statusRef.current = nextStatus
+    setStatus(nextStatus)
+  }, [])
 
   useEffect(() => {
     currentRef.current = current
@@ -1290,6 +1292,32 @@ function PlayerPage({
     return Math.max(0, Math.round(seconds * jellyfinTicksPerSecond))
   }, [])
 
+  const publishNativePlaybackState = useCallback((nextStatus: PlayerStatus | 'stopped') => {
+    const active = planRef.current
+    const videoDuration = videoRef.current?.duration
+    const durationTicks = Number.isFinite(videoDuration) && Number(videoDuration) > 0
+      ? Math.round(Number(videoDuration) * jellyfinTicksPerSecond)
+      : Math.max(0, active?.durationTicks ?? item.runtimeTicks ?? 0)
+    postNativeMessage({
+      type: 'playback_state',
+      state: nextStatus,
+      itemId: item.id,
+      title: item.title,
+      subtitle: item.original && item.original !== item.title ? item.original : item.subtitle,
+      playMethod: active?.playMethod ?? '',
+      positionTicks: positionTicks(),
+      durationTicks,
+    })
+  }, [item.id, item.original, item.runtimeTicks, item.subtitle, item.title, positionTicks])
+
+  useEffect(() => {
+    publishNativePlaybackState(status)
+  }, [publishNativePlaybackState, status])
+
+  useEffect(() => () => {
+    publishNativePlaybackState('stopped')
+  }, [publishNativePlaybackState])
+
   const stopPlan = useCallback((value: PlaybackPlan | null, failed = false) => {
     if (!value) return
     const key = planKey(value)
@@ -1307,12 +1335,12 @@ function PlayerPage({
     desiredPlaying.current = shouldPlay
     fallbackUsed.current = false
     seekAppliedKey.current = ''
+    updateStatus('preparing')
     hlsRef.current?.destroy()
     hlsRef.current = null
     videoRef.current?.pause()
     setPanel(null)
     setError('')
-    setStatus('preparing')
     currentRef.current = requestedPositionTicks / jellyfinTicksPerSecond
     setCurrent(requestedPositionTicks / jellyfinTicksPerSecond)
 
@@ -1322,16 +1350,16 @@ function PlayerPage({
       planRef.current = next
       setPlan(next)
       setTotal((next.durationTicks || item.runtimeTicks || 0) / jellyfinTicksPerSecond)
-      setStatus('buffering')
+      updateStatus('buffering')
     } catch (reason) {
       if (generation !== prepareGeneration.current) return
       planRef.current = null
       setPlan(null)
       setError(reason instanceof Error ? reason.message : '无法准备 Jellyfin 播放。')
-      setStatus('error')
+      updateStatus('error')
       setControls(true)
     }
-  }, [item, preparePlayback])
+  }, [item, preparePlayback, updateStatus])
 
   useEffect(() => {
     startedPlans.current.clear()
@@ -1358,7 +1386,7 @@ function PlayerPage({
       seekAppliedKey.current = ''
       planRef.current = fallback
       setPlan(fallback)
-      setStatus('buffering')
+      updateStatus('buffering')
       setError('')
       setControls(true)
       return
@@ -1366,9 +1394,9 @@ function PlayerPage({
 
     stopPlan(active, true)
     setError(message || '媒体流无法播放，请返回后重试。')
-    setStatus('error')
+    updateStatus('error')
     setControls(true)
-  }, [positionTicks, stopPlan])
+  }, [positionTicks, stopPlan, updateStatus])
 
   useEffect(() => {
     const video = videoRef.current
@@ -1439,10 +1467,10 @@ function PlayerPage({
     applyInitialSeek()
     void video.play().catch(() => {
       desiredPlaying.current = false
-      setStatus('paused')
+      updateStatus('paused')
       setControls(true)
     })
-  }, [applyInitialSeek])
+  }, [applyInitialSeek, updateStatus])
 
   const togglePlayback = useCallback(() => {
     const video = videoRef.current
@@ -1458,12 +1486,12 @@ function PlayerPage({
     if (video.ended) video.currentTime = 0
     if (video.paused) {
       desiredPlaying.current = true
-      void video.play().catch(() => setStatus('paused'))
+      void video.play().catch(() => updateStatus('paused'))
     } else {
       desiredPlaying.current = false
       video.pause()
     }
-  }, [positionTicks, prepare, status])
+  }, [positionTicks, prepare, status, updateStatus])
 
   const scheduleHide = useCallback(() => {
     if (hideTimer.current) window.clearTimeout(hideTimer.current)
@@ -1513,11 +1541,12 @@ function PlayerPage({
     const timer = window.setInterval(() => {
       const video = videoRef.current
       const active = planRef.current
+      publishNativePlaybackState(statusRef.current)
       if (!video || !active || !startedPlans.current.has(planKey(active))) return
       void reportPlaybackProgress(active, video.paused, positionTicks()).catch(() => undefined)
     }, 10_000)
     return () => window.clearInterval(timer)
-  }, [planKey, positionTicks, reportPlaybackProgress])
+  }, [planKey, positionTicks, publishNativePlaybackState, reportPlaybackProgress])
 
   useEffect(() => {
     const onVisibilityChange = () => {
@@ -1630,7 +1659,7 @@ function PlayerPage({
 
   const handlePlaying = useCallback(() => {
     const active = planRef.current
-    setStatus('playing')
+    updateStatus('playing')
     setError('')
     if (active) {
       const key = planKey(active)
@@ -1640,25 +1669,25 @@ function PlayerPage({
       }
     }
     scheduleHide()
-  }, [planKey, positionTicks, reportPlaybackStarted, scheduleHide])
+  }, [planKey, positionTicks, reportPlaybackStarted, scheduleHide, updateStatus])
 
   const handlePause = useCallback(() => {
     const video = videoRef.current
     const active = planRef.current
     if (!video || video.ended || statusRef.current === 'preparing' || statusRef.current === 'error') return
-    setStatus('paused')
+    updateStatus('paused')
     setControls(true)
     if (active && startedPlans.current.has(planKey(active))) {
       void reportPlaybackProgress(active, true, positionTicks()).catch(() => undefined)
     }
-  }, [planKey, positionTicks, reportPlaybackProgress])
+  }, [planKey, positionTicks, reportPlaybackProgress, updateStatus])
 
   const handleEnded = useCallback(() => {
     desiredPlaying.current = false
-    setStatus('ended')
+    updateStatus('ended')
     setControls(true)
     stopPlan(planRef.current)
-  }, [stopPlan])
+  }, [stopPlan, updateStatus])
 
   const progress = total > 0 ? Math.min(100, Math.max(0, current / total * 100)) : 0
   const subtitleText = useMemo(() => subtitleCues
@@ -1700,7 +1729,7 @@ function PlayerPage({
         onCanPlay={attemptPlay}
         onPlaying={handlePlaying}
         onPause={handlePause}
-        onWaiting={() => statusRef.current !== 'preparing' && setStatus('buffering')}
+        onWaiting={() => statusRef.current !== 'preparing' && updateStatus('buffering')}
         onTimeUpdate={(event) => { currentRef.current = event.currentTarget.currentTime; setCurrent(event.currentTarget.currentTime) }}
         onDurationChange={(event) => Number.isFinite(event.currentTarget.duration) && setTotal(event.currentTarget.duration)}
         onEnded={handleEnded}
@@ -1963,6 +1992,7 @@ export default function App() {
   }, [jellyfin.refresh, showToast])
 
   const manageLogin = useCallback(() => {
+    postNativeMessage({ type: 'manage_login' })
     showToast('请在手机端管理 Jellyfin 登录')
   }, [showToast])
 

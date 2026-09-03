@@ -89,6 +89,7 @@ namespace JellyfinForRayNeo
             {
                 _glassesWebView = gameObject.AddComponent<GlassesWebViewPresenter>();
             }
+            _glassesWebView.MessageReceived += HandleGlassesWebMessage;
             _glassesWebView.Show();
 
             _lifetime = new CancellationTokenSource();
@@ -97,6 +98,7 @@ namespace JellyfinForRayNeo
             _companionBridge.QuickConnectRequested += HandleCompanionQuickConnectRequested;
             _companionBridge.QuickConnectCancelRequested += HandleCompanionQuickConnectCancelRequested;
             _companionBridge.SessionAvailable += HandleCompanionSessionAvailable;
+            _companionBridge.SessionCleared += HandleCompanionSessionCleared;
             _companionBridge.RemoteCommandReceived += HandleRemoteCommand;
             _companionBridge.VolumeChanged += HandleVolumeChanged;
             _companionBridge.PublishState(
@@ -258,6 +260,30 @@ namespace JellyfinForRayNeo
                 return;
             }
             _volumeOverlay?.Show(percentage);
+        }
+
+        private void HandleGlassesWebMessage(GlassesWebMessage message)
+        {
+            if (message == null || _companionBridge == null)
+            {
+                return;
+            }
+
+            switch (message.Type)
+            {
+                case GlassesWebMessageType.ManageLogin:
+                    _companionBridge.OpenCompanionScreen(
+                        _api != null && _api.Session != null
+                            ? "settings"
+                            : "connect");
+                    break;
+                case GlassesWebMessageType.Logout:
+                    Logout();
+                    break;
+                case GlassesWebMessageType.PlaybackState:
+                    _companionBridge.PublishPlaybackState(message);
+                    break;
+            }
         }
 
         private void SelectInScope(Transform scope, params string[] preferredNames)
@@ -709,6 +735,16 @@ namespace JellyfinForRayNeo
             }
 
             AdoptCompanionSessionAsync(session).Forget(HandleFatalError);
+        }
+
+        private void HandleCompanionSessionCleared()
+        {
+            if (_api == null || _sessionStore == null || _api.Session == null)
+            {
+                return;
+            }
+
+            Logout(false);
         }
 
         private async Task AdoptCompanionSessionAsync(JellyfinSession session)
@@ -1667,6 +1703,11 @@ namespace JellyfinForRayNeo
 
         private void Logout()
         {
+            Logout(true);
+        }
+
+        private void Logout(bool clearNativeSession)
+        {
             JellyfinSession activeSession = _api.Session;
             if (activeSession != null)
             {
@@ -1683,7 +1724,10 @@ namespace JellyfinForRayNeo
             CancelAndDispose(ref _detailImages);
             _sessionStore.ClearSession();
             _api.ClearSession();
-            _companionBridge.ClearNativeSession();
+            if (clearNativeSession)
+            {
+                _companionBridge.ClearNativeSession();
+            }
             _detailView.Hide();
             _browseView.Hide();
             _homeView.Show(false);
@@ -1783,12 +1827,17 @@ namespace JellyfinForRayNeo
             CancelAndDispose(ref _homeImages);
             CancelAndDispose(ref _browseImages);
             CancelAndDispose(ref _detailImages);
+            if (_glassesWebView != null)
+            {
+                _glassesWebView.MessageReceived -= HandleGlassesWebMessage;
+            }
             if (_companionBridge != null)
             {
                 _companionBridge.LoginRequested -= HandleCompanionLoginRequested;
                 _companionBridge.QuickConnectRequested -= HandleCompanionQuickConnectRequested;
                 _companionBridge.QuickConnectCancelRequested -= HandleCompanionQuickConnectCancelRequested;
                 _companionBridge.SessionAvailable -= HandleCompanionSessionAvailable;
+                _companionBridge.SessionCleared -= HandleCompanionSessionCleared;
                 _companionBridge.RemoteCommandReceived -= HandleRemoteCommand;
                 _companionBridge.VolumeChanged -= HandleVolumeChanged;
                 _companionBridge.PublishState(

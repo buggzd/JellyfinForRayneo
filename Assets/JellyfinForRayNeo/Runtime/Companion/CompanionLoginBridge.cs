@@ -446,6 +446,8 @@ namespace JellyfinForRayNeo
             new ConcurrentQueue<CompanionQuickConnectRequest>();
         private readonly ConcurrentQueue<CompanionSessionRequest> _pendingSessions =
             new ConcurrentQueue<CompanionSessionRequest>();
+        private readonly ConcurrentQueue<bool> _pendingSessionClears =
+            new ConcurrentQueue<bool>();
         private readonly ConcurrentQueue<bool> _pendingQuickConnectCancellations =
             new ConcurrentQueue<bool>();
         private readonly ConcurrentQueue<string> _pendingValidationErrors =
@@ -497,6 +499,7 @@ namespace JellyfinForRayNeo
         public event Action<CompanionQuickConnectRequest> QuickConnectRequested;
         public event Action QuickConnectCancelRequested;
         public event Action<CompanionSessionRequest> SessionAvailable;
+        public event Action SessionCleared;
         public event Action<CompanionRemoteCommand> RemoteCommandReceived;
         public event Action<int> VolumeChanged;
 
@@ -667,6 +670,11 @@ namespace JellyfinForRayNeo
                 QuickConnectCancelRequested?.Invoke();
             }
 
+            while (_pendingSessionClears.TryDequeue(out _))
+            {
+                SessionCleared?.Invoke();
+            }
+
             while (_pendingRequests.TryDequeue(out CompanionLoginRequest request))
             {
                 try
@@ -708,6 +716,69 @@ namespace JellyfinForRayNeo
             catch (Exception exception)
             {
                 Debug.LogWarning("Android companion session could not be cleared: " + exception.Message);
+            }
+#endif
+        }
+
+        internal void OpenCompanionScreen(string screen)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            string normalized = string.Equals(
+                screen,
+                "settings",
+                StringComparison.OrdinalIgnoreCase)
+                ? "settings"
+                : "connect";
+            try
+            {
+                using (AndroidJavaClass unityPlayer =
+                       new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (AndroidJavaObject activity =
+                       unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                {
+                    activity?.Call("openCompanionScreen", normalized);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    "Android companion screen could not be opened: "
+                    + exception.Message);
+            }
+#endif
+        }
+
+        internal void PublishPlaybackState(GlassesWebMessage message)
+        {
+            if (message == null || message.Type != GlassesWebMessageType.PlaybackState)
+            {
+                return;
+            }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (AndroidJavaClass unityPlayer =
+                       new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (AndroidJavaObject activity =
+                       unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                {
+                    activity?.Call(
+                        "setGlassesPlaybackState",
+                        message.State,
+                        message.ItemId,
+                        message.Title,
+                        message.Subtitle,
+                        message.PlayMethod,
+                        message.PositionTicks,
+                        message.DurationTicks);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    "Glasses playback state could not be published: "
+                    + exception.Message);
             }
 #endif
         }
@@ -830,6 +901,9 @@ namespace JellyfinForRayNeo
             while (_pendingSessions.TryDequeue(out _))
             {
             }
+            while (_pendingSessionClears.TryDequeue(out _))
+            {
+            }
             while (_pendingQuickConnectCancellations.TryDequeue(out _))
             {
             }
@@ -876,8 +950,20 @@ namespace JellyfinForRayNeo
                        unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
                 {
                     string payload = activity?.Call<string>("getPendingSessionJson");
-                    if (string.IsNullOrWhiteSpace(payload)
-                        || string.Equals(payload, _lastNativeSessionPayload, StringComparison.Ordinal))
+                    if (string.IsNullOrWhiteSpace(payload))
+                    {
+                        if (!string.IsNullOrWhiteSpace(_lastNativeSessionPayload))
+                        {
+                            _lastNativeSessionPayload = null;
+                            _pendingSessionClears.Enqueue(true);
+                        }
+                        return;
+                    }
+
+                    if (string.Equals(
+                            payload,
+                            _lastNativeSessionPayload,
+                            StringComparison.Ordinal))
                     {
                         return;
                     }

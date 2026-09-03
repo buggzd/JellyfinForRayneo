@@ -103,6 +103,16 @@ function formatQuickCode(value) {
   return `${compact.slice(0, 3)} · ${compact.slice(3)}`
 }
 
+function formatPlaybackTime(ticks) {
+  const seconds = Math.max(0, Math.floor(Number(ticks || 0) / 10_000_000))
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const remaining = seconds % 60
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`
+    : `${minutes}:${String(remaining).padStart(2, '0')}`
+}
+
 function useStoredState(key, initialValue) {
   const [value, setValue] = useState(() => {
     try {
@@ -229,6 +239,14 @@ function App() {
 
     const nativeApi = {
       receiveState,
+      openScreen: (requestedScreen) => {
+        if (requestedScreen === 'settings') {
+          go('settings')
+          return
+        }
+        setAuthMode('password')
+        go('connect')
+      },
       handleBack: () => {
         if (screenRef.current === 'touchpad' || screenRef.current === 'settings') {
           go('home')
@@ -452,6 +470,7 @@ function App() {
             <TouchpadScreen
               displayMode={displayMode}
               haptics={haptics}
+              playback={nativeState?.playback}
               onExit={() => go('home')}
               onCommand={(command) => callNative('remoteCommand', command, haptics)}
               native={isNative}
@@ -1141,7 +1160,7 @@ function BottomNav({ active, onHome, onTouchpad, onSettings }) {
   )
 }
 
-function TouchpadScreen({ displayMode, haptics, onExit, onCommand, native }) {
+function TouchpadScreen({ displayMode, haptics, playback, onExit, onCommand, native }) {
   const surfaceRef = useRef(null)
   const glowRef = useRef(null)
   const point = useRef({ x: 50, y: 50, tx: 50, ty: 50, vx: 0, vy: 0 })
@@ -1284,6 +1303,33 @@ function TouchpadScreen({ displayMode, haptics, onExit, onCommand, native }) {
     return glyphs[feedback] ?? ''
   }, [feedback])
 
+  const playbackState = [
+    'preparing',
+    'buffering',
+    'playing',
+    'paused',
+    'ended',
+    'error',
+  ].includes(playback?.state)
+    ? playback.state
+    : 'stopped'
+  const playbackLabels = {
+    preparing: '正在准备',
+    buffering: '正在缓冲',
+    playing: '正在播放',
+    paused: '已暂停',
+    ended: '播放结束',
+    error: '播放出错',
+    stopped: '未在播放',
+  }
+  const durationTicks = Math.max(0, Number(playback?.durationTicks || 0))
+  const positionTicks = Math.max(0, Number(playback?.positionTicks || 0))
+  const playbackProgress = durationTicks > 0
+    ? Math.min(100, positionTicks / durationTicks * 100)
+    : 0
+  const showPlayback = playbackState !== 'stopped'
+    && Boolean(playback?.title || playback?.itemId)
+
   return (
     <section
       ref={surfaceRef}
@@ -1312,6 +1358,25 @@ function TouchpadScreen({ displayMode, haptics, onExit, onCommand, native }) {
         <span><i /> RAYNEO AIR 3S</span>
         <em>{displayMode === 'stereo' ? '3D' : '2D'}</em>
       </header>
+
+      {showPlayback && (
+        <aside
+          className={`touchpad-playback is-${playbackState}`}
+          style={{ '--playback-progress': `${playbackProgress}%` }}
+          aria-live="polite"
+        >
+          <span className="touchpad-playback__status">
+            <i /> {playbackLabels[playbackState]}
+          </span>
+          <strong>{playback.title}</strong>
+          {playback.subtitle && <small>{playback.subtitle}</small>}
+          <div className="touchpad-playback__timeline"><i /></div>
+          <div className="touchpad-playback__meta">
+            <span>{formatPlaybackTime(positionTicks)} / {formatPlaybackTime(durationTicks)}</span>
+            <em>{playback.playMethod === 'Transcode' ? '服务器转码' : '直接播放'}</em>
+          </div>
+        </aside>
+      )}
 
       <div className={`touch-feedback ${feedback ? 'is-visible' : ''}`}>
         <span>{feedbackGlyph}</span>

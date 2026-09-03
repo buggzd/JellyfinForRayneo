@@ -134,9 +134,18 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private WebView companionWebView;
     private GlassesWebViewHost glassesWebViewHost;
     private boolean companionWebReady;
+    private boolean companionJavascriptReady;
     private String lastPushedWebStateJson;
     private boolean webTouchpadActive;
     private String webScreen = "connect";
+    private String pendingWebScreen = "";
+    private String glassesPlaybackState = "stopped";
+    private String glassesPlaybackItemId = "";
+    private String glassesPlaybackTitle = "";
+    private String glassesPlaybackSubtitle = "";
+    private String glassesPlaybackMethod = "";
+    private long glassesPlaybackPositionTicks;
+    private long glassesPlaybackDurationTicks;
     private AmbientBackdropView ambientBackdropView;
     private ScrollView configurationScrollView;
     private TouchpadView touchpadView;
@@ -299,6 +308,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             companionDisplayManager = null;
         }
         if (companionWebView != null) {
+            companionJavascriptReady = false;
             companionWebView.removeJavascriptInterface("JellyfinNative");
             companionWebView.stopLoading();
             if (companionOverlay != null) {
@@ -815,6 +825,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 super.onReceivedError(view, request, error);
                 if (request != null && request.isForMainFrame()) {
                     companionWebReady = false;
+                    companionJavascriptReady = false;
                     lastPushedWebStateJson = null;
                     view.setVisibility(View.GONE);
                     companionModeInitialized = false;
@@ -843,6 +854,20 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         evaluateCompanionJavascript(
                 "window.LumaNative && window.LumaNative.handleBack && "
                         + "window.LumaNative.handleBack();");
+    }
+
+    private void dispatchPendingWebScreen() {
+        if (!companionJavascriptReady || TextUtils.isEmpty(pendingWebScreen)) {
+            return;
+        }
+
+        String screen = pendingWebScreen;
+        pendingWebScreen = "";
+        evaluateCompanionJavascript(
+                "window.LumaNative && window.LumaNative.openScreen && "
+                        + "window.LumaNative.openScreen("
+                        + JSONObject.quote(screen)
+                        + ");");
     }
 
     private void evaluateCompanionJavascript(String script) {
@@ -911,6 +936,16 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             state.put("discoveryError", latestDiscoveryError);
             state.put("discoveryScanning", discoveryScanning);
 
+            JSONObject playback = new JSONObject();
+            playback.put("state", glassesPlaybackState);
+            playback.put("itemId", glassesPlaybackItemId);
+            playback.put("title", glassesPlaybackTitle);
+            playback.put("subtitle", glassesPlaybackSubtitle);
+            playback.put("playMethod", glassesPlaybackMethod);
+            playback.put("positionTicks", glassesPlaybackPositionTicks);
+            playback.put("durationTicks", glassesPlaybackDurationTicks);
+            state.put("playback", playback);
+
             JSONArray servers = new JSONArray();
             synchronized (latestDiscoveredServers) {
                 for (DiscoveredServer server : latestDiscoveredServers) {
@@ -970,8 +1005,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 @Override
                 public void run() {
                     companionWebReady = true;
+                    companionJavascriptReady = true;
                     lastPushedWebStateJson = null;
                     pushWebState();
+                    dispatchPendingWebScreen();
                 }
             });
         }
@@ -2326,6 +2363,50 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         return getCompanionPreferences().getString(PREF_SESSION_JSON, "");
     }
 
+    public void openCompanionScreen(final String screen) {
+        final String requestedScreen = "settings".equalsIgnoreCase(screen)
+                ? "settings"
+                : "connect";
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                pendingWebScreen = "settings".equals(requestedScreen)
+                                && hasNativeSession()
+                        ? "settings"
+                        : "connect";
+                dispatchPendingWebScreen();
+            }
+        });
+    }
+
+    public void setGlassesPlaybackState(
+            final String state,
+            final String itemId,
+            final String title,
+            final String subtitle,
+            final String playMethod,
+            final long positionTicks,
+            final long durationTicks) {
+        final String normalizedState = normalizeGlassesPlaybackState(state);
+        if (normalizedState == null) {
+            return;
+        }
+
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                glassesPlaybackState = normalizedState;
+                glassesPlaybackItemId = normalizePlaybackText(itemId, 128);
+                glassesPlaybackTitle = normalizePlaybackText(title, 180);
+                glassesPlaybackSubtitle = normalizePlaybackText(subtitle, 240);
+                glassesPlaybackMethod = normalizePlaybackText(playMethod, 32);
+                glassesPlaybackPositionTicks = Math.max(0L, positionTicks);
+                glassesPlaybackDurationTicks = Math.max(0L, durationTicks);
+                pushWebState();
+            }
+        });
+    }
+
     public boolean showGlassesWebView() {
         return glassesWebViewHost != null && glassesWebViewHost.show();
     }
@@ -2457,6 +2538,13 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 latestMessage = "Jellyfin 配置已清除，请重新选择服务器并登录。";
                 latestIsError = false;
                 latestQuickConnectCode = "";
+                glassesPlaybackState = "stopped";
+                glassesPlaybackItemId = "";
+                glassesPlaybackTitle = "";
+                glassesPlaybackSubtitle = "";
+                glassesPlaybackMethod = "";
+                glassesPlaybackPositionTicks = 0L;
+                glassesPlaybackDurationTicks = 0L;
                 automaticDiscoveryStarted = false;
                 if (companionOverlay != null) {
                     applyCompanionState();
@@ -2498,6 +2586,29 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
 
     private boolean hasNativeSession() {
         return isValidNativeSession(getPendingSessionJson());
+    }
+
+    private static String normalizeGlassesPlaybackState(String value) {
+        String normalized = value == null
+                ? ""
+                : value.trim().toLowerCase(Locale.US);
+        if ("preparing".equals(normalized)
+                || "buffering".equals(normalized)
+                || "playing".equals(normalized)
+                || "paused".equals(normalized)
+                || "ended".equals(normalized)
+                || "error".equals(normalized)
+                || "stopped".equals(normalized)) {
+            return normalized;
+        }
+        return null;
+    }
+
+    private static String normalizePlaybackText(String value, int maximumLength) {
+        String normalized = value == null ? "" : value.trim();
+        return normalized.length() <= maximumLength
+                ? normalized
+                : normalized.substring(0, maximumLength);
     }
 
     private boolean isValidNativeSession(String value) {

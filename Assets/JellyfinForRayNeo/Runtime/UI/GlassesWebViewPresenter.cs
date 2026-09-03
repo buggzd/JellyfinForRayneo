@@ -4,6 +4,121 @@ using UnityEngine;
 
 namespace JellyfinForRayNeo
 {
+    internal enum GlassesWebMessageType
+    {
+        Unknown,
+        ManageLogin,
+        Logout,
+        PlaybackState
+    }
+
+    [Serializable]
+    internal sealed class GlassesWebMessage
+    {
+        private const int MaximumPayloadLength = 8192;
+        private const int MaximumItemIdLength = 128;
+        private const int MaximumTitleLength = 180;
+        private const int MaximumSubtitleLength = 240;
+
+        [SerializeField] private string type;
+        [SerializeField] private string state;
+        [SerializeField] private string itemId;
+        [SerializeField] private string title;
+        [SerializeField] private string subtitle;
+        [SerializeField] private string playMethod;
+        [SerializeField] private long positionTicks;
+        [SerializeField] private long durationTicks;
+
+        public GlassesWebMessageType Type { get; private set; }
+        public string State => state;
+        public string ItemId => itemId;
+        public string Title => title;
+        public string Subtitle => subtitle;
+        public string PlayMethod => playMethod;
+        public long PositionTicks => positionTicks;
+        public long DurationTicks => durationTicks;
+
+        public static bool TryParse(string payload, out GlassesWebMessage message)
+        {
+            message = null;
+            if (string.IsNullOrWhiteSpace(payload)
+                || payload.Length > MaximumPayloadLength)
+            {
+                return false;
+            }
+
+            try
+            {
+                GlassesWebMessage parsed = JsonUtility.FromJson<GlassesWebMessage>(payload);
+                if (parsed == null || !parsed.TryNormalize())
+                {
+                    return false;
+                }
+
+                message = parsed;
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        private bool TryNormalize()
+        {
+            switch ((type ?? string.Empty).Trim().ToLowerInvariant())
+            {
+                case "manage_login":
+                    Type = GlassesWebMessageType.ManageLogin;
+                    break;
+                case "logout":
+                    Type = GlassesWebMessageType.Logout;
+                    break;
+                case "playback_state":
+                    Type = GlassesWebMessageType.PlaybackState;
+                    break;
+                default:
+                    return false;
+            }
+
+            state = Normalize(state, 32).ToLowerInvariant();
+            itemId = Normalize(itemId, MaximumItemIdLength);
+            title = Normalize(title, MaximumTitleLength);
+            subtitle = Normalize(subtitle, MaximumSubtitleLength);
+            playMethod = Normalize(playMethod, 32);
+            positionTicks = Math.Max(0L, positionTicks);
+            durationTicks = Math.Max(0L, durationTicks);
+
+            return Type != GlassesWebMessageType.PlaybackState
+                || IsPlaybackState(state);
+        }
+
+        private static bool IsPlaybackState(string value)
+        {
+            switch (value)
+            {
+                case "preparing":
+                case "buffering":
+                case "playing":
+                case "paused":
+                case "ended":
+                case "error":
+                case "stopped":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static string Normalize(string value, int maximumLength)
+        {
+            string normalized = value != null ? value.Trim() : string.Empty;
+            return normalized.Length <= maximumLength
+                ? normalized
+                : normalized.Substring(0, maximumLength);
+        }
+    }
+
     internal interface IGlassesWebViewHost
     {
         bool IsSupported { get; }
@@ -24,6 +139,8 @@ namespace JellyfinForRayNeo
         private bool _showRequested;
 
         public bool IsActive => _active;
+
+        internal event Action<GlassesWebMessage> MessageReceived;
 
         internal int PendingCommandCount => _pendingCommands.Count;
 
@@ -103,6 +220,17 @@ namespace JellyfinForRayNeo
             {
                 _host?.RefreshBootstrapState();
             }
+        }
+
+        public void OnGlassesWebMessage(string payload)
+        {
+            if (!GlassesWebMessage.TryParse(payload, out GlassesWebMessage message))
+            {
+                Debug.LogWarning("Glasses WebView sent an invalid native message.");
+                return;
+            }
+
+            MessageReceived?.Invoke(message);
         }
 
         internal void InitializeForTests(IGlassesWebViewHost host)

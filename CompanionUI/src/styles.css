@@ -1649,6 +1649,126 @@ input:focus-visible {
 .touchpad-top > span i { width: 5px; height: 5px; border-radius: 50%; background: #64e7ca; box-shadow: 0 0 10px rgba(85,229,198,.55); }
 .touchpad-top > em { justify-self: end; font-style: normal; }
 
+.touchpad-playback {
+  position: absolute;
+  z-index: 6;
+  top: max(62px, calc(env(safe-area-inset-top) + 52px));
+  left: 50%;
+  width: min(calc(100% - 34px), 360px);
+  padding: 12px 14px 11px;
+  overflow: hidden;
+  border: 1px solid rgba(172,232,240,.09);
+  border-radius: 17px;
+  color: rgba(226,247,250,.74);
+  background: linear-gradient(145deg, rgba(18,29,33,.48), rgba(4,8,10,.32));
+  box-shadow: inset 0 1px rgba(255,255,255,.025), 0 18px 55px rgba(0,0,0,.16);
+  backdrop-filter: blur(18px) saturate(.78);
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: touchpad-playback-in 620ms var(--smooth) backwards;
+}
+
+.touchpad-playback::after {
+  content: '';
+  position: absolute;
+  top: -45px;
+  right: -34px;
+  width: 110px;
+  height: 88px;
+  border-radius: 50%;
+  background: rgba(84,213,232,.07);
+  filter: blur(25px);
+}
+
+.touchpad-playback__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+  color: rgba(139,211,222,.44);
+  font-size: 6px;
+  font-weight: 650;
+  letter-spacing: .18em;
+}
+
+.touchpad-playback__status i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #69dfc8;
+  box-shadow: 0 0 10px rgba(79,220,196,.44);
+}
+
+.touchpad-playback.is-buffering .touchpad-playback__status i,
+.touchpad-playback.is-preparing .touchpad-playback__status i {
+  background: #76dff2;
+  animation: touchpad-status-pulse 1.25s ease-in-out infinite;
+}
+
+.touchpad-playback.is-paused .touchpad-playback__status i,
+.touchpad-playback.is-ended .touchpad-playback__status i {
+  background: rgba(216,231,234,.45);
+  box-shadow: none;
+}
+
+.touchpad-playback.is-error .touchpad-playback__status i {
+  background: #f394a6;
+  box-shadow: 0 0 10px rgba(243,148,166,.38);
+}
+
+.touchpad-playback > strong,
+.touchpad-playback > small {
+  position: relative;
+  z-index: 1;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.touchpad-playback > strong {
+  color: rgba(232,249,251,.76);
+  font-size: 11px;
+  font-weight: 560;
+  letter-spacing: .02em;
+}
+
+.touchpad-playback > small {
+  margin-top: 2px;
+  color: rgba(187,219,225,.34);
+  font-size: 7px;
+}
+
+.touchpad-playback__timeline {
+  position: relative;
+  height: 2px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(215,240,244,.08);
+}
+
+.touchpad-playback__timeline i {
+  display: block;
+  width: var(--playback-progress);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(99,217,230,.46), rgba(118,234,203,.62));
+  box-shadow: 0 0 8px rgba(87,218,226,.28);
+  transition: width 700ms linear;
+}
+
+.touchpad-playback__meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+  color: rgba(181,213,219,.28);
+  font-size: 6px;
+  letter-spacing: .05em;
+}
+
+.touchpad-playback__meta em { font-style: normal; }
+
 .finger-glow {
   position: absolute;
   z-index: 3;
@@ -1908,6 +2028,16 @@ input:focus-visible {
 @keyframes touchpad-enter {
   from { opacity: 0; transform: scale(1.025); filter: brightness(1.8); }
   to { opacity: 1; transform: none; filter: none; }
+}
+
+@keyframes touchpad-playback-in {
+  from { opacity: 0; transform: translate(-50%, -8px) scale(.97); filter: blur(4px); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); filter: blur(0); }
+}
+
+@keyframes touchpad-status-pulse {
+  0%, 100% { opacity: .42; transform: scale(.76); }
+  50% { opacity: 1; transform: scale(1.18); }
 }
 
 @keyframes gesture-feedback {
