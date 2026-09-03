@@ -139,7 +139,10 @@ namespace JellyfinForRayNeo
                 _transitioning = false;
                 SwitchTo2DBestEffort();
                 ConfigureMonoOutput();
-                PublishPhoneStatus(false, "应用已暂停，眼镜已恢复为 2D 模式。");
+                PublishPhoneStatus(
+                    false,
+                    false,
+                    "应用已暂停，眼镜已恢复为 2D 模式。");
             }
             else
             {
@@ -276,6 +279,7 @@ namespace JellyfinForRayNeo
                 _activeMode = Air3SDisplayMode.Mirror2D;
                 PublishPhoneStatus(
                     false,
+                    false,
                     _requestedMode == Air3SDisplayMode.StereoVirtualScreen
                         ? "立体屏幕已保存，连接眼镜后自动启用。"
                         : "镜像 2D 已保存，连接眼镜后自动启用。");
@@ -313,6 +317,7 @@ namespace JellyfinForRayNeo
             ConfigureTransitionBlackFrame();
             PublishPhoneStatus(
                 false,
+                true,
                 _requestedMode == Air3SDisplayMode.StereoVirtualScreen
                     ? "正在切换到左右眼立体画面…"
                     : "正在切换到双眼镜像画面…");
@@ -349,7 +354,10 @@ namespace JellyfinForRayNeo
                 _lastGlassesConnected = false;
                 ConfigureMonoOutput();
                 _activeMode = Air3SDisplayMode.Mirror2D;
-                PublishPhoneStatus(false, "眼镜已断开；重新连接后会应用所选模式。");
+                PublishPhoneStatus(
+                    false,
+                    false,
+                    "眼镜已断开；重新连接后会应用所选模式。");
                 return;
             }
 
@@ -362,6 +370,7 @@ namespace JellyfinForRayNeo
                 _nextFailedTransitionRetryAt = 0f;
                 PublishPhoneStatus(
                     true,
+                    false,
                     _requestedMode == Air3SDisplayMode.StereoVirtualScreen
                         ? "立体屏幕已启用：左眼只显示左视图，右眼只显示右视图。"
                         : "镜像 2D 已启用：双眼显示同一幅完整画面。");
@@ -382,7 +391,7 @@ namespace JellyfinForRayNeo
             ConfigureMonoOutput();
             _activeMode = Air3SDisplayMode.Mirror2D;
             _nextFailedTransitionRetryAt = Time.unscaledTime + FailedTransitionRetryDelay;
-            PublishPhoneStatus(false, message);
+            PublishPhoneStatus(false, false, message);
             Debug.LogWarning(message);
         }
 
@@ -632,7 +641,10 @@ namespace JellyfinForRayNeo
 #endif
         }
 
-        private void PublishPhoneStatus(bool requestedModeApplied, string message)
+        private void PublishPhoneStatus(
+            bool requestedModeApplied,
+            bool displayModeTransitioning,
+            string message)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
             string status = ToPreferenceValue(_requestedMode)
@@ -640,6 +652,8 @@ namespace JellyfinForRayNeo
                 + ToPreferenceValue(_activeMode)
                 + "|"
                 + requestedModeApplied
+                + "|"
+                + displayModeTransitioning
                 + "|"
                 + message;
             if (string.Equals(status, _lastPublishedStatus, StringComparison.Ordinal))
@@ -660,6 +674,7 @@ namespace JellyfinForRayNeo
                         ToPreferenceValue(_requestedMode),
                         ToPreferenceValue(_activeMode),
                         requestedModeApplied,
+                        displayModeTransitioning,
                         message ?? string.Empty);
                 }
             }

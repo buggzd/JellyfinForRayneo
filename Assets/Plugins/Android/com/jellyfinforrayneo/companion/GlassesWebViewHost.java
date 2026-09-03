@@ -329,11 +329,11 @@ final class GlassesWebViewHost {
             return;
         }
 
-        boolean settled = activity.isRayNeoDisplayModeApplied();
-        container.setVisibility(requested && settled ? View.VISIBLE : View.INVISIBLE);
+        boolean transitioning = activity.isRayNeoDisplayModeTransitioning();
+        container.setVisibility(requested && !transitioning ? View.VISIBLE : View.INVISIBLE);
         container.setStereo(
-                settled && activity.isRayNeoStereoDisplayActive());
-        if (requested && settled) {
+                !transitioning && activity.isRayNeoStereoDisplayActive());
+        if (requested && !transitioning) {
             container.bringToFront();
         }
     }

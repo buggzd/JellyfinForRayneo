@@ -201,6 +201,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private String requestedDisplayMode = DISPLAY_MODE_MIRROR_2D;
     private String activeDisplayMode = DISPLAY_MODE_MIRROR_2D;
     private boolean requestedDisplayModeApplied;
+    private boolean displayModeTransitioning;
     private String displayModeMessage = "默认使用镜像 2D，连接眼镜后自动应用。";
     private boolean automaticDiscoveryStarted;
     private volatile boolean nativeOperationRunning;
@@ -929,6 +930,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             state.put("displayMode", requestedDisplayMode);
             state.put("activeDisplayMode", activeDisplayMode);
             state.put("displayModeApplied", requestedDisplayModeApplied);
+            state.put("displayModeTransitioning", displayModeTransitioning);
             state.put(
                     "displayMessage",
                     displayModeMessage == null ? "" : displayModeMessage);
@@ -1693,6 +1695,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
 
         requestedDisplayMode = normalized;
         requestedDisplayModeApplied = false;
+        displayModeTransitioning = glassesConnected;
         displayModeMessage = glassesConnected
                 ? "正在同步 Unity 双相机与眼镜硬件模式…"
                 : (isStereoDisplayMode(normalized)
@@ -2441,6 +2444,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         return requestedDisplayModeApplied;
     }
 
+    public boolean isRayNeoDisplayModeTransitioning() {
+        return displayModeTransitioning;
+    }
+
     public boolean isRayNeoStereoDisplayActive() {
         return requestedDisplayModeApplied
                 && DISPLAY_MODE_STEREO_SCREEN.equals(activeDisplayMode);
@@ -2454,6 +2461,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             final String requestedMode,
             final String activeMode,
             final boolean requestedModeApplied,
+            final boolean displayModeTransitioning,
             final String message) {
         runOnUiThread(new Runnable() {
             @Override
@@ -2464,6 +2472,8 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                         normalizeDisplayMode(activeMode);
                 JellyfinRayNeoActivity.this.requestedDisplayModeApplied =
                         requestedModeApplied;
+                JellyfinRayNeoActivity.this.displayModeTransitioning =
+                        displayModeTransitioning;
                 displayModeMessage = message == null ? "" : message.trim();
                 updateDisplayModeUi();
                 if (touchpadView != null) {
@@ -2578,6 +2588,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 DISPLAY_MODE_MIRROR_2D));
         activeDisplayMode = DISPLAY_MODE_MIRROR_2D;
         requestedDisplayModeApplied = false;
+        displayModeTransitioning = glassesConnected;
         displayModeMessage = isStereoDisplayMode(requestedDisplayMode)
                 ? "立体屏幕已保存，连接眼镜后自动启用。"
                 : "镜像 2D 已保存，连接眼镜后自动启用。";
