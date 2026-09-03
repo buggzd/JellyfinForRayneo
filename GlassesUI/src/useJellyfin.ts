@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { MediaItem } from './data'
 import { JellyfinClient, type CatalogSnapshot } from './jellyfin'
 import {
   discoverRuntime,
@@ -7,6 +8,25 @@ import {
 } from './runtime'
 
 export type JellyfinUiStatus = 'booting' | 'loading' | 'ready' | 'no-session' | 'error'
+
+function patchCatalogItem(
+  snapshot: CatalogSnapshot,
+  itemId: string,
+  values: Partial<MediaItem>,
+) {
+  const patch = (item: MediaItem) => item.id === itemId ? { ...item, ...values } : item
+  return {
+    ...snapshot,
+    featured: patch(snapshot.featured),
+    libraries: snapshot.libraries.map(patch),
+    allItems: snapshot.allItems.map(patch),
+    favorites: snapshot.favorites.map(patch),
+    shelves: snapshot.shelves.map((shelf) => ({
+      ...shelf,
+      items: shelf.items.map(patch),
+    })),
+  }
+}
 
 export function useJellyfin() {
   const [runtime, setRuntime] = useState<RuntimeBootstrap | null>(null)
@@ -96,6 +116,41 @@ export function useJellyfin() {
     return client.search(term)
   }, [client])
 
+  const loadDetail = useCallback(async (itemId: string, seasonId?: string) => {
+    if (!client) throw new Error('Jellyfin 会话不可用。')
+    return client.loadDetail(itemId, seasonId)
+  }, [client])
+
+  const setFavorite = useCallback(async (item: MediaItem, favorite: boolean) => {
+    if (!client) return false
+    await client.setFavorite(item.id, favorite)
+    setSnapshot((current) => {
+      if (!current) return current
+      const patchedItem = { ...item, favorite }
+      const patched = patchCatalogItem(current, item.id, { favorite })
+      return {
+        ...patched,
+        favorites: favorite
+          ? [patchedItem, ...patched.favorites.filter((candidate) => candidate.id !== item.id)]
+          : patched.favorites.filter((candidate) => candidate.id !== item.id),
+      }
+    })
+    return true
+  }, [client])
+
+  const setPlayed = useCallback(async (item: MediaItem, played: boolean) => {
+    if (!client) return false
+    await client.setPlayed(item.id, played)
+    setSnapshot((current) => current
+      ? patchCatalogItem(current, item.id, {
+          watched: played,
+          progress: played ? undefined : item.progress,
+          playbackPositionTicks: played ? 0 : item.playbackPositionTicks,
+        })
+      : current)
+    return true
+  }, [client])
+
   const refresh = useCallback(() => loadCatalog(true), [loadCatalog])
   const retry = useCallback(() => loadCatalog(false), [loadCatalog])
 
@@ -109,5 +164,8 @@ export function useJellyfin() {
     retry,
     loadFolder,
     search,
+    loadDetail,
+    setFavorite,
+    setPlayed,
   }
 }

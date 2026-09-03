@@ -45,12 +45,11 @@ import {
   useState,
 } from 'react'
 import {
-  episodes,
   featured as demoFeatured,
-  mediaItems as demoMediaItems,
   type MediaItem,
   type MediaShelf,
 } from './data'
+import type { DetailSnapshot } from './jellyfin'
 import { useJellyfin, type JellyfinUiStatus } from './useJellyfin'
 
 type Page = 'home' | 'browse' | 'favorites' | 'search' | 'detail' | 'player'
@@ -895,39 +894,96 @@ function BrowsePage({
 
 function DetailPage({
   item,
+  detail,
+  loading,
+  error,
   serverName,
   userName,
   refreshing,
   onNavigate,
   onPlay,
+  onSelectSeason,
+  onToggleFavorite,
+  onToggleWatched,
   onOpen,
   onPreview,
   onRefresh,
   onExit,
 }: {
   item: MediaItem
+  detail: DetailSnapshot | null
+  loading: boolean
+  error: string
   serverName: string
   userName: string
   refreshing: boolean
   onNavigate: (page: Page) => void
-  onPlay: () => void
+  onPlay: (item: MediaItem, fromStart?: boolean) => void
+  onSelectSeason: (seasonId: string) => void
+  onToggleFavorite: (item: MediaItem, favorite: boolean) => Promise<boolean>
+  onToggleWatched: (item: MediaItem, watched: boolean) => Promise<boolean>
   onOpen: (item: MediaItem) => void
   onPreview: (item: MediaItem) => void
   onRefresh: () => void
   onExit: () => void
 }) {
-  const [favorite, setFavorite] = useState(Boolean(item.favorite))
-  const [watched, setWatched] = useState(Boolean(item.watched))
+  const resolvedItem = detail?.item ?? item
+  const episodes = detail?.episodes ?? []
+  const similar = detail?.similar ?? []
+  const extras = detail?.extras ?? []
+  const [favorite, setFavorite] = useState(Boolean(resolvedItem.favorite))
+  const [watched, setWatched] = useState(Boolean(resolvedItem.watched))
+  const [actionBusy, setActionBusy] = useState(false)
   const [expanded, setExpanded] = useState(false)
-  const [season, setSeason] = useState('第 1 季')
   const [infoTab, setInfoTab] = useState<'credits' | 'media'>('credits')
   const [detailSection, setDetailSection] = useState<'episodes' | 'similar' | 'clips' | 'details'>('episodes')
-  const extraClips: MediaItem[] = [
-    { ...item, id: `${item.id}-trailer`, title: '正式预告片', subtitle: '2 分 18 秒 · 4K', kind: '视频', art: item.art + 2 },
-    { ...item, id: `${item.id}-making`, title: '创造深海', subtitle: '幕后制作 · 12 分钟', kind: '视频', art: item.art + 4 },
-    { ...item, id: `${item.id}-cast`, title: '演员圆桌', subtitle: '特别内容 · 24 分钟', kind: '视频', art: item.art + 7 },
-    { ...item, id: `${item.id}-sound`, title: '声音的形状', subtitle: '配乐特辑 · 8 分钟', kind: '视频', art: item.art + 9 },
-  ]
+
+  useEffect(() => {
+    setFavorite(Boolean(resolvedItem.favorite))
+    setWatched(Boolean(resolvedItem.watched))
+  }, [resolvedItem.favorite, resolvedItem.id, resolvedItem.watched])
+
+  useEffect(() => {
+    if (!detail || loading || episodes.length || detailSection !== 'episodes') return
+    setDetailSection(similar.length ? 'similar' : 'details')
+  }, [detail, detailSection, episodes.length, loading, similar.length])
+
+  const playTarget = resolvedItem.canPlay
+    ? resolvedItem
+    : episodes.find((episode) => episode.progress && episode.progress > 0)
+      ?? episodes.find((episode) => !episode.watched)
+      ?? episodes[0]
+  const directors = resolvedItem.people?.filter((person) => person.type === 'Director').map((person) => person.name) ?? []
+  const writers = resolvedItem.people?.filter((person) => ['Writer', 'Screenplay'].includes(person.type)).map((person) => person.name) ?? []
+  const actors = resolvedItem.people?.filter((person) => person.type === 'Actor').map((person) => person.name) ?? []
+  const mediaItem = playTarget ?? resolvedItem
+  const dimension = mediaItem.width && mediaItem.height ? `${mediaItem.width}×${mediaItem.height}` : ''
+  const bitrate = mediaItem.bitrate ? `${(mediaItem.bitrate / 1_000_000).toFixed(1)} Mbps` : ''
+  const premiere = resolvedItem.dateCreated
+    ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long' }).format(new Date(resolvedItem.dateCreated))
+    : '未提供'
+
+  const toggleFavorite = async () => {
+    if (actionBusy) return
+    setActionBusy(true)
+    try {
+      const next = !favorite
+      if (await onToggleFavorite(resolvedItem, next)) setFavorite(next)
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  const toggleWatched = async () => {
+    if (actionBusy) return
+    setActionBusy(true)
+    try {
+      const next = !watched
+      if (await onToggleWatched(resolvedItem, next)) setWatched(next)
+    } finally {
+      setActionBusy(false)
+    }
+  }
 
   return (
     <div className="detail-page page-enter">
@@ -935,55 +991,55 @@ function DetailPage({
       <main className="detail-content">
         <FocusButton variant="round" className="detail-back" label="返回" onClick={() => onNavigate('home')}><ArrowLeft size={22} /></FocusButton>
         <section className="detail-hero">
-          <div className="detail-poster-wrap"><ArtFrame item={item} className="detail-poster" /></div>
+          <div className="detail-poster-wrap"><ArtFrame item={resolvedItem} className="detail-poster" /></div>
           <div className="detail-copy">
             <div className="detail-title-lockup">
-              <div className="detail-kicker">LUCENT ORIGINAL SERIES</div>
-              <h1>{item.title}</h1>
-              <p className="detail-original">{item.original ?? 'A LUCENT ARCHIVE'}</p>
-              <p className="detail-tagline">越向下潜，记忆越接近光。</p>
+              <div className="detail-kicker">JELLYFIN · {resolvedItem.sourceType?.toLocaleUpperCase() ?? 'MEDIA'}</div>
+              <h1>{resolvedItem.title}</h1>
+              {resolvedItem.original && <p className="detail-original">{resolvedItem.original}</p>}
+              {resolvedItem.tagline && <p className="detail-tagline">{resolvedItem.tagline}</p>}
             </div>
             <div className="detail-format-badges" aria-label="媒体格式">
-              <span className="detail-format-badges__rating">13+</span>
-              <span>IMAX ENHANCED</span>
-              <span>4K ULTRA HD</span>
-              <span>◈ Dolby Vision</span>
-              <span>◈ Dolby Atmos</span>
-              <span>CC</span>
-              <span>AD</span>
+              {resolvedItem.officialRating && <span className="detail-format-badges__rating">{resolvedItem.officialRating}</span>}
+              {mediaItem.resolution && <span>{mediaItem.resolution}</span>}
+              {mediaItem.videoCodec && <span>{mediaItem.videoCodec}</span>}
+              {mediaItem.audioCodec && <span>{mediaItem.audioCodec}</span>}
+              {mediaItem.container && <span>{mediaItem.container}</span>}
             </div>
             <div className="detail-facts">
-              <span>{item.year ?? '2026'}</span><i />
-              <span>共 2 季</span><i />
-              <span>{item.duration ?? '52 分钟'}</span><i />
-              <span>科幻、悬疑、剧情</span><i />
-              <span className="detail-score"><Star size={14} fill="currentColor" /> {item.rating ?? '8.7'}</span>
+              {resolvedItem.year && <><span>{resolvedItem.year}</span><i /></>}
+              {detail?.seasons.length ? <><span>共 {detail.seasons.length} 季</span><i /></> : null}
+              {resolvedItem.duration && <><span>{resolvedItem.duration}</span><i /></>}
+              {resolvedItem.genres?.length ? <><span>{resolvedItem.genres.slice(0, 4).join('、')}</span><i /></> : null}
+              {resolvedItem.rating && <span className="detail-score"><Star size={14} fill="currentColor" /> {resolvedItem.rating}</span>}
             </div>
             <div className={cx('detail-overview', expanded && 'is-expanded')}>
-              <p>公元 2091 年，深海测绘员林澈随“涟漪号”下潜至无人抵达的海沟。队伍在那里捕捉到一段由海水自行记录的记忆：陌生城市、倒流的雨，以及每个人未曾经历却无比熟悉的童年。</p>
-              <FocusButton variant="ghost" trailing={<ChevronRight size={17} />} onClick={() => setExpanded((value) => !value)}>{expanded ? '收起剧情' : '完整剧情'}</FocusButton>
+              <p>{resolvedItem.overview || 'Jellyfin 暂未提供这项内容的剧情简介。'}</p>
+              {resolvedItem.overview && resolvedItem.overview.length > 120 && <FocusButton variant="ghost" trailing={<ChevronRight size={17} />} onClick={() => setExpanded((value) => !value)}>{expanded ? '收起剧情' : '完整剧情'}</FocusButton>}
             </div>
-            {item.progress !== undefined && item.progress > 0 && (
+            {playTarget?.progress !== undefined && playTarget.progress > 0 && (
               <div className="detail-progress">
-                <div><small>上次看到 S01 E03 · 潮汐记忆</small><strong>剩余约 32 分钟</strong></div>
-                <span><i style={{ width: `${item.progress}%` }} /></span>
+                <div><small>上次看到 {playTarget.subtitle}</small><strong>已观看 {playTarget.progress}%</strong></div>
+                <span><i style={{ width: `${playTarget.progress}%` }} /></span>
               </div>
             )}
             <div className="detail-actions">
-              <FocusButton variant="primary" autoFocusTarget icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">ENTER</span>} onClick={onPlay}>继续 S1E3 · 潮汐记忆</FocusButton>
-              <FocusButton variant="glass" icon={<RotateCcw size={20} />} onClick={onPlay}>从头播放</FocusButton>
-              <FocusButton variant="round" label="播放预告片" onClick={onPlay}><MonitorPlay size={20} /></FocusButton>
-              <FocusButton variant="round" active={favorite} label={favorite ? '取消收藏' : '收藏'} onClick={() => setFavorite((value) => !value)}><Heart size={20} fill={favorite ? 'currentColor' : 'none'} /></FocusButton>
-              <FocusButton variant="round" active={watched} label={watched ? '标记为未看' : '标记已看'} onClick={() => setWatched((value) => !value)}><Check size={21} /></FocusButton>
+              <FocusButton variant="primary" autoFocusTarget disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">ENTER</span>} onClick={() => playTarget && onPlay(playTarget)}>{playTarget?.progress ? `继续 · ${playTarget.subtitle}` : '立即播放'}</FocusButton>
+              <FocusButton variant="glass" disabled={!playTarget || loading} icon={<RotateCcw size={20} />} onClick={() => playTarget && onPlay(playTarget, true)}>从头播放</FocusButton>
+              {extras[0] && <FocusButton variant="round" label="播放预告片" onClick={() => onPlay(extras[0], true)}><MonitorPlay size={20} /></FocusButton>}
+              <FocusButton variant="round" disabled={actionBusy} active={favorite} label={favorite ? '取消收藏' : '收藏'} onClick={() => { void toggleFavorite() }}><Heart size={20} fill={favorite ? 'currentColor' : 'none'} /></FocusButton>
+              <FocusButton variant="round" disabled={actionBusy} active={watched} label={watched ? '标记为未看' : '标记已看'} onClick={() => { void toggleWatched() }}><Check size={21} /></FocusButton>
               <FocusButton variant="round" label="更多操作"><MoreHorizontal size={21} /></FocusButton>
             </div>
+            {loading && <div className="detail-sync"><LoaderCircle className="is-spinning" size={16} /> 正在同步详情…</div>}
+            {error && <div className="detail-sync is-error">{error}</div>}
           </div>
         </section>
 
         <nav className="detail-tabs" aria-label="详情内容分类">
-          <FocusButton variant="ghost" active={detailSection === 'episodes'} onClick={() => setDetailSection('episodes')}>剧集</FocusButton>
-          <FocusButton variant="ghost" active={detailSection === 'similar'} onClick={() => setDetailSection('similar')}>相关推荐</FocusButton>
-          <FocusButton variant="ghost" active={detailSection === 'clips'} onClick={() => setDetailSection('clips')}>额外片段</FocusButton>
+          {(episodes.length > 0 || loading) && <FocusButton variant="ghost" active={detailSection === 'episodes'} onClick={() => setDetailSection('episodes')}>剧集</FocusButton>}
+          {similar.length > 0 && <FocusButton variant="ghost" active={detailSection === 'similar'} onClick={() => setDetailSection('similar')}>相关推荐</FocusButton>}
+          {extras.length > 0 && <FocusButton variant="ghost" active={detailSection === 'clips'} onClick={() => setDetailSection('clips')}>额外片段</FocusButton>}
           <FocusButton variant="ghost" active={detailSection === 'details'} onClick={() => setDetailSection('details')}>详细信息</FocusButton>
         </nav>
 
@@ -993,22 +1049,19 @@ function DetailPage({
               <header className="section-heading">
                 <div><small>EPISODES</small><h2>剧集与章节</h2></div>
                 <div className="season-switcher">
-                  {['第 1 季', '第 2 季', '特别篇'].map((value) => <FocusButton key={value} variant="chip" active={season === value} onClick={() => setSeason(value)}>{value}</FocusButton>)}
+                  {detail?.seasons.map((season) => <FocusButton key={season.id} variant="chip" disabled={loading} active={detail.selectedSeasonId === season.id} onClick={() => onSelectSeason(season.id)}>{season.original || season.title}</FocusButton>)}
                 </div>
               </header>
               <div className="episode-rail">
-                {episodes.map((episode) => {
-                  const episodeItem: MediaItem = { ...item, id: `${item.id}-${episode.number}`, title: episode.title, subtitle: `第 ${episode.number} 集 · ${episode.duration}`, art: episode.art, progress: episode.progress }
-                  return (
-                    <button key={episode.number} type="button" data-focusable="true" className="episode-card" onClick={onPlay} onFocus={() => onPreview(episodeItem)}>
-                      <ArtFrame item={episodeItem} wide />
-                      <span className="episode-card__number">{episode.number}</span>
+                {episodes.map((episode, index) => (
+                    <button key={episode.id} type="button" data-focusable="true" className="episode-card" onClick={() => onPlay(episode)} onFocus={() => onPreview(episode)}>
+                      <ArtFrame item={episode} wide />
+                      <span className="episode-card__number">{String(episode.indexNumber ?? index + 1).padStart(2, '0')}</span>
                       <span className="episode-card__play"><Play size={19} fill="currentColor" /></span>
-                      <span className="episode-card__copy"><strong>{episode.title}</strong><small>{episode.duration}</small></span>
-                      {episode.progress > 0 && <span className="episode-card__progress"><i style={{ width: `${episode.progress}%` }} /></span>}
+                      <span className="episode-card__copy"><strong>{episode.original || episode.title}</strong><small>{episode.duration || episode.subtitle}</small></span>
+                      {episode.progress !== undefined && episode.progress > 0 && <span className="episode-card__progress"><i style={{ width: `${episode.progress}%` }} /></span>}
                     </button>
-                  )
-                })}
+                ))}
               </div>
             </section>
           )}
@@ -1017,7 +1070,7 @@ function DetailPage({
             <section className="similar-section detail-tab-panel">
               <header className="section-heading"><div><small>SIMILAR FREQUENCIES</small><h2>更多类似内容</h2></div></header>
               <div className="shelf__rail">
-                {demoMediaItems.slice(1, 7).map((related) => <MediaCard key={related.id} item={related} wide onOpen={onOpen} onPreview={onPreview} />)}
+                {similar.map((related) => <MediaCard key={related.id} item={related} wide onOpen={onOpen} onPreview={onPreview} />)}
               </div>
             </section>
           )}
@@ -1026,7 +1079,7 @@ function DetailPage({
             <section className="similar-section detail-tab-panel">
               <header className="section-heading"><div><small>EXTRAS</small><h2>额外片段</h2></div></header>
               <div className="shelf__rail">
-                {extraClips.map((clip) => <MediaCard key={clip.id} item={clip} wide onOpen={() => onPlay()} onPreview={onPreview} />)}
+                {extras.map((clip) => <MediaCard key={clip.id} item={clip} wide onOpen={(selectedClip) => onPlay(selectedClip, true)} onPreview={onPreview} />)}
               </div>
             </section>
           )}
@@ -1042,17 +1095,17 @@ function DetailPage({
               </header>
               {infoTab === 'credits' ? (
                 <div className="info-grid glass-panel">
-                  <dl><dt>导演</dt><dd>沈屿、周岚</dd><dt>编剧</dt><dd>季青 / Ari Chen</dd></dl>
-                  <dl><dt>主演</dt><dd>林宥、顾遥、程砚、裴真</dd><dt>工作室</dt><dd>Lowlight Pictures</dd></dl>
-                  <dl><dt>首播日期</dt><dd>2026 年 7 月 18 日</dd><dt>地区 / 语言</dt><dd>中国大陆 / 普通话</dd></dl>
-                  <dl><dt>标签</dt><dd>深海、记忆、近未来、心理</dd><dt>路径</dt><dd>/Series/Echoes.S01/</dd></dl>
+                  <dl><dt>导演</dt><dd>{directors.join('、') || '未提供'}</dd><dt>编剧</dt><dd>{writers.join('、') || '未提供'}</dd></dl>
+                  <dl><dt>主演</dt><dd>{actors.slice(0, 8).join('、') || '未提供'}</dd><dt>工作室</dt><dd>{resolvedItem.studios?.join('、') || '未提供'}</dd></dl>
+                  <dl><dt>加入日期</dt><dd>{premiere}</dd><dt>分类</dt><dd>{resolvedItem.kind}</dd></dl>
+                  <dl><dt>标签</dt><dd>{resolvedItem.genres?.join('、') || '未提供'}</dd><dt>路径</dt><dd>{resolvedItem.path || '未提供'}</dd></dl>
                 </div>
               ) : (
                 <div className="spec-grid glass-panel">
-                  <div><MonitorPlay size={23} /><span><small>视频</small><strong>HEVC Main 10 · 3840×2160 · 23.976 fps</strong></span></div>
-                  <div><AudioLines size={23} /><span><small>音频</small><strong>TrueHD Atmos 7.1 · 48 kHz · 中文</strong></span></div>
-                  <div><Subtitles size={23} /><span><small>字幕</small><strong>ASS 中文特效 / SRT English / 关闭</strong></span></div>
-                  <div><Server size={23} /><span><small>文件</small><strong>MKV · 18.6 GB · 直接播放</strong></span></div>
+                  <div><MonitorPlay size={23} /><span><small>视频</small><strong>{[mediaItem.videoCodec, dimension, mediaItem.resolution].filter(Boolean).join(' · ') || '播放时由 Jellyfin 选择规格'}</strong></span></div>
+                  <div><AudioLines size={23} /><span><small>音频</small><strong>{mediaItem.audioCodec || '播放时由 Jellyfin 选择音轨'}</strong></span></div>
+                  <div><Subtitles size={23} /><span><small>字幕</small><strong>播放时可选择服务器提供的字幕轨</strong></span></div>
+                  <div><Server size={23} /><span><small>文件</small><strong>{[mediaItem.container, bitrate].filter(Boolean).join(' · ') || serverName}</strong></span></div>
                 </div>
               )}
             </section>
@@ -1327,8 +1380,12 @@ export default function App() {
   const [history, setHistory] = useState<Page[]>([])
   const [selected, setSelected] = useState<MediaItem>(demoFeatured)
   const [backdropItem, setBackdropItem] = useState<MediaItem>(demoFeatured)
+  const [detail, setDetail] = useState<DetailSnapshot | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState('')
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<number | null>(null)
+  const detailGeneration = useRef(0)
 
   const serverName = jellyfin.runtime?.session?.serverName
     || jellyfin.runtime?.session?.serverUrl.replace(/^https?:\/\//i, '')
@@ -1348,6 +1405,24 @@ export default function App() {
     setSelected((current) => available.find((item) => item.id === current.id) ?? snapshot.featured)
     setBackdropItem((current) => available.find((item) => item.id === current.id) ?? snapshot.featured)
   }, [jellyfin.snapshot])
+
+  useEffect(() => {
+    if (page !== 'detail' || !selected.id) return
+    const generation = ++detailGeneration.current
+    setDetailLoading(true)
+    setDetailError('')
+    void jellyfin.loadDetail(selected.id).then((next) => {
+      if (generation !== detailGeneration.current) return
+      setDetail(next)
+      setSelected(next.item)
+      setBackdropItem(next.item)
+    }).catch((reason) => {
+      if (generation !== detailGeneration.current) return
+      setDetailError(reason instanceof Error ? reason.message : '详情加载失败。')
+    }).finally(() => {
+      if (generation === detailGeneration.current) setDetailLoading(false)
+    })
+  }, [jellyfin.loadDetail, page, selected.id])
 
   const navigate = useCallback((next: Page) => {
     if (next === page) return
@@ -1393,8 +1468,31 @@ export default function App() {
   const openItem = useCallback((item: MediaItem) => {
     setSelected(item)
     setBackdropItem(item)
+    setDetail(null)
+    setDetailError('')
     if (item.folder) navigate('browse')
     else navigate('detail')
+  }, [navigate])
+
+  const selectSeason = useCallback((seasonId: string) => {
+    const generation = ++detailGeneration.current
+    setDetailLoading(true)
+    setDetailError('')
+    void jellyfin.loadDetail(selected.id, seasonId).then((next) => {
+      if (generation === detailGeneration.current) setDetail(next)
+    }).catch((reason) => {
+      if (generation === detailGeneration.current) {
+        setDetailError(reason instanceof Error ? reason.message : '剧集加载失败。')
+      }
+    }).finally(() => {
+      if (generation === detailGeneration.current) setDetailLoading(false)
+    })
+  }, [jellyfin.loadDetail, selected.id])
+
+  const playItem = useCallback((item: MediaItem) => {
+    setSelected(item)
+    setBackdropItem(item)
+    navigate('player')
   }, [navigate])
 
   useEffect(() => {
@@ -1487,7 +1585,7 @@ export default function App() {
     if (page === 'browse' || page === 'favorites' || page === 'search') {
       return <BrowsePage key={page} mode={page === 'browse' ? 'library' : page} items={snapshot.libraries} favorites={snapshot.favorites} searchSeed={snapshot.allItems} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onSearch={jellyfin.search} onNavigate={navigate} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     }
-    if (page === 'detail') return <DetailPage key={selected.id} item={selected} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigate(next)} onPlay={() => navigate('player')} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
+    if (page === 'detail') return <DetailPage key={selected.id} item={selected} detail={detail} loading={detailLoading} error={detailError} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigate(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? '已加入收藏' : '已取消收藏'); return saved } catch { showToast('收藏状态更新失败'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? '已标记为看过' : '已标记为未看'); return saved } catch { showToast('观看状态更新失败'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     return <PlayerPage item={selected} onBack={goBack} />
   })()
 

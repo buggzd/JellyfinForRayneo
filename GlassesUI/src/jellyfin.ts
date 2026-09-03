@@ -78,6 +78,16 @@ export type CatalogSnapshot = {
   favorites: MediaItem[]
 }
 
+export type DetailSnapshot = {
+  item: MediaItem
+  seriesId?: string
+  selectedSeasonId?: string
+  seasons: MediaItem[]
+  episodes: MediaItem[]
+  similar: MediaItem[]
+  extras: MediaItem[]
+}
+
 const itemFields = [
   'Overview',
   'Genres',
@@ -454,5 +464,91 @@ export class JellyfinClient {
       },
     )
     return (response.Items ?? []).map(this.mapItem)
+  }
+
+  async loadDetail(itemId: string, requestedSeasonId?: string): Promise<DetailSnapshot> {
+    const userId = encodeURIComponent(this.session.userId)
+    const encodedItemId = encodeURIComponent(itemId)
+    const detail = await this.request<JellyfinItemDto>(
+      `/Users/${userId}/Items/${encodedItemId}`,
+      { Fields: itemFields },
+    )
+    const item = this.mapItem(detail)
+    const seriesId = detail.Type === 'Series' ? detail.Id : detail.SeriesId
+
+    const optionalItems = async (path: string, query: Record<string, string | number | boolean | undefined>) => {
+      try {
+        const response = await this.request<JellyfinItemsResponse | JellyfinItemDto[]>(path, query)
+        return Array.isArray(response) ? response : response.Items ?? []
+      } catch {
+        return []
+      }
+    }
+
+    const [seasonDtos, similarDtos, specialFeatureDtos, trailerDtos] = await Promise.all([
+      seriesId
+        ? optionalItems(`/Shows/${encodeURIComponent(seriesId)}/Seasons`, {
+            UserId: this.session.userId,
+            Fields: itemFields,
+          })
+        : Promise.resolve([]),
+      optionalItems(`/Items/${encodedItemId}/Similar`, {
+        UserId: this.session.userId,
+        Limit: 10,
+        Fields: itemFields,
+      }),
+      optionalItems(`/Items/${encodedItemId}/SpecialFeatures`, {
+        UserId: this.session.userId,
+        Fields: itemFields,
+      }),
+      optionalItems(`/Items/${encodedItemId}/LocalTrailers`, {
+        UserId: this.session.userId,
+        Fields: itemFields,
+      }),
+    ])
+
+    const seasons = seasonDtos.map(this.mapItem)
+    const selectedSeason = requestedSeasonId
+      ? seasons.find((season) => season.id === requestedSeasonId)
+      : detail.SeasonId
+        ? seasons.find((season) => season.id === detail.SeasonId)
+        : seasons.find((season) => !season.watched) ?? seasons[0]
+    const episodes = seriesId && selectedSeason
+      ? (await optionalItems(`/Shows/${encodeURIComponent(seriesId)}/Episodes`, {
+          UserId: this.session.userId,
+          SeasonId: selectedSeason.id,
+          Fields: itemFields,
+          ImageTypeLimit: 1,
+          EnableImageTypes: 'Primary,Backdrop',
+        })).map(this.mapItem)
+      : detail.Type === 'Episode'
+        ? [item]
+        : []
+
+    return {
+      item,
+      seriesId,
+      selectedSeasonId: selectedSeason?.id,
+      seasons,
+      episodes,
+      similar: similarDtos.map(this.mapItem),
+      extras: unique([...specialFeatureDtos, ...trailerDtos].map(this.mapItem)),
+    }
+  }
+
+  async setFavorite(itemId: string, favorite: boolean) {
+    await this.request<unknown>(
+      `/Users/${encodeURIComponent(this.session.userId)}/FavoriteItems/${encodeURIComponent(itemId)}`,
+      {},
+      { method: favorite ? 'POST' : 'DELETE' },
+    )
+  }
+
+  async setPlayed(itemId: string, played: boolean) {
+    await this.request<unknown>(
+      `/Users/${encodeURIComponent(this.session.userId)}/PlayedItems/${encodeURIComponent(itemId)}`,
+      {},
+      { method: played ? 'POST' : 'DELETE' },
+    )
   }
 }
