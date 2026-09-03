@@ -47,6 +47,11 @@ local.properties
 /CompanionUI/node_modules/
 /CompanionUI/.vite/
 
+# Local dependencies and credentials for the embedded glasses frontend.
+/GlassesUI/node_modules/
+/GlassesUI/.vite/
+/.jellyfin-dev.json
+
 # OS files
 .DS_Store
 Thumbs.db
