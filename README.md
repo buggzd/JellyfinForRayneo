@@ -1,6 +1,6 @@
 # Jellyfin for RayNeo Air
 
-面向 RayNeo Air 系列眼镜的第三方 Jellyfin 客户端原型。项目使用 Unity 构建空间海报墙；Air 3S 不依赖头部追踪，手机在佩戴眼镜后切换为盲操触控板，以上下左右焦点导航和确认/返回完成交互，节奏参考 Apple TV 在 Vision Pro 中的远距浏览方式。
+面向 RayNeo Air 系列眼镜的第三方 Jellyfin 客户端原型。眼镜端完整采用 Lucent 展示模板的 React/WebView 界面，Unity 负责 RayNeo 外接显示、会话和输入桥接；手机端也使用独立 WebView，承载登录、设置和 OLED 盲操触控板。Air 3S 不依赖头部追踪，主要通过上下左右焦点导航和确认/返回完成交互。
 
 > 本项目不是 Jellyfin、RayNeo 或 Apple 的官方产品，与这些公司不存在隶属或背书关系。
 
@@ -9,17 +9,19 @@
 ## 当前能力
 
 - Jellyfin UDP 局域网自动发现、Quick Connect 快速登录、帐号密码登录和本地会话恢复
-- 手机端原生 Android 配置页；连接成功后切换为 OLED 纯黑盲操触控板，RayNeo Air 眼镜端显示媒体内容
-- Unity Editor 手机伴侣模拟器，可与 Game View 组成双端调试环境
+- 手机端 Lucent 风格配置 WebView；负责服务器发现、登录、设置和 OLED 纯黑盲操触控板
+- 眼镜端 Lucent 风格展示 WebView；不显示多余的“等待手机连接”页，获得画面后直接恢复会话或进入媒体库
+- Unity Editor 手机伴侣模拟器与原生 UI 回退，可用于会话、场景和显示控制器测试
 - 加载“我的媒体”、继续观看、下一集和各媒体库最近添加内容
 - 电影/剧集海报网格、收藏、搜索、服务端分页、排序与观看状态筛选
 - 通用文件夹逐层浏览，支持网课库中目录和普通视频混排，并保留返回栈
 - 海报、背景图和用户观看进度展示，带内存图片缓存与并发限制
-- 电影/剧集/季/单集详情；按季选集、相似内容、完整音视频/字幕轨道信息与章节直达
-- 动态探测 Android `MediaCodecList`，按“系统硬解 → LibVLC MediaCodec 兼容容器硬件优先 → LibVLC 本地软解 → Jellyfin H.264/AAC HLS 转码”自动降级
-- 播放、暂停、拖动进度、遥控快退/快进、独占播放焦点和音轨切换；VTT/SRT/ASS/SSA 文字字幕后台加载并本地渲染，PGS/DVD/DVB 字幕由服务器烧录
+- 电影/剧集/季/单集详情、按季选集、相似内容、收藏和看过状态同步
+- WebView 原生支持的 MP4/H.264 等格式直接播放；MKV/HEVC 等不兼容路径由 Jellyfin 输出 H.264/AAC HLS，并在直放失败时自动降级
+- 播放、暂停、拖动进度、遥控快退/快进、上一集/下一集和音轨/字幕切换；文字字幕统一请求为 WebVTT 并由 Lucent 自绘字幕层显示，位图字幕由服务器烧录
 - 向 Jellyfin 同步播放开始、进度和停止事件，用于继续观看与历史记录
-- RayNeo 官方双显示链路；可选单目铺满的 2D 镜像或双目立体虚拟屏幕模式
+- 眼镜播放状态、标题和进度实时同步到手机触控板；眼镜上的“管理登录”可直接打开手机设置页
+- RayNeo 官方双显示链路；可选铺满双眼的 2D 镜像，或将同一个 WebView 渲染复制到 SBS 左右半帧的立体虚拟屏幕模式
 
 这是可运行的 MVP，而不是完整播放器。目前尚未实现多服务器切换、离线下载、播放列表编辑和安全凭据存储。
 
@@ -29,7 +31,8 @@
 - RayNeo Air SDK `1.0.3`
 - RayNeo 提供的 Cardboard XR Plugin 包 `1.0.3`（包内版本 `1.17.0`）
 - Jellyfin API：按 `10.10.7` 与 `12.0.0` 的公共接口设计
-- Android：API 26+、ARM64、IL2CPP
+- Android：API 26+、ARM64、IL2CPP、系统 WebView
+- 前端：React 19、Vite、TypeScript（眼镜端）与 `hls.js`
 
 ## 首次安装
 
@@ -46,6 +49,10 @@ git clone git@github.com:buggzd/JellyfinForRayneo.git
 cd JellyfinForRayneo
 ./scripts/install-rayneo-sdk.sh
 ./scripts/install-libvlc-android.sh
+npm --prefix GlassesUI ci
+npm --prefix CompanionUI ci
+npm --prefix GlassesUI run build
+npm --prefix CompanionUI run build
 ```
 
 RayNeo 二进制 SDK 不进入本仓库。安装脚本从 RayNeo 官方地址下载并在解压前校验：
@@ -59,7 +66,7 @@ RayNeo 二进制 SDK 不进入本仓库。安装脚本从 RayNeo 官方地址下
 
 脚本依赖 `curl`、`unzip`、`zipinfo` 以及 `md5` 或 `md5sum`。若需要覆盖本地包，运行 `./scripts/install-rayneo-sdk.sh --force`。
 
-使用 Unity Hub 打开仓库根目录。主场景已经位于 `Assets/JellyfinForRayNeo/Scenes/Main.unity`；如需重建场景或重新写入 XR 配置，执行菜单：
+两套前端的生产文件会写入 `Assets/StreamingAssets/GlassesUI/` 与 `Assets/StreamingAssets/CompanionUI/`，Android 构建直接打包这些目录。生成文件需要与源码一起提交。使用 Unity Hub 打开仓库根目录；主场景已经位于 `Assets/JellyfinForRayNeo/Scenes/Main.unity`。如需重建场景或重新写入 XR 配置，执行菜单：
 
 ```text
 Jellyfin for RayNeo > Configure Project and Scene
@@ -67,7 +74,7 @@ Jellyfin for RayNeo > Configure Project and Scene
 
 ## 运行与登录
 
-应用采用两个显示端协作：配套手机运行原生 Android 配置页，负责键盘输入；RayNeo Air 运行 Unity XR 画面，负责连接等待、海报墙、详情和播放。登录成功且眼镜画面就绪后，手机配置层切换为本项目的 OLED 盲操触控板。
+应用采用两个 WebView 协作：手机的 `CompanionUI` 负责发现、凭据、Quick Connect、设置与触控；眼镜的 `GlassesUI` 负责媒体浏览、详情和播放。Unity 与 Android Activity 在两者之间同步会话、遥控命令、播放状态和显示模式。眼镜由手机供电，只有接入手机后才会出现画面，因此眼镜端没有“等待手机连接”页面。
 
 真机流程：
 
@@ -75,27 +82,36 @@ Jellyfin for RayNeo > Configure Project and Scene
 2. 手机会通过 Jellyfin UDP 发现协议自动搜索同一局域网的服务器；点击结果即可选择，也可以手动输入地址。反向代理子路径同样受支持，例如 `https://media.example.com/jellyfin`。
 3. 推荐点击“使用 Jellyfin 快速登录”：应用显示 6 位码，可复制或直接打开服务器授权页；在已登录的 Jellyfin App/网页确认后，眼镜端会自动进入媒体库。
 4. 也可以输入用户名和密码并点击“连接并在眼镜中打开”。密码只在进程内传递本次登录，不会保存。
-5. 连接成功后戴上眼镜，手机自动变成盲操触控板：除中央约 4dp 的低亮反馈点外，窗口、系统栏和背景均为不透明 `#000000`。OLED 屏幕的黑色像素不会发光；上下左右滑动移动唯一焦点，单击确认，双击返回。
+5. 登录成功后，眼镜直接加载 Lucent 媒体库；手机可进入盲操触控板。OLED 触控面保持低亮黑色，滑动移动焦点、单击确认、双击返回，并在顶部显示当前标题、播放/缓冲/暂停状态与进度。
 
 播放期间使用独立输入域：左右滑动分别快退/快进 10 秒，可连续累计；上下滑动只唤出并移动播放器控制焦点。控制栏在继续播放约 3.2 秒后自然隐藏并清空焦点，详情页和其他后台页面在播放器退出前都不能接收点击或遥控命令。
 
-Unity Editor 流程：
+眼镜 WebView 的浏览器开发流程：
+
+```bash
+cp .jellyfin-dev.example.json .jellyfin-dev.json
+npm --prefix GlassesUI run dev
+```
+
+只在本机填写 `.jellyfin-dev.json`。Vite 开发中间件会在运行时读取它并登录 Jellyfin；该文件已被 Git 忽略，生产构建不会嵌入其中的地址、帐号或密码。浏览器打开 `http://127.0.0.1:4175/` 即可调试真实目录、详情、播放和字幕。手机模板可另行运行 `npm --prefix CompanionUI run dev`，但浏览器模式没有 Android 原生桥。
+
+Unity Editor 流程用于验证场景、桥接和原生 UI 回退：
 
 1. 打开 `Main` 场景并进入 Play Mode。
 2. `RayNeo Phone` 模拟器窗口会自动打开，也可通过 `Jellyfin for RayNeo > Companion Simulator` 手动打开。
-3. 在模拟器窗口输入 Jellyfin 地址后，可申请并测试 Quick Connect，也可以使用帐号密码；`Game View` 同时作为眼镜画面。UDP 自动发现仅在 Android 手机端运行。
+3. 在模拟器窗口输入 Jellyfin 地址后，可申请并测试 Quick Connect，也可以使用帐号密码；`Game View` 显示 Unity 回退界面。Android 上的最终 Lucent WebView 覆盖层应通过浏览器和真机验证。UDP 自动发现仅在 Android 手机端运行。
 4. 点击 `Game View` 后，使用方向键或 `WASD` 移动焦点，`Enter`/`Space` 确认，`Esc`/`Backspace` 返回；这与手机盲操触控板发送的命令一致。
 5. 按 `1` 预览铺满单目视野的 2D 镜像，按 `2` 预览双目立体虚拟屏幕；按 `F1` 显示或隐藏调试快捷键说明。鼠标仍可直接点击和拖拽滚动区。
 
-Unity MCP 是可选的本机 Editor 工具。通过 `file:/绝对路径` 安装时，`Packages/manifest.json` 和 `packages-lock.json` 会产生仅适用于当前电脑的修改；不要把该绝对路径提交到仓库。`ProjectSettings/PackageManagerSettings.asset` 也属于本机 UI 状态，已由 Git 忽略。
+Unity MCP 是可选的本机 Editor 工具。通过 `file:/绝对路径` 安装时，`Packages/manifest.json`、`packages-lock.json` 和部分 `ProjectSettings` 可能产生只适用于当前电脑的修改；不要把这些本机路径或无关设置提交到仓库。
 
 局域网 HTTP 服务器需要同时放行 Android 明文网络和 Unity Player 的非安全 HTTP 选项，本项目已在 Manifest 与 Player Settings 中开启。跨公网使用时仍应配置 HTTPS。
 
 ## Android 构建
 
 1. 在 Unity 中打开 `File > Build Settings`，选择 `Android` 并执行 `Switch Platform`。
-2. 确认已运行两个依赖安装脚本，且主场景已勾选。
-3. 项目已预设 ARM64、IL2CPP、最低 API 26、自定义 Manifest、Gradle 模板和 Android XR Loader。
+2. 确认已运行两个依赖安装脚本，并执行过眼镜端类型检查及两套前端生产构建。
+3. 确认主场景已勾选。项目已预设 ARM64、IL2CPP、最低 API 26、自定义 Manifest、Gradle 模板和 Android XR Loader。
 4. 点击 `Build` 生成 APK，或 `Build And Run` 安装到 RayNeo 配套设备。
 
 默认输出路径为 `Builds/Android/JellyfinForRayNeo.apk`（构建产物已被 Git 忽略），可通过 ADB 侧载：
@@ -106,11 +122,13 @@ adb install -r Builds/Android/JellyfinForRayNeo.apk
 
 项目按 RayNeo Air SDK `1.0.3` 的兼容要求固定为 target SDK 29，适合向配套设备侧载，但不满足当前 Google Play 的 target SDK 上架要求。正式分发前还需要在 Unity Player Settings 中配置自有 keystore；未配置时 Unity 会使用 Android Debug 证书签名。
 
-启动 Activity 为 `com.jellyfinforrayneo.companion.JellyfinRayNeoActivity`，它继承 RayNeo 文档要求的 `UnityXRSupportActivity`：手机显示原生配置/触控层，外接眼镜仍由 SDK 的 `UnityPresentation` 承载 Unity 画面。最终发布前，应在目标 RayNeo Air 型号和配套手机上验证登录、触摸遥控、双眼显示、HLS 转码和长时间播放。
+启动 Activity 为 `com.jellyfinforrayneo.companion.JellyfinRayNeoActivity`，它继承 RayNeo 文档要求的 `UnityXRSupportActivity`：手机窗口承载 `CompanionUI`，外接 `UnityPresentation` 上方承载 `GlassesUI`；原生 Android 布局只作为 WebView 加载失败时的回退。最终发布前，应在目标 RayNeo Air 型号和配套手机上验证登录、触摸遥控、双眼显示、HLS 转码、字幕和长时间播放。
 
 ## 双显示端调试
 
-Editor 中无法真实创建 Android 外接显示器的 `Presentation`，因此用两个窗口替代：`RayNeo Phone` 模拟手机，`Game View` 模拟眼镜。登录桥、状态切换和密码清理逻辑与 Android 真机共用；只有手机 UI 的实现不同。
+Editor 中无法真实创建 Android 外接显示器的 `Presentation` 或 Android WebView，因此用两个窗口替代：`RayNeo Phone` 模拟手机，`Game View` 验证 Unity 场景和显示控制器；Lucent 页面本身在 Vite 浏览器中调试。登录桥、状态切换和密码清理逻辑与 Android 真机共用。
+
+真机的 `Mirror2D` 模式让一个 WebView 铺满外接显示帧，由眼镜硬件向双眼显示同一画面。`StereoVirtualScreen` 模式只创建一个播放器 WebView，把它按单眼宽度布局，再将同一 Android 渲染结果分别绘制到 SBS 左右半帧；不会启动第二个视频、第二路音频或第二组 Jellyfin 播放上报。2D/3D 硬件切换期间，WebView 会暂时隐藏，让 Unity 黑帧遮住中间状态。
 
 在 macOS 上首次连接局域网 Jellyfin 前，还要到 `系统设置 > 隐私与安全性 > 本地网络` 允许 Unity 访问本地网络。若 curl 可以访问服务器、Unity 却报告 `Cannot connect to destination host`，可用以下命令确认是否被系统权限拦截：
 
@@ -134,7 +152,7 @@ scrcpy --display-id=<RayNeo-display-id> --window-title="RayNeo Air"
 adb shell dumpsys display | rg 'DisplayDeviceInfo|displayId|FLAG_PRESENTATION'
 ```
 
-不同手机系统或 scrcpy 版本可能不允许捕获外接 `Presentation`；此时保留手机 scrcpy 窗口，并直接观察眼镜画面。Android Studio 的 Layout Inspector 用于检查手机原生配置/触控层，Unity Profiler 用于检查眼镜端 Unity 帧与内存，`adb logcat` 用于定位 Activity、网络和 RayNeo SDK 问题。
+不同手机系统或 scrcpy 版本可能不允许捕获外接 `Presentation`；此时保留手机 scrcpy 窗口，并直接观察眼镜画面。开发包已启用 WebView 调试，可通过 Chromium DevTools 检查两端页面；Unity Profiler 用于检查外接显示帧与内存，`adb logcat` 用于定位 Activity、网络和 RayNeo SDK 问题。
 
 开发机上运行 Jellyfin 时，可通过 USB 端口反向映射让手机访问：
 
@@ -146,7 +164,15 @@ adb reverse tcp:8096 tcp:8096
 
 ## 测试
 
-EditMode 测试覆盖 URL、认证响应、浏览查询、媒体元数据、会话和播放设备配置；PlayMode 测试会实际加载主场景并检查登录 UI、分页网格、详情分区、世界空间 Canvas 与 Air 3S 双目显示模式。
+先验证并构建两套 WebView 前端：
+
+```bash
+npm --prefix GlassesUI run check
+npm --prefix GlassesUI run build
+npm --prefix CompanionUI run build
+```
+
+EditMode 测试覆盖 URL、认证响应、浏览查询、媒体元数据、会话、字幕解析和播放设备配置；PlayMode 测试会实际加载主场景并检查消息桥、登录回退、分页网格、详情分区、焦点与 Air 3S 双目显示模式。
 
 ```bash
 /Applications/Unity/Hub/Editor/2022.3.62f3c1/Unity.app/Contents/MacOS/Unity \
@@ -164,43 +190,50 @@ EditMode 测试覆盖 URL、认证响应、浏览查询、媒体元数据、会�
   -logFile /tmp/jellyfin-rayneo-playmode.log
 ```
 
-当前验证结果：EditMode `53/53`、PlayMode `18/18`；Android ARM64 IL2CPP APK 构建成功并通过 APK Signature Scheme v2 校验。含本地解码库的开发 APK 约 54 MiB，包名 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29。
+当前验证结果：眼镜端 TypeScript 检查与两套 Vite 生产构建通过，EditMode `71/71`、PlayMode `34/34`，Android ARM64 IL2CPP 开发 APK 构建成功；浏览器连接真实 Jellyfin 后已人工确认播放与文字字幕显示。包名为 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29。手机桥接与 SBS 双眼画面仍需在连接 RayNeo Air 的 Android 真机上验收。
 
 ## 播放降级策略
 
-1. 首先根据手机的硬件解码器、容器、分辨率、位深和所选音轨判断能否直放；Unity Android `VideoPlayer` 使用系统 `MediaCodec`。
-2. 对 MKV 等 Unity 不直接接受、但视频编码受硬件支持的容器，LibVLC 以 `avcodec-hw=any` 再尝试 MediaCodec 硬件优先解码。
-3. 两条硬件路径失败后自动保留进度，切换 LibVLC `avcodec-hw=none` 强制软件解码；覆盖 VP9、DTS 等更多格式，但耗电和 CPU 占用更高。
-4. 本地路径均失败时重新请求 PlaybackInfo，禁用视频/音频流复制，强制服务器输出双声道 H.264/AAC HLS。服务端转码能力取决于 Jellyfin 的 FFmpeg 配置。
+1. `GlassesUI` 向 Jellyfin 请求 `PlaybackInfo`，携带适合 Android WebView 的直放、HLS 和字幕能力描述。
+2. MP4/H.264 等 WebView 兼容媒体优先使用 HTML `<video>` 直接播放。播放器顶部显示“直接播放”及实际编码信息。
+3. MKV/HEVC 等不兼容组合使用 Jellyfin H.264/AAC HLS 转码；浏览器支持 MSE 时由 `hls.js` 播放，致命媒体错误只尝试恢复一次。
+4. 直放在运行中失败时保留当前位置并切换到服务器返回的 HLS 备用计划，不循环重试失败路径。
+5. 音轨或字幕切换会停止旧播放会话、保留当前位置并重新协商。可外置的文字字幕统一请求为 WebVTT，由 React 字幕层按当前时间自绘；必须烧录的位图字幕随转码视频输出。
 
-直放协商允许最高 120 Mbps 和 8 声道，让本地播放器负责下混；服务器转码仍限制为 20 Mbps、双声道，避免回退路径生成过重的流。
-
-播放器顶部会显示当前路径，并提供音轨和字幕菜单。切轨会保留当前位置并重新协商；任何一级在运行中失败都会从下一层继续，不会重试已经失败的层级。
+直放协商上限为 120 Mbps；服务器回退限制为 24 Mbps、双声道。实际可用路径仍取决于 Android System WebView、设备硬件解码能力和 Jellyfin FFmpeg 配置。Unity/LibVLC 播放代码继续保留为原生回退，但 Lucent WebView 是当前眼镜端主路径。
 
 ## 代码结构
 
 ```text
+GlassesUI/                    # 眼镜端 React/TypeScript、Jellyfin 客户端与播放器
+CompanionUI/                  # 手机端 React 登录、设置和 OLED 触控板
+
 Assets/JellyfinForRayNeo/
-├── Editor/          # Unity 项目配置与手机伴侣模拟器
-├── Runtime/Api/     # Jellyfin HTTP API、模型、URL 与认证头
-├── Runtime/Companion/ # Android/Editor 登录消息桥与状态快照
-├── Runtime/Core/    # 会话、持久化和任务辅助
-├── Runtime/Services/ # 首页聚合、图片缓存和播放历史上报
-├── Runtime/UI/      # 登录、海报墙、详情、选集和播放器
-├── Scenes/          # Main.unity
-└── Tests/           # EditMode 与 PlayMode 测试
+├── Editor/                    # Unity 项目配置与手机伴侣模拟器
+├── Runtime/Api/               # 原生回退使用的 Jellyfin API 与模型
+├── Runtime/Companion/         # Android/Editor 登录消息桥与状态快照
+├── Runtime/Core/              # 会话、持久化和任务辅助
+├── Runtime/Services/          # 原生目录、图片缓存和播放历史上报
+├── Runtime/UI/                # WebView Presenter 与原生 UI 回退
+├── Scenes/                    # Main.unity
+└── Tests/                     # EditMode 与 PlayMode 测试
+
+Assets/StreamingAssets/
+├── GlassesUI/                 # 已构建并随 APK 打包的眼镜页面
+└── CompanionUI/               # 已构建并随 APK 打包的手机页面
 
 Assets/Plugins/Android/
-└── com/jellyfinforrayneo/companion/ # 手机原生配置与触控 Activity
+└── com/jellyfinforrayneo/companion/ # Activity、手机 WebView 与眼镜 WebView 宿主
 ```
 
 ## 安全与已知边界
 
-- 密码从不落盘，也不会进入状态快照或日志；Android/Editor 桥完成派发后会清空请求对象中的密码。Quick Connect secret 仅存在于 Unity 登录任务内存中，手机只接收用户可见的 6 位码。MVP 为恢复登录将 Jellyfin access token 存在 Unity `PlayerPrefs` 中，它不等同于系统安全存储。
+- `.jellyfin-dev.json` 只供 Vite 开发服务器读取，已被 Git 忽略，也不会进入生产 bundle；不要把真实服务器地址、帐号、密码或 token 写进源码、文档、测试和截图。
+- 密码从不落盘，也不会进入状态快照或日志；Android/Editor 桥完成派发后会清空请求对象中的密码。Quick Connect secret 仅存在于登录任务内存中，手机只接收用户可见的 6 位码。MVP 为恢复登录仍会在应用私有存储中保存 Jellyfin access token，它不等同于系统密钥库。
 - Android Manifest 允许明文 HTTP，以支持常见局域网 Jellyfin 部署；公网环境请使用受信任的 HTTPS 反向代理。
 - 图片缓存仅在内存中，默认最多 192 张、最多 4 个并发下载；选集页只加载当前季海报。
 - 单次选集请求最多加载 500 集，超大型剧集库后续需要分页。
-- 播放能力受 Unity Android `VideoPlayer`、设备解码器和 Jellyfin 转码配置影响。
+- 播放能力受 Android System WebView、设备解码器和 Jellyfin 转码配置影响；字幕自绘只覆盖文本字幕，位图字幕需要服务器烧录。
 - RayNeo 官方导入指南要求将 `Active Input Handling` 设为 `Both`；SDK `1.0.3` 的 XR 输入模块同时使用旧版 `StandaloneInputModule` 与新版触摸处理，因此 Unity 会在 Android 构建时提示 `Both` 性能警告。在替换官方输入模块前不要改为单一后端。
 - RayNeo SDK `1.0.3` 的 `EnvFix` 在版本未变化时会遗留每帧资产扫描回调。本项目仅在 Editor 中运行一次检查并解除该回调；升级官方 SDK 后需重新验证此兼容层。
 
