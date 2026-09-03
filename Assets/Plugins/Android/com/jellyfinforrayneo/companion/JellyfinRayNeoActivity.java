@@ -1706,6 +1706,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         if (touchpadView != null) {
             touchpadView.invalidate();
         }
+        if (glassesWebViewHost != null) {
+            glassesWebViewHost.onDisplayModeChanged();
+        }
         pushWebState();
     }
 
@@ -2434,6 +2437,15 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 DISPLAY_MODE_MIRROR_2D));
     }
 
+    public boolean isRayNeoDisplayModeApplied() {
+        return requestedDisplayModeApplied;
+    }
+
+    public boolean isRayNeoStereoDisplayActive() {
+        return requestedDisplayModeApplied
+                && DISPLAY_MODE_STEREO_SCREEN.equals(activeDisplayMode);
+    }
+
     public boolean isRayNeoDisplayConnected() {
         return hasConnectedRayNeoDisplay();
     }
@@ -2459,6 +2471,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                 }
                 if (companionOverlay != null && !isFinishing()) {
                     applyCompanionState();
+                }
+                if (glassesWebViewHost != null) {
+                    glassesWebViewHost.onDisplayModeChanged();
                 }
                 refreshGlassesWebBootstrap();
             }

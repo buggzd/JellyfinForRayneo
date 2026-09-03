@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.os.Build;
 import android.text.TextUtils;
@@ -42,6 +43,7 @@ final class GlassesWebViewHost {
     };
 
     private ViewGroup webParent;
+    private StereoMirrorLayout webContainer;
     private WebView webView;
     private volatile boolean requested;
     private volatile boolean ready;
@@ -82,6 +84,9 @@ final class GlassesWebViewHost {
                 if (webView != null) {
                     webView.setVisibility(View.GONE);
                 }
+                if (webContainer != null) {
+                    webContainer.setVisibility(View.GONE);
+                }
             }
         });
     }
@@ -108,6 +113,15 @@ final class GlassesWebViewHost {
             return;
         }
         scheduleAttach(0L);
+    }
+
+    void onDisplayModeChanged() {
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                applyDisplayModeLayout();
+            }
+        });
     }
 
     boolean dispatchCommand(final String command) {
@@ -179,7 +193,7 @@ final class GlassesWebViewHost {
             return;
         }
         webView.setVisibility(View.VISIBLE);
-        webView.bringToFront();
+        applyDisplayModeLayout();
         if (TextUtils.isEmpty(webView.getUrl())) {
             webView.loadUrl(GLASSES_UI_URL);
         }
@@ -188,6 +202,10 @@ final class GlassesWebViewHost {
     @SuppressLint("SetJavaScriptEnabled")
     private void createWebView(ViewGroup targetParent) {
         Context context = targetParent.getContext();
+        StereoMirrorLayout container = new StereoMirrorLayout(context);
+        container.setBackgroundColor(Color.BLACK);
+        container.setClipChildren(false);
+
         WebView created = new WebView(context);
         created.setBackgroundColor(Color.rgb(2, 7, 13));
         created.setLayerType(View.LAYER_TYPE_HARDWARE, null);
@@ -281,14 +299,35 @@ final class GlassesWebViewHost {
         });
 
         webParent = targetParent;
+        webContainer = container;
         webView = created;
-        targetParent.addView(
+        container.addView(
                 created,
                 new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
-        created.bringToFront();
+        targetParent.addView(
+                container,
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT));
+        applyDisplayModeLayout();
         created.loadUrl(GLASSES_UI_URL);
+    }
+
+    private void applyDisplayModeLayout() {
+        StereoMirrorLayout container = webContainer;
+        if (container == null) {
+            return;
+        }
+
+        boolean settled = activity.isRayNeoDisplayModeApplied();
+        container.setVisibility(requested && settled ? View.VISIBLE : View.INVISIBLE);
+        container.setStereo(
+                settled && activity.isRayNeoStereoDisplayActive());
+        if (requested && settled) {
+            container.bringToFront();
+        }
     }
 
     private boolean isGlassesAssetUrl(String url) {
@@ -342,18 +381,135 @@ final class GlassesWebViewHost {
     private void destroyWebView() {
         ready = false;
         WebView current = webView;
+        StereoMirrorLayout container = webContainer;
         ViewGroup parent = webParent;
         webView = null;
+        webContainer = null;
         webParent = null;
         if (current == null) {
             return;
         }
         current.removeJavascriptInterface("RayNeoGlasses");
         current.stopLoading();
-        if (parent != null) {
-            parent.removeView(current);
+        if (container != null) {
+            container.removeView(current);
+        }
+        if (parent != null && container != null) {
+            parent.removeView(container);
         }
         current.destroy();
+    }
+
+    private static final class StereoMirrorLayout extends FrameLayout {
+        private boolean stereo;
+        private final Runnable stereoInvalidator = new Runnable() {
+            @Override
+            public void run() {
+                if (!stereo
+                        || getVisibility() != View.VISIBLE
+                        || !isAttachedToWindow()) {
+                    return;
+                }
+                invalidate();
+                postOnAnimation(this);
+            }
+        };
+
+        StereoMirrorLayout(Context context) {
+            super(context);
+            setWillNotDraw(false);
+        }
+
+        void setStereo(boolean enabled) {
+            if (stereo == enabled) {
+                removeCallbacks(stereoInvalidator);
+                if (stereo
+                        && getVisibility() == View.VISIBLE
+                        && isAttachedToWindow()) {
+                    postOnAnimation(stereoInvalidator);
+                }
+                return;
+            }
+            stereo = enabled;
+            removeCallbacks(stereoInvalidator);
+            requestLayout();
+            invalidate();
+            if (stereo && isAttachedToWindow()) {
+                postOnAnimation(stereoInvalidator);
+            }
+        }
+
+        @Override
+        protected void onAttachedToWindow() {
+            super.onAttachedToWindow();
+            if (stereo) {
+                postOnAnimation(stereoInvalidator);
+            }
+        }
+
+        @Override
+        protected void onDetachedFromWindow() {
+            removeCallbacks(stereoInvalidator);
+            super.onDetachedFromWindow();
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            int childWidth = stereo
+                    ? Math.max(1, getMeasuredWidth() / 2)
+                    : getMeasuredWidth();
+            int childHeight = getMeasuredHeight();
+            int childWidthSpec = MeasureSpec.makeMeasureSpec(
+                    childWidth,
+                    MeasureSpec.EXACTLY);
+            int childHeightSpec = MeasureSpec.makeMeasureSpec(
+                    childHeight,
+                    MeasureSpec.EXACTLY);
+            for (int index = 0; index < getChildCount(); index++) {
+                getChildAt(index).measure(childWidthSpec, childHeightSpec);
+            }
+        }
+
+        @Override
+        protected void onLayout(
+                boolean changed,
+                int left,
+                int top,
+                int right,
+                int bottom) {
+            int childWidth = stereo
+                    ? Math.max(1, (right - left) / 2)
+                    : right - left;
+            int childHeight = bottom - top;
+            for (int index = 0; index < getChildCount(); index++) {
+                getChildAt(index).layout(0, 0, childWidth, childHeight);
+            }
+        }
+
+        @Override
+        protected void dispatchDraw(Canvas canvas) {
+            if (!stereo || getChildCount() == 0) {
+                super.dispatchDraw(canvas);
+                return;
+            }
+
+            View child = getChildAt(0);
+            int eyeWidth = Math.max(1, getWidth() / 2);
+            int height = getHeight();
+            long drawingTime = getDrawingTime();
+
+            int leftSave = canvas.save();
+            canvas.clipRect(0, 0, eyeWidth, height);
+            drawChild(canvas, child, drawingTime);
+            canvas.restoreToCount(leftSave);
+
+            int rightSave = canvas.save();
+            canvas.translate(eyeWidth, 0f);
+            canvas.clipRect(0, 0, eyeWidth, height);
+            drawChild(canvas, child, drawingTime);
+            canvas.restoreToCount(rightSave);
+        }
     }
 
     private final class GlassesJavascriptBridge {

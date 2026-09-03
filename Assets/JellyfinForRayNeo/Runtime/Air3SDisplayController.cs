@@ -311,6 +311,11 @@ namespace JellyfinForRayNeo
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
             ConfigureTransitionBlackFrame();
+            PublishPhoneStatus(
+                false,
+                _requestedMode == Air3SDisplayMode.StereoVirtualScreen
+                    ? "正在切换到左右眼立体画面…"
+                    : "正在切换到双眼镜像画面…");
             try
             {
                 EnsureNativeSdkInitialized();
