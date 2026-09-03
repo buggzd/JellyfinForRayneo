@@ -95,7 +95,7 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [UnityTest]
-        public IEnumerator NoSavedSession_ShowsPhoneConnectionWaitingUi()
+        public IEnumerator NoSavedSession_ShowsQuietLucentStartupWithoutConnectionUi()
         {
             Canvas canvas = Object.FindObjectOfType<Canvas>();
             Assert.NotNull(canvas);
@@ -112,14 +112,12 @@ namespace JellyfinForRayNeo.Tests
             Assert.AreSame(display.MonoCamera, canvas.worldCamera);
             Assert.AreEqual(display.CanvasWorldScale, canvas.transform.localScale.x, 0.000001f);
 
-            Transform login = FindDescendant(canvas.transform, "Login Screen");
+            Transform startup = FindDescendant(canvas.transform, "Startup Screen");
             Transform home = FindDescendant(canvas.transform, "Home Screen");
-            Transform phoneHint = FindDescendant(canvas.transform, "Phone Connection Hint");
-            Transform phoneCard = FindDescendant(canvas.transform, "Phone Connection Card");
-            Transform phoneVisual = FindDescendant(canvas.transform, "Phone Connection Visual");
-            Transform phoneSignal = FindDescendant(canvas.transform, "Phone Signal Ring 1");
-            Transform firstPhoneStep = FindDescendant(canvas.transform, "Phone Step 1");
-            Transform connectionSignal = FindDescendant(canvas.transform, "Connection Signal");
+            Transform startupBrand = FindDescendant(canvas.transform, "Startup Brand");
+            Transform startupWordmark = FindDescendant(canvas.transform, "Startup Wordmark");
+            Transform startupSpark = FindDescendant(canvas.transform, "Startup Spark Pulse");
+            Transform startupHorizon = FindDescendant(canvas.transform, "Startup Horizon");
             Transform loadingCard = FindDescendant(canvas.transform, "Loading Card");
             Transform loadingSignal = FindDescendant(canvas.transform, "Loading Signal Plate");
             Transform loadingDetail = FindDescendant(canvas.transform, "Loading Detail");
@@ -128,19 +126,23 @@ namespace JellyfinForRayNeo.Tests
             Transform toastAccent = FindDescendant(canvas.transform, "Toast Accent");
             Transform homeContent = FindDescendant(canvas.transform, "Home Content");
             Transform homeViewport = FindDescendant(canvas.transform, "Home Viewport");
-            Assert.NotNull(login);
+            Assert.NotNull(startup);
             Assert.NotNull(home);
-            Assert.NotNull(phoneHint);
-            Assert.NotNull(phoneCard);
-            Assert.NotNull(phoneCard.GetComponent<Shadow>());
-            Assert.NotNull(phoneVisual);
-            Assert.NotNull(phoneVisual.GetComponent<UiItemReveal>());
-            Assert.NotNull(phoneSignal);
-            Assert.NotNull(phoneSignal.GetComponent<UiSignalPulse>());
-            Assert.NotNull(firstPhoneStep);
-            Assert.NotNull(firstPhoneStep.GetComponent<UiItemReveal>());
-            Assert.NotNull(connectionSignal);
-            Assert.NotNull(connectionSignal.GetComponent<UiSignalPulse>());
+            Assert.NotNull(startupBrand);
+            Assert.NotNull(startupBrand.GetComponent<UiItemReveal>());
+            Assert.NotNull(startupWordmark);
+            Assert.AreEqual("LUCENT", startupWordmark.GetComponent<Text>().text);
+            Assert.NotNull(startupSpark);
+            Assert.NotNull(startupSpark.GetComponent<UiSignalPulse>());
+            Assert.NotNull(startupHorizon);
+            Assert.NotNull(startupHorizon.GetComponent<UiAmbientFloat>());
+            Assert.IsNull(FindDescendant(canvas.transform, "Login Screen"));
+            Assert.IsNull(FindDescendant(canvas.transform, "Phone Connection Hint"));
+            Assert.IsNull(FindDescendant(canvas.transform, "Phone Connection Card"));
+            Assert.IsNull(FindDescendant(canvas.transform, "Phone Connection Visual"));
+            Assert.IsNull(FindDescendant(canvas.transform, "Phone Signal Ring 1"));
+            Assert.IsNull(FindDescendant(canvas.transform, "Phone Step 1"));
+            Assert.IsNull(FindDescendant(canvas.transform, "Connection Signal"));
             Assert.NotNull(loadingCard);
             Assert.NotNull(loadingCard.GetComponent<UiGradient>());
             Assert.NotNull(loadingSignal);
@@ -152,9 +154,16 @@ namespace JellyfinForRayNeo.Tests
             Assert.NotNull(toastAccent);
             Assert.NotNull(homeContent);
             Assert.NotNull(homeViewport);
-            Assert.IsTrue(login.gameObject.activeInHierarchy);
+            Assert.IsTrue(startup.gameObject.activeInHierarchy);
             Assert.IsFalse(home.gameObject.activeSelf);
-            Assert.AreEqual(0, login.GetComponentsInChildren<InputField>(true).Length);
+            Assert.AreEqual(0, startup.GetComponentsInChildren<Selectable>(true).Length);
+            Assert.AreEqual(0, startup.GetComponentsInChildren<InputField>(true).Length);
+            Assert.IsFalse(
+                startup.GetComponentsInChildren<Text>(true).Any(text =>
+                    text.text.Contains("等待")
+                    || text.text.Contains("连接")
+                    || text.text.Contains("手机")),
+                "The glasses startup must not describe a phone connection workflow.");
             Assert.IsTrue(
                 homeContent.GetComponent<VerticalLayoutGroup>().childControlHeight,
                 "Home shelves must honor their LayoutElement height instead of collapsing posters into strips.");
