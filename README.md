@@ -8,7 +8,7 @@
 
 ## 当前能力
 
-- Jellyfin UDP 局域网自动发现、Quick Connect 快速登录、帐号密码登录和本地会话恢复
+- Jellyfin UDP 局域网自动发现、Quick Connect 快速登录、帐号密码登录，以及手机 Activity、Unity 与眼镜 WebView 之间一致的本地会话恢复
 - 手机端 Lucent 风格配置 WebView；负责服务器发现、登录、设置和 OLED 纯黑盲操触控板
 - 眼镜端 Lucent 风格展示 WebView；不显示多余的“等待手机连接”页，获得画面后直接恢复会话或进入媒体库
 - Unity Editor 手机伴侣模拟器与原生 UI 回退，可用于会话、场景和显示控制器测试
@@ -76,13 +76,15 @@ Jellyfin for RayNeo > Configure Project and Scene
 
 应用采用两个 WebView 协作：手机的 `CompanionUI` 负责发现、凭据、Quick Connect、设置与触控；眼镜的 `GlassesUI` 负责媒体浏览、详情和播放。Unity 与 Android Activity 在两者之间同步会话、遥控命令、播放状态和显示模式。眼镜由手机供电，只有接入手机后才会出现画面，因此眼镜端没有“等待手机连接”页面。
 
+登录会话保存在应用私有空间。手机登录后，Activity 会把会话交给 Unity；Unity 从本地恢复或完成登录时，也会把经过字段白名单和长度校验的会话同步回 Activity，并立即刷新眼镜 WebView 的启动状态。因此手机已经进入触控板时，眼镜不应再停留在“请在手机端登录”。这条桥只包含服务器与会话必需字段，不包含密码。
+
 真机流程：
 
 1. 将 RayNeo Air 接到配套手机并启动应用。
 2. 手机会通过 Jellyfin UDP 发现协议自动搜索同一局域网的服务器；点击结果即可选择，也可以手动输入地址。反向代理子路径同样受支持，例如 `https://media.example.com/jellyfin`。
 3. 推荐点击“使用 Jellyfin 快速登录”：应用显示 6 位码，可复制或直接打开服务器授权页；在已登录的 Jellyfin App/网页确认后，眼镜端会自动进入媒体库。
 4. 也可以输入用户名和密码并点击“连接并在眼镜中打开”。密码只在进程内传递本次登录，不会保存。
-5. 登录成功后，眼镜直接加载 Lucent 媒体库；手机可进入盲操触控板。OLED 触控面保持低亮黑色，滑动移动焦点、单击确认、双击返回，并在顶部显示当前标题、播放/缓冲/暂停状态与进度。
+5. 登录成功后，眼镜直接加载 Lucent 媒体库；手机可进入盲操触控板。OLED 触控面保持低亮黑色，滑动移动焦点、单击确认、双击返回，并在顶部显示当前标题、播放/缓冲/暂停状态与进度。当前焦点始终以 Lucent 的放大、亮边和光晕效果显示，包括 Android 注入的合成方向键事件。
 
 播放期间使用独立输入域：左右滑动分别快退/快进 10 秒，可连续累计；上下滑动只唤出并移动播放器控制焦点。控制栏在继续播放约 3.2 秒后自然隐藏并清空焦点，详情页和其他后台页面在播放器退出前都不能接收点击或遥控命令。
 
@@ -129,6 +131,8 @@ adb install -r Builds/Android/JellyfinForRayNeo.apk
 Editor 中无法真实创建 Android 外接显示器的 `Presentation` 或 Android WebView，因此用两个窗口替代：`RayNeo Phone` 模拟手机，`Game View` 验证 Unity 场景和显示控制器；Lucent 页面本身在 Vite 浏览器中调试。登录桥、状态切换和密码清理逻辑与 Android 真机共用。
 
 真机的 `Mirror2D` 模式让一个 WebView 铺满外接显示帧，由眼镜硬件向双眼显示同一画面。`StereoVirtualScreen` 模式只创建一个播放器 WebView，把它按单眼宽度布局，再将同一 Android 渲染结果分别绘制到 SBS 左右半帧；不会启动第二个视频、第二路音频或第二组 Jellyfin 播放上报。2D/3D 硬件切换期间，`displayModeTransitioning` 会暂时隐藏 WebView，让 Unity 黑帧遮住中间状态；切换确认或安全回退结束后必须重新显示 WebView。`displayModeApplied` 只表示用户所选模式得到硬件确认，不能用于长期控制可见性。若切换结束后眼镜仍稳定显示 Unity `Main` 场景，应按眼镜 WebView 挂载故障处理。
+
+若手机已经显示触控板、眼镜却仍提示登录，优先检查 Activity 私有首选项中是否存在 `session_json`，以及眼镜 WebView bootstrap 的 `session` 是否非空；调试时只检查字段是否存在，不要打印完整 JSON 或 token。Unity 成功恢复 PlayerPrefs 会话后应自动补写 Activity 会话并推送新 bootstrap，无需重新输入密码。
 
 在 macOS 上首次连接局域网 Jellyfin 前，还要到 `系统设置 > 隐私与安全性 > 本地网络` 允许 Unity 访问本地网络。若 curl 可以访问服务器、Unity 却报告 `Cannot connect to destination host`，可用以下命令确认是否被系统权限拦截：
 
@@ -190,7 +194,7 @@ EditMode 测试覆盖 URL、认证响应、浏览查询、媒体元数据、会�
   -logFile /tmp/jellyfin-rayneo-playmode.log
 ```
 
-当前验证结果：眼镜端 TypeScript 检查与两套 Vite 生产构建通过，EditMode `71/71`、PlayMode `34/34`，Android ARM64 IL2CPP 开发 APK 构建成功；浏览器连接真实 Jellyfin 后已人工确认播放与文字字幕显示。Android 真机已通过两端 WebView 调试通道确认上、下、左、右、确认和返回六类手机遥控命令抵达眼镜 DOM，焦点移动与确认点击生效且没有脚本异常；外接显示的 1920×1080 真机截图也已确认 Lucent `GlassesUI` 覆盖 Unity 场景，并能在 RayNeo SDK 模式切换失败后以 `Mirror2D` 安全回退继续显示。包名为 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29。SBS 双眼观感仍需佩戴 RayNeo Air 验收。
+当前验证结果：眼镜端 TypeScript 检查与两套 Vite 生产构建通过，EditMode `73/73`、PlayMode `34/34`，Android ARM64 IL2CPP 开发 APK 构建并安装成功；浏览器连接真实 Jellyfin 后已人工确认播放与文字字幕显示。保留已有 Unity 登录数据、但 Activity 原生会话为空的升级场景已在 Android 真机验证：启动后 Activity 自动获得白名单会话，眼镜 bootstrap 含完整必需字段且不含密码，Lucent 目录直接出现而不再显示登录提示。两端 WebView 调试通道也已确认手机发出的遥控命令会迁移唯一空间焦点，旧标记被清除，新控件显示放大、亮边和光晕；上、下、左、右、确认和返回六类命令均可抵达眼镜 DOM。外接显示的 1920×1080 真机截图已确认 Lucent `GlassesUI` 覆盖 Unity 场景，并能在 RayNeo SDK 模式切换失败后以 `Mirror2D` 安全回退继续显示。包名为 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29。SBS 双眼观感仍需佩戴 RayNeo Air 验收。
 
 ## 播放降级策略
 
@@ -230,6 +234,7 @@ Assets/Plugins/Android/
 
 - `.jellyfin-dev.json` 只供 Vite 开发服务器读取，已被 Git 忽略，也不会进入生产 bundle；不要把真实服务器地址、帐号、密码或 token 写进源码、文档、测试和截图。
 - 密码从不落盘，也不会进入状态快照或日志；Android/Editor 桥完成派发后会清空请求对象中的密码。Quick Connect secret 仅存在于登录任务内存中，手机只接收用户可见的 6 位码。MVP 为恢复登录仍会在应用私有存储中保存 Jellyfin access token，它不等同于系统密钥库。
+- Unity 向 Activity 回写会话时只序列化固定白名单字段；Activity 会再次执行必填项和长度校验、丢弃额外字段，再把同一份规范化会话提供给眼镜 bootstrap。调试会话同步只能记录成功/失败或字段存在性。
 - Android Manifest 允许明文 HTTP，以支持常见局域网 Jellyfin 部署；公网环境请使用受信任的 HTTPS 反向代理。
 - 图片缓存仅在内存中，默认最多 192 张、最多 4 个并发下载；选集页只加载当前季海报。
 - 单次选集请求最多加载 500 集，超大型剧集库后续需要分页。
