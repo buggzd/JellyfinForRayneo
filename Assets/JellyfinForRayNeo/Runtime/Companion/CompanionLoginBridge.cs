@@ -259,6 +259,13 @@ namespace JellyfinForRayNeo
     [Serializable]
     public sealed class CompanionSessionRequest
     {
+        private const int MaxServerUrlLength = 2048;
+        private const int MaxServerNameLength = 512;
+        private const int MaxServerVersionLength = 128;
+        private const int MaxIdentifierLength = 512;
+        private const int MaxAccessTokenLength = 4096;
+        private const int MaxUserNameLength = 512;
+
         [SerializeField] private string serverUrl;
         [SerializeField] private string serverName;
         [SerializeField] private string serverVersion;
@@ -277,6 +284,38 @@ namespace JellyfinForRayNeo
         public string UserName => userName;
         public string DeviceId => deviceId;
 
+        internal static bool TryCreate(
+            JellyfinSession session,
+            out CompanionSessionRequest request,
+            out string validationMessage)
+        {
+            request = null;
+            if (session == null)
+            {
+                validationMessage = "没有可同步的 Jellyfin 会话。";
+                return false;
+            }
+
+            CompanionSessionRequest created = new CompanionSessionRequest
+            {
+                serverUrl = session.ServerUrl,
+                serverName = session.ServerName,
+                serverVersion = session.ServerVersion,
+                serverId = session.ServerId,
+                accessToken = session.AccessToken,
+                userId = session.UserId,
+                userName = session.UserName,
+                deviceId = session.DeviceId
+            };
+            if (!created.TryNormalize(out validationMessage))
+            {
+                return false;
+            }
+
+            request = created;
+            return true;
+        }
+
         internal bool TryNormalize(out string validationMessage)
         {
             serverUrl = serverUrl != null ? serverUrl.Trim() : string.Empty;
@@ -294,6 +333,19 @@ namespace JellyfinForRayNeo
                 || string.IsNullOrWhiteSpace(deviceId))
             {
                 validationMessage = "手机端保存的 Jellyfin 会话不完整，请重新登录。";
+                return false;
+            }
+
+            if (serverUrl.Length > MaxServerUrlLength
+                || serverName.Length > MaxServerNameLength
+                || serverVersion.Length > MaxServerVersionLength
+                || serverId.Length > MaxIdentifierLength
+                || accessToken.Length > MaxAccessTokenLength
+                || userId.Length > MaxIdentifierLength
+                || userName.Length > MaxUserNameLength
+                || deviceId.Length > MaxIdentifierLength)
+            {
+                validationMessage = "手机端保存的 Jellyfin 会话超出安全长度限制，请重新登录。";
                 return false;
             }
 
@@ -435,6 +487,8 @@ namespace JellyfinForRayNeo
 
     public sealed class CompanionLoginBridge : IDisposable
     {
+        private const int MaxSerializedSessionLength = 16384;
+
         public const int LoginMessageType = 1000;
         public const int QuickConnectMessageType = 1001;
         public const int CancelQuickConnectMessageType = 1002;
@@ -611,6 +665,41 @@ namespace JellyfinForRayNeo
             }
         }
 
+        public static bool TrySerializeSessionPayload(
+            JellyfinSession session,
+            out string payload,
+            out string validationMessage)
+        {
+            payload = null;
+            if (!CompanionSessionRequest.TryCreate(
+                    session,
+                    out CompanionSessionRequest request,
+                    out validationMessage))
+            {
+                return false;
+            }
+
+            try
+            {
+                string serialized = JsonUtility.ToJson(request);
+                if (string.IsNullOrWhiteSpace(serialized)
+                    || serialized.Length > MaxSerializedSessionLength)
+                {
+                    validationMessage = "Jellyfin 会话无法安全同步到眼镜端。";
+                    return false;
+                }
+
+                payload = serialized;
+                validationMessage = null;
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                validationMessage = "Jellyfin 会话无法序列化。";
+                return false;
+            }
+        }
+
         public static bool TryParseGlassesEvent(string[] values, out bool connected)
         {
             connected = false;
@@ -716,6 +805,51 @@ namespace JellyfinForRayNeo
             catch (Exception exception)
             {
                 Debug.LogWarning("Android companion session could not be cleared: " + exception.Message);
+            }
+#endif
+        }
+
+        public void PublishSession(JellyfinSession session, bool persist = true)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (!TrySerializeSessionPayload(
+                    session,
+                    out string payload,
+                    out string validationMessage))
+            {
+                Debug.LogWarning(validationMessage);
+                return;
+            }
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (AndroidJavaClass unityPlayer =
+                       new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (AndroidJavaObject activity =
+                       unityPlayer.GetStatic<AndroidJavaObject>("currentActivity"))
+                {
+                    bool accepted = activity != null
+                        && activity.Call<bool>("setNativeSessionJson", payload, persist);
+                    if (accepted)
+                    {
+                        _lastNativeSessionPayload = payload;
+                    }
+                    else
+                    {
+                        Debug.LogWarning("Android companion rejected the Jellyfin session update.");
+                    }
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    "Android companion session could not be updated: "
+                    + exception.Message);
             }
 #endif
         }

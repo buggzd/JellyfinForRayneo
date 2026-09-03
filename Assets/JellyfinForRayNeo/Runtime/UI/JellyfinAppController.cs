@@ -157,6 +157,7 @@ namespace JellyfinForRayNeo
             _pendingServerUrl = saved.ServerUrl;
             _pendingUserName = saved.UserName;
             _api.SetSession(saved);
+            _companionBridge.PublishSession(saved);
             _loginInProgress = true;
             _loginView.SetBusy(true);
             _companionBridge.PublishState(
@@ -823,6 +824,7 @@ namespace JellyfinForRayNeo
 
                 _api.SetSession(session);
                 _sessionStore.Save(session);
+                _companionBridge.PublishSession(session);
                 await LoadHomeAsync(session, token);
             }
             catch (OperationCanceledException)
@@ -942,6 +944,7 @@ namespace JellyfinForRayNeo
 
                 _api.SetSession(session);
                 _sessionStore.Save(session);
+                _companionBridge.PublishSession(session);
                 await LoadHomeAsync(session, token);
             }
             catch (OperationCanceledException)

@@ -96,6 +96,13 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private static final int QUICK_CONNECT_POLL_MS = 1500;
     private static final long PRESENTATION_FALLBACK_DELAY_MS = 2600L;
     private static final int MAX_REMOTE_COMMANDS = 32;
+    private static final int MAX_SESSION_JSON_LENGTH = 16384;
+    private static final int MAX_SERVER_URL_LENGTH = 2048;
+    private static final int MAX_SERVER_NAME_LENGTH = 512;
+    private static final int MAX_SERVER_VERSION_LENGTH = 128;
+    private static final int MAX_SESSION_IDENTIFIER_LENGTH = 512;
+    private static final int MAX_ACCESS_TOKEN_LENGTH = 4096;
+    private static final int MAX_USER_NAME_LENGTH = 512;
     private static final long DOUBLE_TAP_WINDOW_MS = 280L;
     private static final long REMOTE_FEEDBACK_DURATION_MS = 320L;
     private static final long DISPLAY_MODE_LONG_PRESS_MS = 550L;
@@ -2366,7 +2373,54 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         if (isValidNativeSession(transientSessionJson)) {
             return transientSessionJson;
         }
-        return getCompanionPreferences().getString(PREF_SESSION_JSON, "");
+        String persistedSession = getCompanionPreferences().getString(PREF_SESSION_JSON, "");
+        return isValidNativeSession(persistedSession) ? persistedSession : "";
+    }
+
+    public boolean setNativeSessionJson(String payload, final boolean persist) {
+        final JSONObject session = normalizeNativeSession(payload);
+        if (session == null) {
+            return false;
+        }
+
+        final String sessionValue = session.toString();
+        authenticationGeneration++;
+        nativeOperationRunning = false;
+        transientSessionJson = sessionValue;
+        rememberNativeSession = persist;
+
+        SharedPreferences.Editor editor = getCompanionPreferences().edit()
+                .putString(PREF_SERVER_URL, session.optString("serverUrl", ""))
+                .putString(PREF_USERNAME, session.optString("userName", ""));
+        if (persist) {
+            editor.putString(PREF_SESSION_JSON, sessionValue);
+        } else {
+            editor.remove(PREF_SESSION_JSON);
+        }
+        editor.apply();
+
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (isFinishing()) {
+                    return;
+                }
+                latestState = "session_ready";
+                latestServerUrl = session.optString("serverUrl", "");
+                latestServerName = session.optString("serverName", "");
+                latestUsername = session.optString("userName", "");
+                latestQuickConnectCode = "";
+                latestIsError = false;
+                latestMessage = persist
+                        ? "Jellyfin 配置已保存，正在同步媒体库。"
+                        : "Jellyfin 已连接；会话仅在本次运行期间保留。";
+                if (companionOverlay != null) {
+                    applyCompanionState();
+                }
+                refreshGlassesWebBootstrap();
+            }
+        });
+        return true;
     }
 
     public void openCompanionScreen(final String screen) {
@@ -2638,18 +2692,58 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     }
 
     private boolean isValidNativeSession(String value) {
-        if (TextUtils.isEmpty(value)) {
-            return false;
+        return normalizeNativeSession(value) != null;
+    }
+
+    private JSONObject normalizeNativeSession(String value) {
+        if (TextUtils.isEmpty(value) || value.length() > MAX_SESSION_JSON_LENGTH) {
+            return null;
         }
+
         try {
-            JSONObject session = new JSONObject(value);
-            return isUsableServerValue(session.optString("serverUrl", ""))
-                    && !TextUtils.isEmpty(session.optString("accessToken", ""))
-                    && !TextUtils.isEmpty(session.optString("userId", ""))
-                    && !TextUtils.isEmpty(session.optString("deviceId", ""));
+            JSONObject source = new JSONObject(value);
+            String serverUrl = sessionString(source, "serverUrl");
+            String serverName = sessionString(source, "serverName");
+            String serverVersion = sessionString(source, "serverVersion");
+            String serverId = sessionString(source, "serverId");
+            String accessToken = sessionString(source, "accessToken");
+            String userId = sessionString(source, "userId");
+            String userName = sessionString(source, "userName");
+            String deviceId = sessionString(source, "deviceId");
+
+            if (!isUsableServerValue(serverUrl)
+                    || TextUtils.isEmpty(accessToken)
+                    || TextUtils.isEmpty(userId)
+                    || TextUtils.isEmpty(deviceId)
+                    || serverUrl.length() > MAX_SERVER_URL_LENGTH
+                    || serverName.length() > MAX_SERVER_NAME_LENGTH
+                    || serverVersion.length() > MAX_SERVER_VERSION_LENGTH
+                    || serverId.length() > MAX_SESSION_IDENTIFIER_LENGTH
+                    || accessToken.length() > MAX_ACCESS_TOKEN_LENGTH
+                    || userId.length() > MAX_SESSION_IDENTIFIER_LENGTH
+                    || userName.length() > MAX_USER_NAME_LENGTH
+                    || deviceId.length() > MAX_SESSION_IDENTIFIER_LENGTH) {
+                return null;
+            }
+
+            JSONObject normalized = new JSONObject();
+            normalized.put("serverUrl", serverUrl);
+            normalized.put("serverName", serverName);
+            normalized.put("serverVersion", serverVersion);
+            normalized.put("serverId", serverId);
+            normalized.put("accessToken", accessToken);
+            normalized.put("userId", userId);
+            normalized.put("userName", userName);
+            normalized.put("deviceId", deviceId);
+            return normalized;
         } catch (Exception ignored) {
-            return false;
+            return null;
         }
+    }
+
+    private static String sessionString(JSONObject source, String key) {
+        Object value = source.opt(key);
+        return value instanceof String ? ((String) value).trim() : "";
     }
 
     private boolean isUsableServerValue(String value) {

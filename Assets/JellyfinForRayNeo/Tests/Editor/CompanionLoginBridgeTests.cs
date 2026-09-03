@@ -124,6 +124,64 @@ namespace JellyfinForRayNeo.Tests
             Assert.IsNotEmpty(validationMessage);
         }
 
+        [Test]
+        public void UnitySessionPayload_UsesCamelCaseWhitelistWithoutPassword()
+        {
+            JellyfinSession session = new JellyfinSession
+            {
+                ServerUrl = " http://server:8096 ",
+                ServerName = " Living Room ",
+                ServerVersion = " 10.10.7 ",
+                ServerId = " server-id ",
+                AccessToken = " token ",
+                UserId = " user-id ",
+                UserName = " alice ",
+                DeviceId = " unity-device "
+            };
+
+            Assert.IsTrue(CompanionLoginBridge.TrySerializeSessionPayload(
+                session,
+                out string payload,
+                out string validationMessage), validationMessage);
+            StringAssert.Contains("\"serverUrl\":\"http://server:8096\"", payload);
+            StringAssert.Contains("\"accessToken\":\"token\"", payload);
+            StringAssert.Contains("\"deviceId\":\"unity-device\"", payload);
+            StringAssert.DoesNotContain("Password", payload);
+            StringAssert.DoesNotContain("password", payload);
+            StringAssert.DoesNotContain("createdAt", payload);
+
+            Assert.IsTrue(CompanionLoginBridge.TryParseSessionPayload(
+                payload,
+                out CompanionSessionRequest parsed,
+                out validationMessage), validationMessage);
+            Assert.AreEqual("alice", parsed.UserName);
+        }
+
+        [Test]
+        public void UnitySessionPayload_RejectsIncompleteOrOversizedValues()
+        {
+            JellyfinSession missingToken = new JellyfinSession
+            {
+                ServerUrl = "http://server:8096",
+                UserId = "user-id",
+                DeviceId = "unity-device"
+            };
+            Assert.IsFalse(CompanionLoginBridge.TrySerializeSessionPayload(
+                missingToken,
+                out string payload,
+                out string validationMessage));
+            Assert.IsNull(payload);
+            Assert.IsNotEmpty(validationMessage);
+
+            missingToken.AccessToken = new string('x', 4097);
+            Assert.IsFalse(CompanionLoginBridge.TrySerializeSessionPayload(
+                missingToken,
+                out payload,
+                out validationMessage));
+            Assert.IsNull(payload);
+            Assert.IsNotEmpty(validationMessage);
+        }
+
         [TestCase("1", true)]
         [TestCase("2", false)]
         public void RayNeoGlassEvent_ParsesOfficialSdkValues(
