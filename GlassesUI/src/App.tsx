@@ -2042,8 +2042,8 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase()
-      const target = event.target as HTMLElement | null
-      if (target?.matches('input, textarea') && key !== 'escape') return
+      const target = event.target
+      if (target instanceof Element && target.matches('input, textarea') && key !== 'escape') return
 
       if (key === 'escape' || key === 'backspace') {
         event.preventDefault()

@@ -137,7 +137,8 @@ final class GlassesWebViewHost {
                         + "var keys={up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',"
                         + "right:'ArrowRight',enter:'Enter',back:'Escape'};"
                         + "var key=keys[command];"
-                        + "if(key){window.dispatchEvent(new KeyboardEvent('keydown',"
+                        + "var target=document.activeElement||document.body;"
+                        + "if(key&&target){target.dispatchEvent(new KeyboardEvent('keydown',"
                         + "{key:key,bubbles:true,cancelable:true}));}"
                         + "})("
                         + quotedCommand
