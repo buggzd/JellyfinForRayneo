@@ -8,6 +8,7 @@ namespace JellyfinForRayNeo
     {
         private static Sprite _roundedSprite;
         private static Sprite _radialGlowSprite;
+        private static Sprite _grainSprite;
 
         public static RectTransform CreateRect(string name, Transform parent)
         {
@@ -59,6 +60,43 @@ namespace JellyfinForRayNeo
             return image;
         }
 
+        public static Image CreateGlassPanel(
+            string name,
+            Transform parent,
+            Color color,
+            Vector2 shadowDistance)
+        {
+            Image panel = CreateRoundedPanel(name, parent, color);
+            UiGradient gradient = panel.gameObject.AddComponent<UiGradient>();
+            gradient.StartColor = new Color(1f, 1f, 1f, 1f);
+            gradient.EndColor = new Color(0.64f, 0.84f, 0.94f, 0.70f);
+            gradient.Horizontal = true;
+
+            Outline outline = panel.gameObject.AddComponent<Outline>();
+            outline.effectColor = UiTheme.Border;
+            outline.effectDistance = new Vector2(1f, -1f);
+            outline.useGraphicAlpha = true;
+
+            Shadow shadow = panel.gameObject.AddComponent<Shadow>();
+            shadow.effectColor = new Color(0f, 0.02f, 0.04f, 0.42f);
+            shadow.effectDistance = shadowDistance;
+            shadow.useGraphicAlpha = true;
+            return panel;
+        }
+
+        public static Image CreateFilmGrain(Transform parent, float opacity = 0.035f)
+        {
+            Image grain = CreatePanel(
+                "Film Grain",
+                parent,
+                new Color(1f, 1f, 1f, Mathf.Clamp01(opacity)));
+            grain.sprite = GrainSprite;
+            grain.type = Image.Type.Tiled;
+            grain.raycastTarget = false;
+            Stretch(grain.rectTransform);
+            return grain;
+        }
+
         public static Text CreateText(
             string name,
             Transform parent,
@@ -97,16 +135,30 @@ namespace JellyfinForRayNeo
             button.transition = Selectable.Transition.ColorTint;
             ColorBlock colors = button.colors;
             colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.10f, 1.10f, 1.10f, 1f);
-            colors.selectedColor = new Color(1.10f, 1.10f, 1.10f, 1f);
+            colors.highlightedColor = new Color(1.04f, 1.04f, 1.04f, 1f);
+            colors.selectedColor = new Color(1.04f, 1.04f, 1.04f, 1f);
             colors.pressedColor = new Color(0.78f, 0.82f, 0.86f, 1f);
             colors.disabledColor = new Color(0.48f, 0.48f, 0.52f, 0.55f);
             colors.colorMultiplier = 1f;
             button.colors = colors;
 
+            Image focusWash = CreateRoundedPanel(
+                "Focus Wash",
+                image.transform,
+                Color.clear);
+            focusWash.raycastTarget = false;
+            Stretch(focusWash.rectTransform, -2f, -2f, -2f, -2f);
+
             Text text = CreateText("Label", image.transform, label, fontSize, foreground, TextAnchor.MiddleCenter, FontStyle.Bold);
             Stretch(text.rectTransform, 12f, 12f, 8f, 8f);
-            image.gameObject.AddComponent<FocusScale>();
+            FocusScale focus = image.gameObject.AddComponent<FocusScale>();
+            focus.ConfigureFocusGraphic(
+                focusWash,
+                new Color(
+                    UiTheme.AccentBright.r,
+                    UiTheme.AccentBright.g,
+                    UiTheme.AccentBright.b,
+                    0.14f));
             return button;
         }
 
@@ -196,6 +248,37 @@ namespace JellyfinForRayNeo
             violetMotion.Amplitude = new Vector2(34f, 28f);
             violetMotion.Speed = 0.045f;
             violetMotion.Phase = 2.1f;
+
+            Image blue = CreatePanel("Blue Spectrum", ambient, UiTheme.GlowTeal);
+            blue.sprite = RadialGlowSprite;
+            blue.raycastTarget = false;
+            SetRect(
+                blue.rectTransform,
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(-190f, -130f),
+                new Vector2(1280f, 780f));
+            UiAmbientFloat blueMotion = blue.gameObject.AddComponent<UiAmbientFloat>();
+            blueMotion.Amplitude = new Vector2(54f, 26f);
+            blueMotion.Speed = 0.038f;
+            blueMotion.Phase = 4.2f;
+            blueMotion.ScalePulse = 0.025f;
+
+            Image leftVeil = CreateGradientPanel(
+                "Ambient Left Veil",
+                ambient,
+                new Color(0.004f, 0.018f, 0.034f, 0.96f),
+                new Color(0.004f, 0.018f, 0.034f, 0.08f),
+                true);
+            Stretch(leftVeil.rectTransform);
+
+            Image edgeFade = CreateGradientPanel(
+                "Ambient Edge Fade",
+                ambient,
+                new Color(0.004f, 0.018f, 0.034f, 0.94f),
+                new Color(0.004f, 0.018f, 0.034f, 0.05f));
+            Stretch(edgeFade.rectTransform);
 
             return ambient;
         }
@@ -477,6 +560,52 @@ namespace JellyfinForRayNeo
                 _radialGlowSprite.name = "Runtime Radial Glow";
                 _radialGlowSprite.hideFlags = HideFlags.HideAndDontSave;
                 return _radialGlowSprite;
+            }
+        }
+
+        private static Sprite GrainSprite
+        {
+            get
+            {
+                if (_grainSprite != null)
+                {
+                    return _grainSprite;
+                }
+
+                const int size = 96;
+                Color[] pixels = new Color[size * size];
+                uint state = 0x7f4a7c15u;
+                for (int index = 0; index < pixels.Length; index++)
+                {
+                    state = state * 1664525u + 1013904223u;
+                    float value = ((state >> 24) & 0xff) / 255f;
+                    float alpha = Mathf.Lerp(0.05f, 0.46f, value);
+                    pixels[index] = new Color(1f, 1f, 1f, alpha);
+                }
+
+                Texture2D texture = new Texture2D(
+                    size,
+                    size,
+                    TextureFormat.RGBA32,
+                    false,
+                    true)
+                {
+                    name = "Runtime Film Grain",
+                    filterMode = FilterMode.Point,
+                    wrapMode = TextureWrapMode.Repeat,
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+                texture.SetPixels(pixels);
+                texture.Apply(false, true);
+
+                _grainSprite = Sprite.Create(
+                    texture,
+                    new Rect(0f, 0f, size, size),
+                    new Vector2(0.5f, 0.5f),
+                    24f);
+                _grainSprite.name = "Runtime Film Grain";
+                _grainSprite.hideFlags = HideFlags.HideAndDontSave;
+                return _grainSprite;
             }
         }
     }
