@@ -190,7 +190,7 @@ EditMode 测试覆盖 URL、认证响应、浏览查询、媒体元数据、会�
   -logFile /tmp/jellyfin-rayneo-playmode.log
 ```
 
-当前验证结果：眼镜端 TypeScript 检查与两套 Vite 生产构建通过，EditMode `71/71`、PlayMode `34/34`，Android ARM64 IL2CPP 开发 APK 构建成功；浏览器连接真实 Jellyfin 后已人工确认播放与文字字幕显示。包名为 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29。手机桥接与 SBS 双眼画面仍需在连接 RayNeo Air 的 Android 真机上验收。
+当前验证结果：眼镜端 TypeScript 检查与两套 Vite 生产构建通过，EditMode `71/71`、PlayMode `34/34`，Android ARM64 IL2CPP 开发 APK 构建成功；浏览器连接真实 Jellyfin 后已人工确认播放与文字字幕显示。Android 真机已通过两端 WebView 调试通道确认上、下、左、右、确认和返回六类手机遥控命令抵达眼镜 DOM，焦点移动与确认点击生效且没有脚本异常。包名为 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29。SBS 双眼观感仍需佩戴 RayNeo Air 验收。
 
 ## 播放降级策略
 

@@ -10,7 +10,7 @@ The phone owns discovery, credentials, Quick Connect, login settings, and the OL
 
 Preserve both modes managed by `Air3SDisplayController`. `Mirror2D` displays one full-width WebView frame. `StereoVirtualScreen` measures one WebView at per-eye width and replays that same render into both SBS halves; do not create two player WebViews, because that duplicates decoding, audio, and Jellyfin playback reports. During hardware mode transitions the WebView stays hidden behind Unity's black transition frame.
 
-Directional input goes to the active glasses WebView first and uses its scoped DOM focus logic. The native Unity fallback still uses `DirectionalFocusNavigator`. While video is active, underlying pages must remain non-interactable in either path.
+Directional input goes to the active glasses WebView first and uses its scoped DOM focus logic. Android-injected keyboard events must originate from `document.activeElement` (falling back to `document.body`) so they bubble with an element target, and DOM handlers must type-check `EventTarget` before calling element APIs. The native Unity fallback still uses `DirectionalFocusNavigator`. While video is active, underlying pages must remain non-interactable in either path.
 
 ## Build, Test, and Development Commands
 
