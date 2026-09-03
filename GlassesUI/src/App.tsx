@@ -67,6 +67,7 @@ type PlaybackRequest = {
 }
 
 const focusableSelector = '[data-focusable="true"]:not([disabled])'
+const spatialFocusSelector = '[data-spatial-focus="true"]'
 let sideNavigationReturnTarget: HTMLElement | null = null
 
 function visibleFocusables() {
@@ -77,6 +78,21 @@ function visibleFocusables() {
   })
 }
 
+function clearSpatialFocus(except?: HTMLElement | null) {
+  document.querySelectorAll<HTMLElement>(spatialFocusSelector).forEach((element) => {
+    if (element !== except) element.removeAttribute('data-spatial-focus')
+  })
+}
+
+function focusSpatialElement(element?: HTMLElement | null, options: FocusOptions = { preventScroll: true }) {
+  if (!element) return false
+  clearSpatialFocus(element)
+  element.focus(options)
+  if (document.activeElement !== element) return false
+  element.setAttribute('data-spatial-focus', 'true')
+  return true
+}
+
 function moveFocus(direction: Direction) {
   const nodes = visibleFocusables()
   if (!nodes.length) return
@@ -84,7 +100,7 @@ function moveFocus(direction: Direction) {
   const current = document.activeElement instanceof HTMLElement ? document.activeElement : null
   if (!current || !nodes.includes(current)) {
     const firstContent = nodes.find((node) => !node.closest('.side-navigation'))
-    ;(document.querySelector<HTMLElement>('[data-autofocus="true"]') ?? firstContent ?? nodes[0]).focus()
+    focusSpatialElement(document.querySelector<HTMLElement>('[data-autofocus="true"]') ?? firstContent ?? nodes[0])
     return
   }
 
@@ -96,7 +112,7 @@ function moveFocus(direction: Direction) {
   const contentNodes = nodes.filter((node) => !node.closest('.side-navigation'))
 
   const focusTarget = (node: HTMLElement) => {
-    node.focus({ preventScroll: true })
+    focusSpatialElement(node)
     if (node.closest('.side-navigation')) return
 
     if (direction === 'up' && node.closest('.hero-section')) {
@@ -178,19 +194,19 @@ function movePlayerFocus(direction: Direction) {
   const controlIndex = controlButtons.indexOf(current)
 
   if (direction === 'down' && current === progress) {
-    ;(document.querySelector<HTMLElement>('.player-play') ?? controlButtons[0])?.focus({ preventScroll: true })
+    focusSpatialElement(document.querySelector<HTMLElement>('.player-play') ?? controlButtons[0])
     return true
   }
 
   if (direction === 'up' && controlIndex >= 0) {
-    progress?.focus({ preventScroll: true })
+    focusSpatialElement(progress)
     return true
   }
 
   if ((direction === 'left' || direction === 'right') && controlIndex >= 0) {
     const offset = direction === 'left' ? -1 : 1
     const nextIndex = Math.max(0, Math.min(controlButtons.length - 1, controlIndex + offset))
-    controlButtons[nextIndex]?.focus({ preventScroll: true })
+    focusSpatialElement(controlButtons[nextIndex])
     return true
   }
 
@@ -224,7 +240,7 @@ function moveVirtualKeyboardFocus(current: HTMLElement, direction: Direction) {
     const columnIndex = row.indexOf(current)
     const nextIndex = columnIndex + (direction === 'right' ? 1 : -1)
     const next = row[Math.max(0, Math.min(row.length - 1, nextIndex))]
-    next.focus({ preventScroll: true })
+    focusSpatialElement(next)
     return true
   }
 
@@ -239,7 +255,7 @@ function moveVirtualKeyboardFocus(current: HTMLElement, direction: Direction) {
     return distance < closest.distance ? { element: candidate, distance } : closest
   }, { element: rows[nextRowIndex][0], distance: Number.POSITIVE_INFINITY }).element
 
-  next.focus({ preventScroll: true })
+  focusSpatialElement(next)
   next.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
   return true
 }
@@ -751,7 +767,7 @@ function BrowsePage({
   const focusFirstResult = () => {
     const firstResult = document.querySelector<HTMLElement>('.search-results .media-card')
     if (firstResult) {
-      firstResult.focus({ preventScroll: true })
+      focusSpatialElement(firstResult)
       firstResult.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
     }
   }
@@ -1497,7 +1513,7 @@ function PlayerPage({
     if (hideTimer.current) window.clearTimeout(hideTimer.current)
     if (status === 'playing' && !panel) {
       hideTimer.current = window.setTimeout(() => {
-        document.querySelector<HTMLElement>('.player-progress__bar')?.focus({ preventScroll: true })
+        focusSpatialElement(document.querySelector<HTMLElement>('.player-progress__bar'))
         setControls(false)
       }, 3200)
     }
@@ -1523,7 +1539,7 @@ function PlayerPage({
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      document.querySelector<HTMLElement>('.player-controls [data-autofocus="true"]')?.focus({ preventScroll: true })
+      focusSpatialElement(document.querySelector<HTMLElement>('.player-controls [data-autofocus="true"]'))
     }, 140)
     return () => window.clearTimeout(timer)
   }, [])
@@ -1580,7 +1596,7 @@ function PlayerPage({
         }
 
         if (!controls) {
-          document.querySelector<HTMLElement>('.player-progress__bar')?.focus({ preventScroll: true })
+          focusSpatialElement(document.querySelector<HTMLElement>('.player-progress__bar'))
           return seek(key === 'left' ? -10 : 10, false)
         }
 
@@ -1593,7 +1609,7 @@ function PlayerPage({
         reveal()
         window.setTimeout(() => {
           if (wasHidden) {
-            document.querySelector<HTMLElement>('.player-progress__bar')?.focus({ preventScroll: true })
+            focusSpatialElement(document.querySelector<HTMLElement>('.player-progress__bar'))
           } else {
             if (!movePlayerFocus('down')) moveFocus('down')
           }
@@ -2031,13 +2047,37 @@ export default function App() {
   }, [navigate])
 
   useEffect(() => {
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (!target?.matches(spatialFocusSelector)) clearSpatialFocus()
+    }
+    const onPointerDown = () => clearSpatialFocus()
+    const onRemoteCommand = () => {
+      const active = document.activeElement
+      if (!(active instanceof HTMLElement) || !active.matches(focusableSelector)) return
+      clearSpatialFocus(active)
+      active.setAttribute('data-spatial-focus', 'true')
+    }
+
+    document.addEventListener('focusin', onFocusIn)
+    document.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('rayneo-remote-command', onRemoteCommand)
+    return () => {
+      document.removeEventListener('focusin', onFocusIn)
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('rayneo-remote-command', onRemoteCommand)
+      clearSpatialFocus()
+    }
+  }, [])
+
+  useEffect(() => {
     if (page === 'player') return
     const timer = window.setTimeout(() => {
       const target = document.querySelector<HTMLElement>('[data-autofocus="true"]') ?? visibleFocusables()[0]
-      target?.focus({ preventScroll: true })
+      focusSpatialElement(target)
     }, 180)
     return () => window.clearTimeout(timer)
-  }, [page])
+  }, [jellyfin.status, page])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
