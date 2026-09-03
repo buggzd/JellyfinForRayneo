@@ -8,12 +8,12 @@ namespace JellyfinForRayNeo
 {
     public sealed class PosterCardView : MonoBehaviour
     {
-        public const float PosterWidth = 208f;
-        public const float PosterArtworkHeight = 312f;
-        public const float PosterHeight = 380f;
-        public const float LandscapeWidth = 342f;
-        public const float LandscapeArtworkHeight = 192.375f;
-        public const float LandscapeHeight = 260f;
+        public const float PosterWidth = 242f;
+        public const float PosterArtworkHeight = 363f;
+        public const float PosterHeight = 435f;
+        public const float LandscapeWidth = 390f;
+        public const float LandscapeArtworkHeight = 219.375f;
+        public const float LandscapeHeight = 296f;
 
         private Image _artwork;
         private AspectRatioFitter _artworkAspect;
@@ -23,6 +23,7 @@ namespace JellyfinForRayNeo
         private Text _title;
         private Text _subtitle;
         private Text _centerLabel;
+        private Text _artIndex;
         private GameObject _typeBadge;
         private Text _typeBadgeLabel;
         private GameObject _statusBadge;
@@ -54,15 +55,15 @@ namespace JellyfinForRayNeo
             Image shadow = UiFactory.CreateRoundedPanel(
                 "Artwork Shadow",
                 rootRect,
-                new Color(0f, 0f, 0f, landscape ? 0.42f : 0.50f));
+                new Color(0f, 0.01f, 0.02f, landscape ? 0.50f : 0.58f));
             shadow.raycastTarget = false;
             UiFactory.SetRect(
                 shadow.rectTransform,
                 new Vector2(0f, 1f),
                 new Vector2(1f, 1f),
                 new Vector2(0.5f, 1f),
-                new Vector2(0f, -10f),
-                new Vector2(10f, artworkHeight + 6f));
+                new Vector2(0f, -12f),
+                new Vector2(18f, artworkHeight + 12f));
 
             Image focusRing = UiFactory.CreateRoundedPanel(
                 "Focus Ring",
@@ -75,12 +76,12 @@ namespace JellyfinForRayNeo
                 new Vector2(1f, 1f),
                 new Vector2(0.5f, 1f),
                 Vector2.zero,
-                new Vector2(10f, artworkHeight + 10f));
+                new Vector2(12f, artworkHeight + 12f));
 
             Image artworkFrame = UiFactory.CreateRoundedPanel(
                 "Artwork Frame",
                 rootRect,
-                new Color(0.09f, 0.095f, 0.12f, 1f));
+                new Color(0.018f, 0.055f, 0.078f, 1f));
             UiFactory.SetRect(
                 artworkFrame.rectTransform,
                 new Vector2(0f, 1f),
@@ -90,6 +91,10 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, artworkHeight));
             Mask artworkMask = artworkFrame.gameObject.AddComponent<Mask>();
             artworkMask.showMaskGraphic = true;
+            Outline artworkOutline = artworkFrame.gameObject.AddComponent<Outline>();
+            artworkOutline.effectColor = new Color(0.79f, 0.94f, 0.98f, 0.13f);
+            artworkOutline.effectDistance = new Vector2(1f, -1f);
+            artworkOutline.useGraphicAlpha = true;
 
             Image artwork = UiFactory.CreatePanel("Artwork", artworkFrame.transform, Color.white);
             artwork.raycastTarget = false;
@@ -106,8 +111,8 @@ namespace JellyfinForRayNeo
             artworkAspect.aspectRatio = landscape ? 16f / 9f : 2f / 3f;
 
             UiGradient frameGradient = artworkFrame.gameObject.AddComponent<UiGradient>();
-            frameGradient.StartColor = new Color(0.038f, 0.070f, 0.082f, 1f);
-            frameGradient.EndColor = new Color(0.075f, 0.048f, 0.100f, 1f);
+            frameGradient.StartColor = new Color(0.025f, 0.098f, 0.125f, 1f);
+            frameGradient.EndColor = new Color(0.055f, 0.049f, 0.128f, 1f);
             frameGradient.Horizontal = true;
 
             RectTransform placeholderLayer = UiFactory.CreateRect(
@@ -118,7 +123,7 @@ namespace JellyfinForRayNeo
             Image placeholderGlow = UiFactory.CreateGlowPanel(
                 "Artwork Placeholder Glow",
                 placeholderLayer,
-                new Color(0.28f, 0.92f, 0.84f, landscape ? 0.11f : 0.09f));
+                new Color(0.34f, 0.88f, 1f, landscape ? 0.15f : 0.12f));
             UiFactory.SetRect(
                 placeholderGlow.rectTransform,
                 new Vector2(0.5f, 0.5f),
@@ -132,7 +137,7 @@ namespace JellyfinForRayNeo
             Image placeholderShimmer = UiFactory.CreatePanel(
                 "Artwork Placeholder Shimmer",
                 placeholderLayer,
-                new Color(0.72f, 1f, 0.97f, 0.075f));
+                new Color(0.78f, 0.97f, 1f, 0.075f));
             placeholderShimmer.raycastTarget = false;
             UiFactory.SetRect(
                 placeholderShimmer.rectTransform,
@@ -148,7 +153,7 @@ namespace JellyfinForRayNeo
             Image placeholderMark = UiFactory.CreateRoundedPanel(
                 "Artwork Placeholder Mark",
                 placeholderLayer,
-                new Color(0.48f, 0.96f, 0.89f, 0.72f));
+                new Color(0.62f, 0.93f, 1f, 0.72f));
             placeholderMark.raycastTarget = false;
             UiFactory.SetRect(
                 placeholderMark.rectTransform,
@@ -163,7 +168,7 @@ namespace JellyfinForRayNeo
                 placeholderLayer,
                 string.Empty,
                 landscape ? 27 : 24,
-                new Color(0.90f, 1f, 0.98f, 0.76f),
+                new Color(0.90f, 0.98f, 1f, 0.76f),
                 TextAnchor.MiddleCenter,
                 FontStyle.Bold);
             UiFactory.SetRect(
@@ -179,7 +184,7 @@ namespace JellyfinForRayNeo
                 placeholderLayer,
                 "正在载入",
                 14,
-                new Color(0.72f, 0.79f, 0.84f, 0.68f),
+                UiTheme.TextMuted,
                 TextAnchor.MiddleCenter,
                 FontStyle.Bold);
             UiFactory.SetRect(
@@ -202,18 +207,34 @@ namespace JellyfinForRayNeo
             Image artworkShade = UiFactory.CreateGradientPanel(
                 "Artwork Shade",
                 artworkFrame.transform,
-                new Color(0.012f, 0.014f, 0.022f, landscape ? 0.54f : 0.20f),
-                new Color(0.012f, 0.014f, 0.022f, 0f));
+                new Color(0.002f, 0.014f, 0.024f, landscape ? 0.74f : 0.36f),
+                new Color(0.002f, 0.014f, 0.024f, 0.015f));
             UiFactory.Stretch(artworkShade.rectTransform);
+
+            Text artIndex = UiFactory.CreateText(
+                "Artwork Index",
+                artworkFrame.transform,
+                "L/00",
+                11,
+                UiTheme.TextMuted,
+                TextAnchor.MiddleLeft,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                artIndex.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(14f, -12f),
+                new Vector2(74f, 24f));
 
             Text centerLabel = UiFactory.CreateText(
                 "Library Title Overlay",
                 artworkFrame.transform,
                 string.Empty,
-                landscape ? 34 : 26,
+                landscape ? 30 : 24,
                 Color.white,
                 TextAnchor.MiddleCenter,
-                FontStyle.Bold);
+                FontStyle.Normal);
             centerLabel.resizeTextForBestFit = true;
             centerLabel.resizeTextMinSize = 22;
             centerLabel.resizeTextMaxSize = landscape ? 36 : 28;
@@ -226,7 +247,7 @@ namespace JellyfinForRayNeo
             Image typeBadge = UiFactory.CreateRoundedPanel(
                 "Type Badge",
                 artworkFrame.transform,
-                new Color(0.025f, 0.03f, 0.05f, 0.84f));
+                new Color(0.005f, 0.027f, 0.043f, 0.68f));
             typeBadge.raycastTarget = false;
             UiFactory.SetRect(
                 typeBadge.rectTransform,
@@ -249,7 +270,7 @@ namespace JellyfinForRayNeo
             Image statusBadge = UiFactory.CreateRoundedPanel(
                 "Status Badge",
                 artworkFrame.transform,
-                new Color(0.03f, 0.035f, 0.055f, 0.90f));
+                new Color(0.005f, 0.027f, 0.043f, 0.72f));
             statusBadge.raycastTarget = false;
             UiFactory.SetRect(
                 statusBadge.rectTransform,
@@ -297,13 +318,13 @@ namespace JellyfinForRayNeo
                 "Title",
                 rootRect,
                 string.Empty,
-                landscape ? 23 : 22,
+                landscape ? 22 : 21,
                 UiTheme.TextPrimary,
                 TextAnchor.UpperLeft,
-                FontStyle.Bold);
+                FontStyle.Normal);
             title.resizeTextForBestFit = true;
-            title.resizeTextMinSize = landscape ? 18 : 17;
-            title.resizeTextMaxSize = landscape ? 23 : 22;
+            title.resizeTextMinSize = landscape ? 17 : 16;
+            title.resizeTextMaxSize = landscape ? 22 : 21;
             UiFactory.SetRect(
                 title.rectTransform,
                 new Vector2(0f, 1f),
@@ -316,8 +337,8 @@ namespace JellyfinForRayNeo
                 "Subtitle",
                 rootRect,
                 string.Empty,
-                17,
-                UiTheme.TextSecondary,
+                15,
+                UiTheme.TextMuted,
                 TextAnchor.UpperLeft);
             UiFactory.SetRect(
                 subtitle.rectTransform,
@@ -335,13 +356,13 @@ namespace JellyfinForRayNeo
             button.navigation = navigation;
 
             FocusScale focus = rootRect.gameObject.AddComponent<FocusScale>();
-            focus.FocusedScale = landscape ? 1.055f : 1.07f;
-            focus.AnimationSpeed = 15f;
-            focus.LocalDepthOffset = -22f;
+            focus.FocusedScale = landscape ? 1.045f : 1.055f;
+            focus.AnimationSpeed = 12f;
+            focus.LocalDepthOffset = -20f;
             focus.ConfigureFocusGraphic(focusRing, UiTheme.Focus);
             focus.ConfigureShadowGraphic(
                 shadow,
-                new Color(UiTheme.Accent.r, UiTheme.Accent.g, UiTheme.Accent.b, 0.34f));
+                new Color(UiTheme.Accent.r, UiTheme.Accent.g, UiTheme.Accent.b, 0.42f));
 
             PosterCardView view = rootRect.gameObject.AddComponent<PosterCardView>();
             view._artwork = artwork;
@@ -352,6 +373,7 @@ namespace JellyfinForRayNeo
             view._title = title;
             view._subtitle = subtitle;
             view._centerLabel = centerLabel;
+            view._artIndex = artIndex;
             view._typeBadge = typeBadge.gameObject;
             view._typeBadgeLabel = typeBadgeLabel;
             view._statusBadge = statusBadge.gameObject;
@@ -387,6 +409,7 @@ namespace JellyfinForRayNeo
             _title.text = BuildTitle(item);
             _subtitle.text = BuildSubtitle(item);
             _centerLabel.text = item != null ? item.Name : string.Empty;
+            _artIndex.text = ArtworkIndex(item);
             _centerLabel.gameObject.SetActive(libraryCard && item != null);
             BindBadges(item, libraryCard);
             _artwork.sprite = null;
@@ -641,6 +664,25 @@ namespace JellyfinForRayNeo
                 _artworkAspect.aspectRatio = sprite.rect.width / sprite.rect.height;
             }
             _placeholderMotion.Complete(0.30f);
+        }
+
+        private static string ArtworkIndex(JellyfinItem item)
+        {
+            string source = item != null
+                ? item.Id ?? item.Name ?? item.Type
+                : null;
+            if (string.IsNullOrWhiteSpace(source))
+            {
+                return "L/00";
+            }
+
+            int checksum = 17;
+            foreach (char value in source)
+            {
+                checksum = unchecked(checksum * 31 + value);
+            }
+            int index = (int)(Math.Abs((long)checksum) % 99L) + 1;
+            return "L/" + index.ToString("00");
         }
 
         private static string PlaceholderLabel(JellyfinItem item)

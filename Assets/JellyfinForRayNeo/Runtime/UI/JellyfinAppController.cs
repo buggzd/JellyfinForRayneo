@@ -182,6 +182,9 @@ namespace JellyfinForRayNeo
         private void WireEvents()
         {
             _homeView.ItemSelected += OpenItem;
+            _homeView.PlayRequested += (item, position) =>
+                PlayAsync(item, position).Forget(HandleFatalError);
+            _homeView.LibraryRequested += OpenLibrary;
             _homeView.SearchRequested += OpenSearch;
             _homeView.FavoritesRequested += OpenFavorites;
             _homeView.RefreshRequested += () => RefreshHomeAsync().Forget(HandleFatalError);
@@ -304,7 +307,7 @@ namespace JellyfinForRayNeo
                     _homeView.FocusRoot,
                     "Hero Action",
                     "Poster Card",
-                    "Home Search");
+                    "Navigation Search");
             }
         }
 
@@ -374,6 +377,16 @@ namespace JellyfinForRayNeo
                 historyMode).Forget(HandleFatalError);
         }
 
+        private void OpenLibrary()
+        {
+            BrowseHistoryMode historyMode = _browseView != null && _browseView.IsVisible
+                ? BrowseHistoryMode.Push
+                : BrowseHistoryMode.Reset;
+            ShowBrowseAsync(
+                JellyfinBrowseState.ForAllMedia(),
+                historyMode).Forget(HandleFatalError);
+        }
+
         private void OpenFavorites()
         {
             BrowseHistoryMode historyMode = _browseView != null && _browseView.IsVisible
@@ -406,7 +419,7 @@ namespace JellyfinForRayNeo
             _detailView?.Hide();
             _homeView?.Show(true);
             _detailReturnsToBrowse = false;
-            SelectInScope(_homeView.FocusRoot, "Hero Action", "Poster Card", "Home Search");
+            SelectInScope(_homeView.FocusRoot, "Hero Action", "Poster Card", "Navigation Search");
         }
 
         private async Task SelectSearchInitialAsync(string initial)
@@ -934,7 +947,7 @@ namespace JellyfinForRayNeo
             _browseHistory.Clear();
             _detailHistory.Clear();
             _detailReturnsToBrowse = false;
-            SelectInScope(_homeView.FocusRoot, "Hero Action", "Poster Card", "Refresh");
+            SelectInScope(_homeView.FocusRoot, "Hero Action", "Poster Card", "Navigation Refresh");
             _pendingServerUrl = session.ServerUrl;
             _pendingUserName = session.UserName;
             _companionBridge.PublishState(

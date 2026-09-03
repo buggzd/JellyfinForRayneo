@@ -9,12 +9,11 @@ namespace JellyfinForRayNeo
 {
     public sealed class HomeView
     {
-        private const float HeroHeight = 610f;
-        private const float ContentSideMargin = 48f;
+        private const float HeroHeight = 812f;
 
         private readonly GameObject _root;
         private readonly UiViewMotion _motion;
-        private readonly Text _serverLabel;
+        private readonly LucentSideNavigation _navigation;
         private readonly EmptyStateView _emptyState;
         private readonly ScrollRect _verticalScroll;
         private readonly RectTransform _content;
@@ -23,14 +22,22 @@ namespace JellyfinForRayNeo
 
         private Image _heroBackdrop;
         private AspectRatioFitter _heroAspect;
+        private Text _heroOriginal;
         private Text _heroTitle;
         private Text _heroMetadata;
         private Text _heroOverview;
+        private GameObject _heroProgress;
+        private Text _heroProgressLabel;
+        private Text _heroProgressValue;
+        private Image _heroProgressFill;
         private Button _heroAction;
+        private Text _heroActionLabel;
         private JellyfinItem _heroItem;
         private int _heroBindingVersion;
 
         public event Action<JellyfinItem> ItemSelected;
+        public event Action<JellyfinItem, long> PlayRequested;
+        public event Action LibraryRequested;
         public event Action SearchRequested;
         public event Action FavoritesRequested;
         public event Action RefreshRequested;
@@ -46,7 +53,7 @@ namespace JellyfinForRayNeo
             RectTransform rootRect = UiFactory.CreateRect("Home Screen", parent);
             UiFactory.Stretch(rootRect);
             _root = rootRect.gameObject;
-            _motion = UiFactory.AddViewMotion(_root, 24f, 0.99f);
+            _motion = UiFactory.AddViewMotion(_root, 18f, 0.995f);
             UiFactory.CreateAmbientBackdrop(rootRect);
 
             RectTransform viewport = UiFactory.CreateRect("Home Viewport", rootRect);
@@ -62,8 +69,8 @@ namespace JellyfinForRayNeo
             _content.sizeDelta = Vector2.zero;
 
             VerticalLayoutGroup verticalLayout = _content.gameObject.AddComponent<VerticalLayoutGroup>();
-            verticalLayout.padding = new RectOffset(0, 0, 0, 84);
-            verticalLayout.spacing = 26f;
+            verticalLayout.padding = new RectOffset(0, 0, 0, 108);
+            verticalLayout.spacing = 48f;
             verticalLayout.childAlignment = TextAnchor.UpperLeft;
             verticalLayout.childControlHeight = true;
             verticalLayout.childControlWidth = true;
@@ -89,185 +96,19 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, -34f),
                 new Vector2(1080f, 330f));
             _emptyState.SetContent(
-                "JELLYFIN  ·  LIBRARY",
+                "LUCENT  ·  JELLYFIN LIBRARY",
                 "媒体库还没有可展示的内容",
-                "检查媒体库权限或等待 Jellyfin 完成扫描，然后选择右上角“刷新”。",
+                "检查媒体库权限或等待 Jellyfin 完成扫描，然后从左侧导航刷新媒体库。",
                 UiTheme.AccentBright);
 
-            Image topScrim = UiFactory.CreateGradientPanel(
-                "Top Scrim",
+            _navigation = new LucentSideNavigation(
                 rootRect,
-                new Color(UiTheme.Background.r, UiTheme.Background.g, UiTheme.Background.b, 0f),
-                UiTheme.Background);
-            UiFactory.SetRect(
-                topScrim.rectTransform,
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(0.5f, 1f),
-                Vector2.zero,
-                new Vector2(0f, 154f));
-
-            Image headerShadow = UiFactory.CreateRoundedPanel(
-                "Header Shadow",
-                rootRect,
-                new Color(0f, 0f, 0f, 0.42f));
-            headerShadow.raycastTarget = false;
-            UiFactory.SetRect(
-                headerShadow.rectTransform,
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(0.5f, 1f),
-                new Vector2(0f, -36f),
-                new Vector2(-88f, 82f));
-
-            Image header = UiFactory.CreateRoundedPanel("Header", rootRect, UiTheme.SurfaceGlass);
-            UiFactory.SetRect(
-                header.rectTransform,
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(0.5f, 1f),
-                new Vector2(0f, -28f),
-                new Vector2(-96f, 78f));
-            Outline headerOutline = header.gameObject.AddComponent<Outline>();
-            headerOutline.effectColor = UiTheme.Border;
-            headerOutline.effectDistance = new Vector2(1f, -1f);
-            headerOutline.useGraphicAlpha = true;
-
-            Text brand = UiFactory.CreateText(
-                "Brand",
-                header.transform,
-                "JELLYFIN",
-                28,
-                UiTheme.TextPrimary,
-                TextAnchor.MiddleLeft,
-                FontStyle.Bold);
-            UiFactory.SetRect(
-                brand.rectTransform,
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                new Vector2(24f, 1f),
-                new Vector2(180f, 48f));
-
-            Text rayneo = UiFactory.CreateText(
-                "RayNeo",
-                header.transform,
-                "RAYNEO AIR",
-                15,
-                UiTheme.AccentBright,
-                TextAnchor.MiddleLeft,
-                FontStyle.Bold);
-            UiFactory.SetRect(
-                rayneo.rectTransform,
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                new Vector2(0f, 0.5f),
-                new Vector2(184f, 0f),
-                new Vector2(150f, 40f));
-
-            Image activeNavigation = UiFactory.CreateRoundedPanel(
-                "Active Navigation",
-                header.transform,
-                new Color(1f, 1f, 1f, 0.12f));
-            activeNavigation.raycastTarget = false;
-            UiFactory.SetRect(
-                activeNavigation.rectTransform,
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(-150f, 0f),
-                new Vector2(112f, 46f));
-            Text activeNavigationLabel = UiFactory.CreateText(
-                "Active Navigation Label",
-                activeNavigation.transform,
-                "首页",
-                20,
-                UiTheme.TextPrimary,
-                TextAnchor.MiddleCenter,
-                FontStyle.Bold);
-            UiFactory.Stretch(activeNavigationLabel.rectTransform, 12f, 12f, 4f, 4f);
-
-            Button favoritesButton = UiFactory.CreateButton(
-                "Home Favorites",
-                header.transform,
-                "收藏",
-                new Color(1f, 1f, 1f, 0.04f),
-                UiTheme.TextSecondary,
-                19);
-            UiFactory.SetRect(
-                favoritesButton.GetComponent<RectTransform>(),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                Vector2.zero,
-                new Vector2(112f, 46f));
-            favoritesButton.onClick.AddListener(() => FavoritesRequested?.Invoke());
-
-            Button searchButton = UiFactory.CreateButton(
-                "Home Search",
-                header.transform,
-                "搜索",
-                new Color(1f, 1f, 1f, 0.04f),
-                UiTheme.TextSecondary,
-                19);
-            UiFactory.SetRect(
-                searchButton.GetComponent<RectTransform>(),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f),
-                new Vector2(150f, 0f),
-                new Vector2(112f, 46f));
-            searchButton.onClick.AddListener(() => SearchRequested?.Invoke());
-
-            _serverLabel = UiFactory.CreateText(
-                "Server",
-                header.transform,
-                string.Empty,
-                18,
-                UiTheme.TextSecondary,
-                TextAnchor.MiddleRight);
-            _serverLabel.resizeTextForBestFit = true;
-            _serverLabel.resizeTextMinSize = 14;
-            _serverLabel.resizeTextMaxSize = 18;
-            UiFactory.SetRect(
-                _serverLabel.rectTransform,
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(-220f, 0f),
-                new Vector2(380f, 48f));
-
-            Button refreshButton = UiFactory.CreateButton(
-                "Refresh",
-                header.transform,
-                "刷新",
-                UiTheme.SurfaceSoft,
-                UiTheme.TextPrimary,
-                18);
-            UiFactory.SetRect(
-                refreshButton.GetComponent<RectTransform>(),
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(-108f, 0f),
-                new Vector2(84f, 46f));
-            refreshButton.onClick.AddListener(() => RefreshRequested?.Invoke());
-
-            Button logoutButton = UiFactory.CreateButton(
-                "Logout",
-                header.transform,
-                "退出",
-                new Color(0.26f, 0.11f, 0.16f, 0.86f),
-                UiTheme.TextPrimary,
-                18);
-            UiFactory.SetRect(
-                logoutButton.GetComponent<RectTransform>(),
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(1f, 0.5f),
-                new Vector2(-16f, 0f),
-                new Vector2(80f, 46f));
-            logoutButton.onClick.AddListener(() => LogoutRequested?.Invoke());
+                LucentSideNavigation.Section.Home);
+            _navigation.LibraryRequested += () => LibraryRequested?.Invoke();
+            _navigation.SearchRequested += () => SearchRequested?.Invoke();
+            _navigation.FavoritesRequested += () => FavoritesRequested?.Invoke();
+            _navigation.RefreshRequested += () => RefreshRequested?.Invoke();
+            _navigation.LogoutRequested += () => LogoutRequested?.Invoke();
             _motion.SetVisibleImmediately(false);
         }
 
@@ -286,15 +127,7 @@ namespace JellyfinForRayNeo
 
         public void SetHeader(JellyfinSession session)
         {
-            if (session == null)
-            {
-                _serverLabel.text = string.Empty;
-                return;
-            }
-
-            string server = string.IsNullOrWhiteSpace(session.ServerName) ? "Jellyfin" : session.ServerName;
-            string user = string.IsNullOrWhiteSpace(session.UserName) ? string.Empty : "  ·  " + session.UserName;
-            _serverLabel.text = server + user;
+            _navigation.SetIdentity(session);
         }
 
         public void SetSections(IList<JellyfinHomeSection> sections, CancellationToken cancellationToken)
@@ -348,20 +181,13 @@ namespace JellyfinForRayNeo
             heroLayout.preferredHeight = HeroHeight;
             heroLayout.flexibleHeight = 0f;
 
-            Image heroShadow = UiFactory.CreateRoundedPanel(
-                "Hero Shadow",
-                hero,
-                new Color(0f, 0f, 0f, 0.58f));
-            heroShadow.raycastTarget = false;
-            UiFactory.Stretch(heroShadow.rectTransform, ContentSideMargin - 5f, ContentSideMargin - 5f, 6f, -8f);
-
-            Image heroFrame = UiFactory.CreateRoundedPanel(
+            hero.gameObject.AddComponent<RectMask2D>();
+            Image heroFrame = UiFactory.CreatePanel(
                 "Hero Frame",
                 hero,
-                new Color(0.055f, 0.06f, 0.08f, 1f));
-            UiFactory.Stretch(heroFrame.rectTransform, ContentSideMargin, ContentSideMargin, 0f, 0f);
-            Mask heroMask = heroFrame.gameObject.AddComponent<Mask>();
-            heroMask.showMaskGraphic = true;
+                new Color(0.003f, 0.014f, 0.026f, 0.98f));
+            heroFrame.raycastTarget = false;
+            UiFactory.Stretch(heroFrame.rectTransform);
 
             _heroBackdrop = UiFactory.CreatePanel("Hero Backdrop", heroFrame.transform, Color.clear);
             _heroBackdrop.raycastTarget = false;
@@ -372,120 +198,296 @@ namespace JellyfinForRayNeo
                 new Vector2(0.5f, 0.5f),
                 new Vector2(0.5f, 0.5f),
                 Vector2.zero,
-                new Vector2(1824f, HeroHeight));
+                new Vector2(1920f, 1080f));
             _heroAspect = _heroBackdrop.gameObject.AddComponent<AspectRatioFitter>();
             _heroAspect.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
             _heroAspect.aspectRatio = 16f / 9f;
+            UiHeroBreath heroBreath = _heroBackdrop.gameObject.AddComponent<UiHeroBreath>();
+            heroBreath.ScaleAmplitude = 0.016f;
+            heroBreath.CycleSeconds = 24f;
 
             Image horizontalShade = UiFactory.CreateGradientPanel(
                 "Hero Horizontal Shade",
                 heroFrame.transform,
-                new Color(0.012f, 0.014f, 0.024f, 0.93f),
-                new Color(0.012f, 0.014f, 0.024f, 0.06f),
+                new Color(0.002f, 0.014f, 0.025f, 0.99f),
+                new Color(0.002f, 0.014f, 0.025f, 0.03f),
                 true);
             UiFactory.Stretch(horizontalShade.rectTransform);
 
             Image verticalShade = UiFactory.CreateGradientPanel(
                 "Hero Vertical Shade",
                 heroFrame.transform,
-                new Color(0.012f, 0.014f, 0.024f, 0.92f),
-                new Color(0.012f, 0.014f, 0.024f, 0.02f));
+                new Color(0.002f, 0.014f, 0.025f, 0.96f),
+                new Color(0.002f, 0.014f, 0.025f, 0.10f));
             UiFactory.Stretch(verticalShade.rectTransform);
 
-            Image badge = UiFactory.CreateRoundedPanel(
-                "Featured Badge",
+            Image horizonGlow = UiFactory.CreateGlowPanel(
+                "Hero Horizon Glow",
                 heroFrame.transform,
-                new Color(1f, 1f, 1f, 0.13f));
-            badge.raycastTarget = false;
+                new Color(UiTheme.Accent.r, UiTheme.Accent.g, UiTheme.Accent.b, 0.075f));
             UiFactory.SetRect(
-                badge.rectTransform,
+                horizonGlow.rectTransform,
+                new Vector2(0f, 0.5f),
+                new Vector2(0f, 0.5f),
+                new Vector2(0.5f, 0.5f),
+                new Vector2(430f, 28f),
+                new Vector2(920f, 610f));
+
+            UiFactory.CreateFilmGrain(heroFrame.transform, 0.026f);
+
+            Text eyebrow = UiFactory.CreateText(
+                "Hero Eyebrow",
+                heroFrame.transform,
+                "LUCENT  ·  本周推荐",
+                16,
+                UiTheme.AccentBright,
+                TextAnchor.MiddleLeft,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                eyebrow.rectTransform,
                 new Vector2(0f, 0f),
                 new Vector2(0f, 0f),
                 new Vector2(0f, 0f),
-                new Vector2(52f, 304f),
-                new Vector2(126f, 38f));
-            Text badgeLabel = UiFactory.CreateText(
-                "Featured Badge Label",
-                badge.transform,
-                "为你推荐",
-                17,
-                UiTheme.TextPrimary,
-                TextAnchor.MiddleCenter,
-                FontStyle.Bold);
-            UiFactory.Stretch(badgeLabel.rectTransform, 10f, 10f, 2f, 2f);
+                new Vector2(UiTheme.ContentLeft, 676f),
+                new Vector2(620f, 32f));
+
+            _heroOriginal = UiFactory.CreateText(
+                "Hero Original Title",
+                heroFrame.transform,
+                string.Empty,
+                15,
+                UiTheme.TextMuted,
+                TextAnchor.MiddleLeft,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                _heroOriginal.rectTransform,
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(UiTheme.ContentLeft, 626f),
+                new Vector2(850f, 30f));
 
             _heroTitle = UiFactory.CreateText(
                 "Hero Title",
                 heroFrame.transform,
                 string.Empty,
-                54,
+                92,
                 UiTheme.TextPrimary,
                 TextAnchor.LowerLeft,
-                FontStyle.Bold);
+                FontStyle.Normal);
             _heroTitle.resizeTextForBestFit = true;
-            _heroTitle.resizeTextMinSize = 36;
-            _heroTitle.resizeTextMaxSize = 54;
+            _heroTitle.resizeTextMinSize = 48;
+            _heroTitle.resizeTextMaxSize = 92;
             UiFactory.SetRect(
                 _heroTitle.rectTransform,
                 new Vector2(0f, 0f),
                 new Vector2(0f, 0f),
                 new Vector2(0f, 0f),
-                new Vector2(52f, 218f),
-                new Vector2(780f, 82f));
+                new Vector2(UiTheme.ContentLeft - 4f, 504f),
+                new Vector2(940f, 118f));
 
             _heroMetadata = UiFactory.CreateText(
                 "Hero Metadata",
                 heroFrame.transform,
                 string.Empty,
-                20,
-                new Color(0.92f, 0.93f, 0.97f, 0.92f),
+                18,
+                new Color(0.88f, 0.95f, 0.98f, 0.72f),
                 TextAnchor.MiddleLeft,
-                FontStyle.Bold);
+                FontStyle.Normal);
             UiFactory.SetRect(
                 _heroMetadata.rectTransform,
                 new Vector2(0f, 0f),
                 new Vector2(0f, 0f),
                 new Vector2(0f, 0f),
-                new Vector2(54f, 176f),
-                new Vector2(820f, 34f));
+                new Vector2(UiTheme.ContentLeft, 455f),
+                new Vector2(840f, 32f));
 
             _heroOverview = UiFactory.CreateText(
                 "Hero Overview",
                 heroFrame.transform,
                 string.Empty,
-                20,
-                new Color(0.90f, 0.91f, 0.95f, 0.90f),
+                18,
+                new Color(0.84f, 0.91f, 0.94f, 0.58f),
                 TextAnchor.UpperLeft);
-            _heroOverview.lineSpacing = 1.12f;
+            _heroOverview.lineSpacing = 1.28f;
             UiFactory.SetRect(
                 _heroOverview.rectTransform,
                 new Vector2(0f, 0f),
                 new Vector2(0f, 0f),
                 new Vector2(0f, 0f),
-                new Vector2(54f, 98f),
-                new Vector2(760f, 70f));
+                new Vector2(UiTheme.ContentLeft, 358f),
+                new Vector2(740f, 76f));
+
+            RectTransform progress = UiFactory.CreateRect("Hero Progress", heroFrame.transform);
+            UiFactory.SetRect(
+                progress,
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(UiTheme.ContentLeft, 276f),
+                new Vector2(590f, 60f));
+            _heroProgress = progress.gameObject;
+            _heroProgressLabel = UiFactory.CreateText(
+                "Hero Progress Label",
+                progress,
+                string.Empty,
+                14,
+                UiTheme.TextSecondary,
+                TextAnchor.UpperLeft,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                _heroProgressLabel.rectTransform,
+                new Vector2(0f, 0.5f),
+                new Vector2(0.82f, 1f),
+                new Vector2(0f, 0.5f),
+                Vector2.zero,
+                Vector2.zero);
+            _heroProgressValue = UiFactory.CreateText(
+                "Hero Progress Value",
+                progress,
+                string.Empty,
+                14,
+                UiTheme.TextSecondary,
+                TextAnchor.UpperRight,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                _heroProgressValue.rectTransform,
+                new Vector2(0.82f, 0.5f),
+                new Vector2(1f, 1f),
+                new Vector2(1f, 0.5f),
+                Vector2.zero,
+                Vector2.zero);
+            Image progressTrack = UiFactory.CreateRoundedPanel(
+                "Hero Progress Track",
+                progress,
+                UiTheme.ProgressTrack);
+            progressTrack.raycastTarget = false;
+            UiFactory.SetRect(
+                progressTrack.rectTransform,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 7f),
+                new Vector2(0f, 4f));
+            _heroProgressFill = UiFactory.CreateRoundedPanel(
+                "Hero Progress Fill",
+                progressTrack.transform,
+                UiTheme.Focus);
+            _heroProgressFill.raycastTarget = false;
+            _heroProgressFill.rectTransform.anchorMin = Vector2.zero;
+            _heroProgressFill.rectTransform.anchorMax = new Vector2(0f, 1f);
+            _heroProgressFill.rectTransform.pivot = new Vector2(0f, 0.5f);
+            _heroProgressFill.rectTransform.anchoredPosition = Vector2.zero;
+            _heroProgressFill.rectTransform.sizeDelta = Vector2.zero;
 
             _heroAction = UiFactory.CreateButton(
                 "Hero Action",
                 heroFrame.transform,
-                "查看详情",
-                new Color(0.98f, 0.985f, 1f, 0.96f),
-                new Color(0.055f, 0.06f, 0.085f, 1f),
-                21);
+                "立即观看",
+                new Color(0.91f, 0.985f, 1f, 0.94f),
+                new Color(0.015f, 0.055f, 0.074f, 1f),
+                20);
             UiFactory.SetRect(
                 _heroAction.GetComponent<RectTransform>(),
                 new Vector2(0f, 0f),
                 new Vector2(0f, 0f),
                 new Vector2(0f, 0f),
-                new Vector2(52f, 30f),
-                new Vector2(178f, 58f));
-            _heroAction.onClick.AddListener(() => ItemSelected?.Invoke(_heroItem));
+                new Vector2(UiTheme.ContentLeft, 186f),
+                new Vector2(184f, 58f));
+            _heroActionLabel = _heroAction.transform.Find("Label").GetComponent<Text>();
+            _heroAction.onClick.AddListener(() => PlayRequested?.Invoke(
+                _heroItem,
+                _heroItem != null && _heroItem.UserData != null
+                    ? Math.Max(0L, _heroItem.UserData.PlaybackPositionTicks)
+                    : 0L));
             FocusScale heroFocus = _heroAction.GetComponent<FocusScale>();
             if (heroFocus != null)
             {
                 heroFocus.FocusedScale = 1.06f;
                 heroFocus.ConfigureScrollRects(null, _verticalScroll);
             }
+
+            Button detailAction = UiFactory.CreateButton(
+                "Hero Details",
+                heroFrame.transform,
+                "查看详情",
+                new Color(0.30f, 0.53f, 0.63f, 0.17f),
+                UiTheme.TextPrimary,
+                19);
+            UiFactory.SetRect(
+                detailAction.GetComponent<RectTransform>(),
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(UiTheme.ContentLeft + 202f, 186f),
+                new Vector2(188f, 58f));
+            detailAction.onClick.AddListener(() => ItemSelected?.Invoke(_heroItem));
+            FocusScale detailFocus = detailAction.GetComponent<FocusScale>();
+            if (detailFocus != null)
+            {
+                detailFocus.FocusedScale = 1.045f;
+                detailFocus.ConfigureScrollRects(null, _verticalScroll);
+            }
+
+            Text edition = UiFactory.CreateText(
+                "Hero Edition",
+                heroFrame.transform,
+                "ORIGINAL SERIES\n01  /  SEASON",
+                25,
+                new Color(0.84f, 0.94f, 0.97f, 0.22f),
+                TextAnchor.LowerRight,
+                FontStyle.Normal);
+            edition.lineSpacing = 0.72f;
+            UiFactory.SetRect(
+                edition.rectTransform,
+                new Vector2(1f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(-UiTheme.ContentRight, 128f),
+                new Vector2(310f, 90f));
+
+            Image scrollLine = UiFactory.CreatePanel(
+                "Hero Scroll Cue Line",
+                heroFrame.transform,
+                new Color(UiTheme.Focus.r, UiTheme.Focus.g, UiTheme.Focus.b, 0.20f));
+            scrollLine.raycastTarget = false;
+            UiFactory.SetRect(
+                scrollLine.rectTransform,
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(-42f, 38f),
+                new Vector2(2f, 34f));
+            Text scrollCue = UiFactory.CreateText(
+                "Hero Scroll Cue",
+                heroFrame.transform,
+                "向下探索",
+                12,
+                UiTheme.TextMuted,
+                TextAnchor.MiddleLeft,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                scrollCue.rectTransform,
+                new Vector2(0.5f, 0f),
+                new Vector2(0.5f, 0f),
+                new Vector2(0f, 0f),
+                new Vector2(-30f, 32f),
+                new Vector2(110f, 40f));
+
+            Image bottomMerge = UiFactory.CreateGradientPanel(
+                "Hero Bottom Merge",
+                heroFrame.transform,
+                UiTheme.Background,
+                new Color(UiTheme.Background.r, UiTheme.Background.g, UiTheme.Background.b, 0f));
+            bottomMerge.raycastTarget = false;
+            UiFactory.SetRect(
+                bottomMerge.rectTransform,
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(0.5f, 0f),
+                Vector2.zero,
+                new Vector2(0f, 74f));
+            bottomMerge.transform.SetSiblingIndex(scrollLine.transform.GetSiblingIndex());
 
             UiFactory.AddItemReveal(hero.gameObject, 0f);
             BindHero(item, cancellationToken);
@@ -495,11 +497,29 @@ namespace JellyfinForRayNeo
         {
             _heroBindingVersion++;
             _heroItem = item;
+            _heroOriginal.text = item != null && !string.IsNullOrWhiteSpace(item.OriginalTitle)
+                ? item.OriginalTitle.ToUpperInvariant()
+                : "JELLYFIN  /  CURATED FOR RAYNEO";
             _heroTitle.text = item != null ? item.Name : string.Empty;
             _heroMetadata.text = BuildHeroMetadata(item);
             _heroOverview.text = item != null && !string.IsNullOrWhiteSpace(item.Overview)
                 ? Condense(item.Overview, 112)
                 : "从你的 Jellyfin 媒体库中精选，戴上眼镜即可进入沉浸观影。";
+
+            double watched = item != null && item.UserData != null
+                && item.UserData.PlayedPercentage.HasValue
+                    ? item.UserData.PlayedPercentage.Value
+                    : 0d;
+            bool resumable = watched > 0.1d && watched < 99.9d;
+            _heroProgress.SetActive(resumable);
+            _heroProgressFill.rectTransform.anchorMax = new Vector2(
+                resumable ? Mathf.Clamp01((float)watched / 100f) : 0f,
+                1f);
+            _heroProgressLabel.text = resumable
+                ? "上次看到  ·  " + (item.Name ?? "继续观看")
+                : string.Empty;
+            _heroProgressValue.text = resumable ? watched.ToString("0") + "%" : string.Empty;
+            _heroActionLabel.text = resumable ? "继续观看" : "立即观看";
             _heroBackdrop.sprite = null;
             _heroBackdrop.color = Color.clear;
 
@@ -574,30 +594,62 @@ namespace JellyfinForRayNeo
                 section.Key,
                 "my-media",
                 StringComparison.OrdinalIgnoreCase);
-            float shelfHeight = landscape ? 334f : 454f;
+            float shelfHeight = landscape ? 356f : 472f;
 
             RectTransform shelf = UiFactory.CreateRect("Shelf - " + section.Title, _content);
             LayoutElement shelfLayout = shelf.gameObject.AddComponent<LayoutElement>();
             shelfLayout.minHeight = shelfHeight;
             shelfLayout.preferredHeight = shelfHeight;
             shelfLayout.flexibleHeight = 0f;
-            UiFactory.AddItemReveal(shelf.gameObject, revealDelay);
+            UiFactory.AddScrollReveal(shelf.gameObject, _verticalScroll, revealDelay);
+
+            Text eyebrow = UiFactory.CreateText(
+                "Shelf Eyebrow",
+                shelf,
+                ShelfEyebrow(section.Key),
+                12,
+                UiTheme.TextMuted,
+                TextAnchor.MiddleLeft,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                eyebrow.rectTransform,
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(UiTheme.ContentLeft, -2f),
+                new Vector2(520f, 24f));
 
             Text title = UiFactory.CreateText(
                 "Shelf Title",
                 shelf,
                 section.Title,
-                29,
+                34,
                 UiTheme.TextPrimary,
                 TextAnchor.MiddleLeft,
-                FontStyle.Bold);
+                FontStyle.Normal);
             UiFactory.SetRect(
                 title.rectTransform,
                 new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(0f, 1f),
+                new Vector2(UiTheme.ContentLeft, -27f),
+                new Vector2(820f, 48f));
+
+            Text shelfCount = UiFactory.CreateText(
+                "Shelf Count",
+                shelf,
+                (section.Items != null ? section.Items.Count : 0) + " 项  ·  横向浏览",
+                13,
+                UiTheme.TextMuted,
+                TextAnchor.MiddleRight,
+                FontStyle.Normal);
+            UiFactory.SetRect(
+                shelfCount.rectTransform,
                 new Vector2(1f, 1f),
-                new Vector2(0.5f, 1f),
-                new Vector2(0f, -2f),
-                new Vector2(-ContentSideMargin * 2f, 48f));
+                new Vector2(1f, 1f),
+                new Vector2(1f, 1f),
+                new Vector2(-UiTheme.ContentRight, -29f),
+                new Vector2(320f, 42f));
 
             RectTransform viewport = UiFactory.CreateRect("Viewport", shelf);
             viewport.gameObject.AddComponent<RectMask2D>();
@@ -607,8 +659,8 @@ namespace JellyfinForRayNeo
                 new Vector2(0f, 0f),
                 new Vector2(1f, 1f),
                 new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -27f),
-                new Vector2(0f, -54f));
+                new Vector2(0f, -42f),
+                new Vector2(0f, -84f));
 
             RectTransform row = UiFactory.CreateRect("Cards", viewport);
             row.anchorMin = new Vector2(0f, 0f);
@@ -618,8 +670,12 @@ namespace JellyfinForRayNeo
             row.sizeDelta = Vector2.zero;
 
             HorizontalLayoutGroup layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = landscape ? 24f : 25f;
-            layout.padding = new RectOffset(58, 80, 10, 10);
+            layout.spacing = landscape ? 30f : 28f;
+            layout.padding = new RectOffset(
+                Mathf.RoundToInt(UiTheme.ContentLeft),
+                Mathf.RoundToInt(UiTheme.ContentRight),
+                24,
+                14);
             layout.childAlignment = TextAnchor.UpperLeft;
             layout.childControlHeight = false;
             layout.childControlWidth = false;
@@ -640,6 +696,7 @@ namespace JellyfinForRayNeo
             horizontalScroll.decelerationRate = 0.11f;
             horizontalScroll.ConfigureParent(_verticalScroll);
 
+            int cardIndex = 0;
             foreach (JellyfinItem item in section.Items)
             {
                 if (item == null)
@@ -658,7 +715,33 @@ namespace JellyfinForRayNeo
                     landscape ? 760 : 480,
                     libraryCards,
                     libraryCards);
+                UiFactory.AddItemReveal(
+                    card.gameObject,
+                    Mathf.Min(0.22f, cardIndex * 0.026f));
+                cardIndex++;
             }
+        }
+
+        private static string ShelfEyebrow(string key)
+        {
+            if (string.Equals(key, "my-media", StringComparison.OrdinalIgnoreCase))
+            {
+                return "YOUR JELLYFIN LIBRARIES";
+            }
+            if (string.Equals(key, "resume", StringComparison.OrdinalIgnoreCase))
+            {
+                return "PICK UP WHERE YOU LEFT OFF";
+            }
+            if (string.Equals(key, "next-up", StringComparison.OrdinalIgnoreCase))
+            {
+                return "NEXT IN YOUR SERIES";
+            }
+            if (!string.IsNullOrWhiteSpace(key)
+                && key.StartsWith("genre-", StringComparison.OrdinalIgnoreCase))
+            {
+                return "CURATED BY GENRE";
+            }
+            return "RECENTLY ADDED";
         }
 
         private static void AddTransparentDragSurface(RectTransform viewport)

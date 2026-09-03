@@ -83,6 +83,20 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [Test]
+        public void BrowseQuery_AllMediaNavigationUsesRecursiveCatalog()
+        {
+            JellyfinBrowseState state = JellyfinBrowseState.ForAllMedia();
+
+            JellyfinItemsQuery query = BrowseCatalogService.BuildQuery(state);
+
+            Assert.AreEqual("媒体库", state.Title);
+            Assert.IsTrue(query.Recursive);
+            Assert.IsNull(query.ParentId);
+            StringAssert.Contains("Movie", query.IncludeItemTypes);
+            Assert.AreEqual("SortName", query.SortBy);
+        }
+
+        [Test]
         public void BrowseQuery_UsesServerPagingSearchAndFavoriteFilter()
         {
             JellyfinBrowseState state = JellyfinBrowseState.ForSearch();

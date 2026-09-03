@@ -317,6 +317,106 @@ namespace JellyfinForRayNeo.Tests
         }
 
         [UnityTest]
+        public IEnumerator HomeView_UsesLucentHeroAndExpandableNavigation()
+        {
+            GameObject host = new GameObject("Lucent Home Test Host", typeof(RectTransform));
+            host.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
+            JellyfinSession session = new JellyfinSession
+            {
+                ServerUrl = "http://127.0.0.1:8096",
+                ServerName = "海面以下",
+                AccessToken = "lucent-home-token",
+                UserId = "lucent-home-user",
+                UserName = "泠",
+                DeviceId = "lucent-home-device"
+            };
+            JellyfinApiClient api = new JellyfinApiClient(session.DeviceId);
+            api.SetSession(session);
+            JellyfinImageCache imageCache = new JellyfinImageCache();
+            HomeView home = new HomeView(host.transform, api, imageCache);
+            JellyfinItem featured = new JellyfinItem
+            {
+                Id = "lucent-featured",
+                Name = "深海回声",
+                OriginalTitle = "Echoes Below",
+                Type = "Movie",
+                ProductionYear = 2026,
+                UserData = new JellyfinUserData
+                {
+                    PlayedPercentage = 38d,
+                    PlaybackPositionTicks = AppConstants.TicksPerSecond * 120L
+                }
+            };
+            JellyfinItem playedItem = null;
+            long playedPosition = -1L;
+            bool libraryRequested = false;
+            home.PlayRequested += (item, position) =>
+            {
+                playedItem = item;
+                playedPosition = position;
+            };
+            home.LibraryRequested += () => libraryRequested = true;
+            home.SetHeader(session);
+            home.SetSections(
+                new List<JellyfinHomeSection>
+                {
+                    new JellyfinHomeSection
+                    {
+                        Key = "resume",
+                        Title = "继续观看",
+                        Items = new List<JellyfinItem> { featured }
+                    }
+                },
+                CancellationToken.None);
+            home.Show(true);
+            yield return new WaitForSecondsRealtime(0.08f);
+            Canvas.ForceUpdateCanvases();
+
+            Transform navigation = FindDescendant(host.transform, "Lucent Side Navigation");
+            Transform homeButton = FindDescendant(navigation, "Navigation Home");
+            Transform searchButton = FindDescendant(navigation, "Navigation Search");
+            Transform profileName = FindDescendant(navigation, "Profile Copy Value");
+            Transform serverName = FindDescendant(navigation, "Server Copy Value");
+            Transform hero = FindDescendant(host.transform, "Featured Hero");
+            Transform grain = FindDescendant(hero, "Film Grain");
+            Transform progress = FindDescendant(hero, "Hero Progress");
+            Assert.NotNull(navigation);
+            Assert.NotNull(navigation.GetComponent<UiSideRailMotion>());
+            Assert.NotNull(homeButton);
+            Assert.Greater(
+                FindDescendant(homeButton, "Active Indicator").GetComponent<Image>().color.a,
+                0.5f);
+            Assert.AreEqual("泠", profileName.GetComponent<Text>().text);
+            Assert.AreEqual("海面以下", serverName.GetComponent<Text>().text);
+            Assert.NotNull(hero);
+            Assert.NotNull(grain);
+            Assert.NotNull(FindDescendant(hero, "Hero Backdrop").GetComponent<UiHeroBreath>());
+            Assert.IsTrue(progress.gameObject.activeInHierarchy);
+            Assert.AreEqual(
+                0.38f,
+                FindDescendant(progress, "Hero Progress Fill")
+                    .GetComponent<RectTransform>().anchorMax.x,
+                0.001f);
+
+            FindDescendant(hero, "Hero Action").GetComponent<Button>().onClick.Invoke();
+            Assert.AreSame(featured, playedItem);
+            Assert.AreEqual(featured.UserData.PlaybackPositionTicks, playedPosition);
+            FindDescendant(navigation, "Navigation Library").GetComponent<Button>().onClick.Invoke();
+            Assert.IsTrue(libraryRequested);
+
+            EventSystem.current.SetSelectedGameObject(searchButton.gameObject);
+            yield return new WaitForSecondsRealtime(0.24f);
+            Assert.IsTrue(navigation.GetComponent<UiSideRailMotion>().IsExpanded);
+            Assert.Greater(
+                navigation.GetComponent<RectTransform>().rect.width,
+                UiTheme.SideRailWidth + 80f);
+
+            imageCache.Dispose();
+            Object.Destroy(host);
+            yield return null;
+        }
+
+        [UnityTest]
         public IEnumerator EpisodeBrowser_PreservesLandscapeEpisodeCards()
         {
             GameObject host = new GameObject("Episode Layout Test Host", typeof(RectTransform));

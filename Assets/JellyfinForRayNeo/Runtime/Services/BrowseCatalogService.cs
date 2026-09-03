@@ -96,6 +96,18 @@ namespace JellyfinForRayNeo
             };
         }
 
+        public static JellyfinBrowseState ForAllMedia()
+        {
+            return new JellyfinBrowseState
+            {
+                Title = "媒体库",
+                Recursive = true,
+                PreferLandscape = false,
+                Sort = JellyfinBrowseSort.Name,
+                Filter = JellyfinBrowseFilter.All
+            };
+        }
+
         public static JellyfinBrowseState ForFavorites()
         {
             return new JellyfinBrowseState
