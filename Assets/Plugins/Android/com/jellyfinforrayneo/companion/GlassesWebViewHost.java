@@ -1,0 +1,387 @@
+package com.jellyfinforrayneo.companion;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Context;
+import android.content.pm.ApplicationInfo;
+import android.graphics.Color;
+import android.os.Build;
+import android.text.TextUtils;
+import android.view.Display;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+
+import com.unity3d.player.UnityPlayer;
+
+import org.json.JSONObject;
+
+final class GlassesWebViewHost {
+    private static final String GLASSES_UI_ROOT =
+            "file:///android_asset/GlassesUI/";
+    private static final String GLASSES_UI_URL = GLASSES_UI_ROOT + "index.html";
+    private static final long PRESENTATION_ATTACH_RETRY_MS = 160L;
+    private static final String UNITY_RECEIVER = "Jellyfin for RayNeo Application";
+
+    private final JellyfinRayNeoActivity activity;
+    private final UnityPlayer unityPlayer;
+    private final Runnable attachRunnable = new Runnable() {
+        @Override
+        public void run() {
+            attachToGlassesPresentation();
+        }
+    };
+
+    private ViewGroup webParent;
+    private WebView webView;
+    private volatile boolean requested;
+    private volatile boolean ready;
+
+    GlassesWebViewHost(
+            JellyfinRayNeoActivity activity,
+            UnityPlayer unityPlayer) {
+        this.activity = activity;
+        this.unityPlayer = unityPlayer;
+    }
+
+    boolean show() {
+        if (activity == null || unityPlayer == null || activity.isFinishing()) {
+            return false;
+        }
+        requested = true;
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                scheduleAttach(0L);
+            }
+        });
+        return true;
+    }
+
+    void hide() {
+        requested = false;
+        ready = false;
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                View decor = activity.getWindow() == null
+                        ? null
+                        : activity.getWindow().getDecorView();
+                if (decor != null) {
+                    decor.removeCallbacks(attachRunnable);
+                }
+                if (webView != null) {
+                    webView.setVisibility(View.GONE);
+                }
+            }
+        });
+    }
+
+    void destroy() {
+        requested = false;
+        ready = false;
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                View decor = activity.getWindow() == null
+                        ? null
+                        : activity.getWindow().getDecorView();
+                if (decor != null) {
+                    decor.removeCallbacks(attachRunnable);
+                }
+                destroyWebView();
+            }
+        });
+    }
+
+    void onPresentationChanged() {
+        if (!requested || activity.isFinishing()) {
+            return;
+        }
+        scheduleAttach(0L);
+    }
+
+    boolean dispatchCommand(final String command) {
+        if (!requested || !ready || webView == null || TextUtils.isEmpty(command)) {
+            return false;
+        }
+
+        final String quotedCommand = JSONObject.quote(command.trim().toLowerCase());
+        evaluateJavascript(
+                "(function(command){"
+                        + "window.dispatchEvent(new CustomEvent('rayneo-remote-command',"
+                        + "{detail:command}));"
+                        + "var keys={up:'ArrowUp',down:'ArrowDown',left:'ArrowLeft',"
+                        + "right:'ArrowRight',enter:'Enter',back:'Escape'};"
+                        + "var key=keys[command];"
+                        + "if(key){window.dispatchEvent(new KeyboardEvent('keydown',"
+                        + "{key:key,bubbles:true,cancelable:true}));}"
+                        + "})("
+                        + quotedCommand
+                        + ");");
+        return true;
+    }
+
+    void refreshBootstrapState() {
+        if (ready) {
+            pushBootstrapState();
+        }
+    }
+
+    private void scheduleAttach(long delayMs) {
+        if (!requested || activity.isFinishing() || activity.getWindow() == null) {
+            return;
+        }
+        View decor = activity.getWindow().getDecorView();
+        decor.removeCallbacks(attachRunnable);
+        decor.postDelayed(attachRunnable, Math.max(0L, delayMs));
+    }
+
+    private void attachToGlassesPresentation() {
+        if (!requested || activity.isFinishing()) {
+            return;
+        }
+
+        View unityView = unityPlayer.getView();
+        Display display = unityView == null ? null : unityView.getDisplay();
+        boolean externalDisplay = display != null
+                && display.isValid()
+                && display.getDisplayId() != Display.DEFAULT_DISPLAY
+                && display.getState() == Display.STATE_ON;
+        ViewParent parent = unityView == null ? null : unityView.getParent();
+        if (!externalDisplay || !(parent instanceof ViewGroup)) {
+            if (webParent != null) {
+                destroyWebView();
+            }
+            if (activity.isRayNeoDisplayConnected()) {
+                scheduleAttach(PRESENTATION_ATTACH_RETRY_MS);
+            }
+            return;
+        }
+
+        ViewGroup targetParent = (ViewGroup) parent;
+        if (webView == null || webParent != targetParent) {
+            destroyWebView();
+            createWebView(targetParent);
+        }
+
+        if (webView == null) {
+            scheduleAttach(PRESENTATION_ATTACH_RETRY_MS);
+            return;
+        }
+        webView.setVisibility(View.VISIBLE);
+        webView.bringToFront();
+        if (TextUtils.isEmpty(webView.getUrl())) {
+            webView.loadUrl(GLASSES_UI_URL);
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void createWebView(ViewGroup targetParent) {
+        Context context = targetParent.getContext();
+        WebView created = new WebView(context);
+        created.setBackgroundColor(Color.rgb(2, 7, 13));
+        created.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        created.setSaveEnabled(false);
+        created.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        created.setVerticalScrollBarEnabled(false);
+        created.setHorizontalScrollBarEnabled(false);
+        created.setFocusable(true);
+        created.setFocusableInTouchMode(true);
+
+        WebSettings settings = created.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(false);
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(true);
+        settings.setSupportMultipleWindows(false);
+        settings.setBuiltInZoomControls(false);
+        settings.setDisplayZoomControls(false);
+        settings.setLoadWithOverviewMode(true);
+        settings.setUseWideViewPort(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setTextZoom(100);
+        settings.setDefaultTextEncodingName("utf-8");
+        settings.setSaveFormData(false);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            created.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT
+                && (activity.getApplicationInfo().flags
+                        & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            WebView.setWebContentsDebuggingEnabled(true);
+        }
+
+        created.addJavascriptInterface(new GlassesJavascriptBridge(), "RayNeoGlasses");
+        created.setWebChromeClient(new WebChromeClient());
+        created.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(
+                    WebView view,
+                    WebResourceRequest request) {
+                return request == null
+                        || request.getUrl() == null
+                        || !isGlassesAssetUrl(request.getUrl().toString());
+            }
+
+            @SuppressWarnings("deprecation")
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return !isGlassesAssetUrl(url);
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                if (!isGlassesAssetUrl(url)) {
+                    return;
+                }
+                ready = true;
+                pushBootstrapState();
+            }
+
+            @Override
+            public void onReceivedError(
+                    WebView view,
+                    WebResourceRequest request,
+                    WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                if (request != null && request.isForMainFrame()) {
+                    ready = false;
+                    view.setVisibility(View.GONE);
+                }
+            }
+
+            @Override
+            public boolean onRenderProcessGone(
+                    WebView view,
+                    RenderProcessGoneDetail detail) {
+                ready = false;
+                destroyWebView();
+                if (requested) {
+                    scheduleAttach(PRESENTATION_ATTACH_RETRY_MS);
+                }
+                return true;
+            }
+        });
+
+        webParent = targetParent;
+        webView = created;
+        targetParent.addView(
+                created,
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT));
+        created.bringToFront();
+        created.loadUrl(GLASSES_UI_URL);
+    }
+
+    private boolean isGlassesAssetUrl(String url) {
+        return !TextUtils.isEmpty(url) && url.startsWith(GLASSES_UI_ROOT);
+    }
+
+    private void evaluateJavascript(final String script) {
+        if (TextUtils.isEmpty(script)) {
+            return;
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (requested && ready && webView != null) {
+                    webView.evaluateJavascript(script, null);
+                }
+            }
+        });
+    }
+
+    private void pushBootstrapState() {
+        final String payload = JSONObject.quote(buildBootstrapState().toString());
+        evaluateJavascript(
+                "window.LucentNative && window.LucentNative.receiveBootstrapState && "
+                        + "window.LucentNative.receiveBootstrapState("
+                        + payload
+                        + ");");
+    }
+
+    private JSONObject buildBootstrapState() {
+        JSONObject state = new JSONObject();
+        try {
+            state.put("source", "android");
+            state.put("displayMode", activity.getRayNeoDisplayMode());
+            state.put("glassesConnected", activity.isRayNeoDisplayConnected());
+            String session = activity.getPendingSessionJson();
+            if (TextUtils.isEmpty(session)) {
+                state.put("session", JSONObject.NULL);
+            } else {
+                try {
+                    state.put("session", new JSONObject(session));
+                } catch (Exception ignored) {
+                    state.put("session", JSONObject.NULL);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return state;
+    }
+
+    private void destroyWebView() {
+        ready = false;
+        WebView current = webView;
+        ViewGroup parent = webParent;
+        webView = null;
+        webParent = null;
+        if (current == null) {
+            return;
+        }
+        current.removeJavascriptInterface("RayNeoGlasses");
+        current.stopLoading();
+        if (parent != null) {
+            parent.removeView(current);
+        }
+        current.destroy();
+    }
+
+    private final class GlassesJavascriptBridge {
+        @JavascriptInterface
+        public String getBootstrapState() {
+            return buildBootstrapState().toString();
+        }
+
+        @JavascriptInterface
+        public void ready() {
+            activity.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    ready = true;
+                    pushBootstrapState();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void postMessage(String message) {
+            if (TextUtils.isEmpty(message)) {
+                return;
+            }
+            UnityPlayer.UnitySendMessage(
+                    UNITY_RECEIVER,
+                    "OnGlassesWebMessage",
+                    message);
+        }
+    }
+}

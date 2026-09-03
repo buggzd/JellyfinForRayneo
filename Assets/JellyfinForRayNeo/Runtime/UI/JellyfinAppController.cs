@@ -37,6 +37,7 @@ namespace JellyfinForRayNeo
         private PlaybackReporter _playbackReporter;
         private PlaybackCapabilities _playbackCapabilities;
         private CompanionLoginBridge _companionBridge;
+        private GlassesWebViewPresenter _glassesWebView;
         private DirectionalFocusNavigator _focusNavigator;
         private LoginView _loginView;
         private HomeView _homeView;
@@ -83,6 +84,13 @@ namespace JellyfinForRayNeo
                 gameObject.AddComponent<RayNeoEditorInputSimulator>();
             }
 #endif
+            _glassesWebView = GetComponent<GlassesWebViewPresenter>();
+            if (_glassesWebView == null)
+            {
+                _glassesWebView = gameObject.AddComponent<GlassesWebViewPresenter>();
+            }
+            _glassesWebView.Show();
+
             _lifetime = new CancellationTokenSource();
             _companionBridge = new CompanionLoginBridge();
             _companionBridge.LoginRequested += HandleCompanionLoginRequested;
@@ -222,6 +230,12 @@ namespace JellyfinForRayNeo
 
         private void HandleRemoteCommand(CompanionRemoteCommand command)
         {
+            if (_glassesWebView != null
+                && _glassesWebView.DispatchRemoteCommand(command))
+            {
+                return;
+            }
+
             if (command == CompanionRemoteCommand.Back)
             {
                 HandleRemoteBack();
@@ -239,6 +253,10 @@ namespace JellyfinForRayNeo
 
         private void HandleVolumeChanged(int percentage)
         {
+            if (_glassesWebView != null && _glassesWebView.DispatchVolume(percentage))
+            {
+                return;
+            }
             _volumeOverlay?.Show(percentage);
         }
 

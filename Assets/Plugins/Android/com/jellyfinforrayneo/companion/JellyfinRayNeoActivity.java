@@ -132,6 +132,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
 
     private FrameLayout companionOverlay;
     private WebView companionWebView;
+    private GlassesWebViewHost glassesWebViewHost;
     private boolean companionWebReady;
     private String lastPushedWebStateJson;
     private boolean webTouchpadActive;
@@ -236,6 +237,7 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         // forced through Android's software canvas.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
         super.onCreate(savedInstanceState);
+        glassesWebViewHost = new GlassesWebViewHost(this, mUnityPlayer);
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
@@ -304,6 +306,10 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
             }
             companionWebView.destroy();
             companionWebView = null;
+        }
+        if (glassesWebViewHost != null) {
+            glassesWebViewHost.destroy();
+            glassesWebViewHost = null;
         }
         dismissFallbackPresentation();
         super.onDestroy();
@@ -2319,6 +2325,27 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
         return getCompanionPreferences().getString(PREF_SESSION_JSON, "");
     }
 
+    public boolean showGlassesWebView() {
+        return glassesWebViewHost != null && glassesWebViewHost.show();
+    }
+
+    public void hideGlassesWebView() {
+        if (glassesWebViewHost != null) {
+            glassesWebViewHost.hide();
+        }
+    }
+
+    public boolean dispatchGlassesWebCommand(String command) {
+        return glassesWebViewHost != null
+                && glassesWebViewHost.dispatchCommand(command);
+    }
+
+    public void refreshGlassesWebBootstrap() {
+        if (glassesWebViewHost != null) {
+            glassesWebViewHost.refreshBootstrapState();
+        }
+    }
+
     public String getRayNeoDisplayMode() {
         return normalizeDisplayMode(getCompanionPreferences().getString(
                 PREF_DISPLAY_MODE,
@@ -3066,6 +3093,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
                     applyCompanionState();
                     schedulePresentationProbe();
                 }
+                if (glassesWebViewHost != null) {
+                    glassesWebViewHost.onPresentationChanged();
+                }
             }
         });
     }
@@ -3109,6 +3139,9 @@ public final class JellyfinRayNeoActivity extends UnityXRSupportActivity {
     private void onFallbackPresentationShown() {
         glassesConnected = true;
         glassesPresentationReady = true;
+        if (glassesWebViewHost != null) {
+            glassesWebViewHost.onPresentationChanged();
+        }
         if (companionOverlay != null && !isFinishing()) {
             applyCompanionState();
         }
