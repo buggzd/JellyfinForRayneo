@@ -2358,6 +2358,7 @@ kbd {
   z-index: 1;
   inset: 0;
   overflow: hidden;
+  overflow: clip;
   background: #00070d;
 }
 

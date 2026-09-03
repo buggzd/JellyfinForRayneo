@@ -115,6 +115,32 @@ function moveFocus(direction: Direction) {
     focusSpatialElement(node)
     if (node.closest('.side-navigation')) return
 
+    const playerPage = node.closest<HTMLElement>('.player-page')
+    if (playerPage) {
+      playerPage.scrollLeft = 0
+      playerPage.scrollTop = 0
+
+      const trackList = node.closest<HTMLElement>('.track-list')
+      if (!trackList) return
+
+      const targetRect = node.getBoundingClientRect()
+      const listRect = trackList.getBoundingClientRect()
+      const focusInset = 6
+      const scrollDelta = targetRect.top < listRect.top + focusInset
+        ? targetRect.top - listRect.top - focusInset
+        : targetRect.bottom > listRect.bottom - focusInset
+          ? targetRect.bottom - listRect.bottom + focusInset
+          : 0
+
+      if (scrollDelta) {
+        trackList.scrollTo({
+          top: trackList.scrollTop + scrollDelta,
+          behavior: 'smooth',
+        })
+      }
+      return
+    }
+
     if (direction === 'up' && node.closest('.hero-section')) {
       window.scrollTo({ top: 0, behavior: 'smooth' })
       return
