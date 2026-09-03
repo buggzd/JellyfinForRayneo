@@ -1,5 +1,5 @@
 import type { MediaItem, MediaKind, MediaShelf } from './data'
-import type { JellyfinSession } from './runtime'
+import { getNativeHardwareVideoCodecs, type JellyfinSession } from './runtime'
 
 type JellyfinUserData = {
   PlaybackPositionTicks?: number
@@ -12,6 +12,10 @@ type JellyfinUserData = {
 type JellyfinMediaStream = {
   Type?: string
   Codec?: string
+  Profile?: string
+  Level?: number
+  BitDepth?: number
+  PixelFormat?: string
   Title?: string
   DisplayTitle?: string
   Width?: number
@@ -177,64 +181,124 @@ const itemFields = [
 
 const directPlayMaxBitrate = 120_000_000
 const transcodeMaxBitrate = 24_000_000
+const maximumDirectPlayWidth = 3_840
+const maximumDirectPlayHeight = 2_160
+const knownWebViewVideoCodecs = ['h264', 'hevc', 'vp8', 'vp9', 'av1'] as const
 
-const webViewDeviceProfile = {
-  Name: 'Lucent Android WebView',
-  MaxStreamingBitrate: directPlayMaxBitrate,
-  MaxStaticBitrate: directPlayMaxBitrate,
-  DirectPlayProfiles: [
+function browserSupportsVideoCodec(codec: string) {
+  if (typeof document === 'undefined') return codec === 'h264'
+  const video = document.createElement('video')
+  const contentTypes: Record<string, string[]> = {
+    h264: ['video/mp4; codecs="avc1.42E01E"'],
+    hevc: [
+      'video/mp4; codecs="hvc1.1.6.L93.B0"',
+      'video/mp4; codecs="hev1.1.6.L93.B0"',
+    ],
+    vp8: ['video/webm; codecs="vp8"'],
+    vp9: [
+      'video/webm; codecs="vp09.00.31.08"',
+      'video/webm; codecs="vp9"',
+    ],
+    av1: ['video/webm; codecs="av01.0.08M.08"'],
+  }
+  return (contentTypes[codec] ?? []).some((contentType) => video.canPlayType(contentType) !== '')
+}
+
+function detectHardwareVideoCodecs() {
+  const nativeCodecs = getNativeHardwareVideoCodecs()
+  const candidates = nativeCodecs ?? knownWebViewVideoCodecs
+  return new Set(candidates.filter(browserSupportsVideoCodec))
+}
+
+function videoConditions(maximumBitDepth: number) {
+  return [
     {
-      Container: 'mp4,m4v,mov',
-      Type: 'Video',
-      VideoCodec: 'h264,hevc',
-      AudioCodec: 'aac,mp3,ac3,eac3,opus',
+      Condition: 'LessThanEqual',
+      Property: 'Width',
+      Value: String(maximumDirectPlayWidth),
+      IsRequired: false,
     },
     {
-      Container: 'webm',
-      Type: 'Video',
-      VideoCodec: 'vp8,vp9,av1',
-      AudioCodec: 'vorbis,opus',
+      Condition: 'LessThanEqual',
+      Property: 'Height',
+      Value: String(maximumDirectPlayHeight),
+      IsRequired: false,
     },
-  ],
-  TranscodingProfiles: [
     {
-      Container: 'ts',
-      Type: 'Video',
-      VideoCodec: 'h264',
-      AudioCodec: 'aac,mp3',
-      Protocol: 'hls',
-      Context: 'Streaming',
-      MaxAudioChannels: '2',
-      MinSegments: 2,
-      SegmentLength: 6,
-      EnableSubtitlesInManifest: true,
+      Condition: 'LessThanEqual',
+      Property: 'VideoBitDepth',
+      Value: String(maximumBitDepth),
+      IsRequired: false,
     },
-  ],
-  ContainerProfiles: [],
-  CodecProfiles: [
-    {
-      Type: 'Video',
-      Codec: 'h264,hevc,vp8,vp9,av1',
-      Conditions: [
-        { Condition: 'LessThanEqual', Property: 'Width', Value: '3840', IsRequired: false },
-        { Condition: 'LessThanEqual', Property: 'Height', Value: '2160', IsRequired: false },
-        { Condition: 'LessThanEqual', Property: 'VideoBitDepth', Value: '10', IsRequired: false },
-      ],
-      ApplyConditions: [],
-    },
-  ],
-  SubtitleProfiles: [
-    { Format: 'vtt', Method: 'External' },
-    { Format: 'webvtt', Method: 'External' },
-    { Format: 'srt', Method: 'External' },
-    { Format: 'subrip', Method: 'External' },
-    { Format: 'ass', Method: 'External' },
-    { Format: 'ssa', Method: 'External' },
-    { Format: 'mov_text', Method: 'External' },
-    { Format: 'pgssub', Method: 'Encode' },
-    { Format: 'dvdsub', Method: 'Encode' },
-    { Format: 'dvbsub', Method: 'Encode' },
-  ],
+  ]
+}
+
+function createWebViewDeviceProfile(hardwareVideoCodecs: ReadonlySet<string>) {
+  const mp4VideoCodecs = ['h264', 'hevc'].filter((codec) => hardwareVideoCodecs.has(codec))
+  const webmVideoCodecs = ['vp8', 'vp9', 'av1'].filter((codec) => hardwareVideoCodecs.has(codec))
+  const eightBitVideoCodecs = ['h264', 'vp8'].filter((codec) => hardwareVideoCodecs.has(codec))
+  const tenBitVideoCodecs = ['hevc', 'vp9', 'av1'].filter((codec) => hardwareVideoCodecs.has(codec))
+
+  return {
+    Name: 'Lucent Android WebView Hardware',
+    MaxStreamingBitrate: directPlayMaxBitrate,
+    MaxStaticBitrate: directPlayMaxBitrate,
+    DirectPlayProfiles: [
+      ...(mp4VideoCodecs.length > 0 ? [{
+        Container: 'mp4,m4v,mov',
+        Type: 'Video',
+        VideoCodec: mp4VideoCodecs.join(','),
+        AudioCodec: 'aac,mp3,ac3,eac3,opus',
+      }] : []),
+      ...(webmVideoCodecs.length > 0 ? [{
+        Container: 'webm',
+        Type: 'Video',
+        VideoCodec: webmVideoCodecs.join(','),
+        AudioCodec: 'vorbis,opus',
+      }] : []),
+    ],
+    TranscodingProfiles: [
+      {
+        Container: 'ts',
+        Type: 'Video',
+        VideoCodec: 'h264',
+        AudioCodec: 'aac,mp3',
+        Protocol: 'hls',
+        Context: 'Streaming',
+        MaxAudioChannels: '2',
+        MinSegments: 2,
+        SegmentLength: 6,
+        EnableSubtitlesInManifest: true,
+      },
+    ],
+    ContainerProfiles: [],
+    CodecProfiles: [
+      ...(eightBitVideoCodecs.length > 0 ? [{
+        Type: 'Video',
+        Codec: eightBitVideoCodecs.join(','),
+        Conditions: videoConditions(8),
+        ApplyConditions: [],
+      }] : []),
+      ...(tenBitVideoCodecs.length > 0 ? [{
+        Type: 'Video',
+        Codec: tenBitVideoCodecs.join(','),
+        Conditions: videoConditions(10),
+        ApplyConditions: [],
+      }] : []),
+    ],
+    SubtitleProfiles: [
+      { Format: 'vtt', Method: 'External' },
+      { Format: 'webvtt', Method: 'External' },
+      { Format: 'srt', Method: 'External' },
+      { Format: 'subrip', Method: 'External' },
+      { Format: 'ass', Method: 'External' },
+      { Format: 'ssa', Method: 'External' },
+      { Format: 'mov_text', Method: 'External' },
+      { Format: 'pgssub', Method: 'Encode' },
+      { Format: 'dvdsub', Method: 'Encode' },
+      { Format: 'dvbsub', Method: 'Encode' },
+    ],
+  }
 }
 
 function normalizeCodec(value: string | undefined) {
@@ -249,6 +313,43 @@ function normalizeContainer(value: string | undefined) {
   const container = value?.split(',')[0]?.trim().toLocaleLowerCase() ?? ''
   if (['m4v', 'mov'].includes(container)) return 'mp4'
   return container
+}
+
+function inferredVideoBitDepth(stream: JellyfinMediaStream | undefined) {
+  if (stream?.BitDepth) return stream.BitDepth
+  const pixelFormat = stream?.PixelFormat?.toLocaleLowerCase() ?? ''
+  const match = pixelFormat.match(/(?:p|yuv\d{3}p)(\d{2})(?:le|be)?$/)
+  return match ? Number(match[1]) : undefined
+}
+
+function isHardwareProfileCompatible(stream: JellyfinMediaStream | undefined) {
+  if (!stream) return true
+  const codec = normalizeCodec(stream.Codec)
+  const profile = stream.Profile?.trim().toLocaleLowerCase() ?? ''
+  const bitDepth = inferredVideoBitDepth(stream)
+  const maximumBitDepth = codec === 'h264' || codec === 'vp8' ? 8 : 10
+  if (bitDepth !== undefined && bitDepth > maximumBitDepth) return false
+
+  if (codec === 'h264') {
+    return !/(?:high\s*10|high\s*4:2:2|high\s*4:4:4|cavlc\s*4:4:4)/.test(profile)
+  }
+  if (codec === 'hevc') {
+    return !/(?:main\s*12|4:2:2|4:4:4|range\s*extension|rext)/.test(profile)
+  }
+  if (codec === 'vp9') {
+    return !/(?:profile\s*)?[13](?:\D|$)/.test(profile)
+  }
+  if (codec === 'av1') {
+    return !/(?:high|professional)/.test(profile)
+  }
+  return true
+}
+
+function isWithinHardwarePlaybackLimits(stream: JellyfinMediaStream | undefined) {
+  return (!stream?.Width || stream.Width <= maximumDirectPlayWidth)
+    && (!stream?.Height || stream.Height <= maximumDirectPlayHeight)
+    && (!stream?.BitRate || stream.BitRate <= directPlayMaxBitrate)
+    && isHardwareProfileCompatible(stream)
 }
 
 function isTextSubtitle(value: string | undefined) {
@@ -425,9 +526,13 @@ function unique(items: MediaItem[]) {
 
 export class JellyfinClient {
   readonly session: JellyfinSession
+  private readonly hardwareVideoCodecs: ReadonlySet<string>
+  private readonly deviceProfile: ReturnType<typeof createWebViewDeviceProfile>
 
   constructor(session: JellyfinSession) {
     this.session = session
+    this.hardwareVideoCodecs = detectHardwareVideoCodecs()
+    this.deviceProfile = createWebViewDeviceProfile(this.hardwareVideoCodecs)
   }
 
   private url(path: string, query: Record<string, string | number | boolean | undefined> = {}) {
@@ -518,7 +623,7 @@ export class JellyfinClient {
       AllowAudioStreamCopy: !forceTranscode,
       AlwaysBurnInSubtitleWhenTranscoding: false,
       DeviceProfile: {
-        ...webViewDeviceProfile,
+        ...this.deviceProfile,
         MaxStreamingBitrate: forceTranscode ? transcodeMaxBitrate : directPlayMaxBitrate,
         MaxStaticBitrate: forceTranscode ? transcodeMaxBitrate : directPlayMaxBitrate,
       },
@@ -861,7 +966,8 @@ export class JellyfinClient {
     const videoCodec = normalizeCodec(video?.Codec)
     const audioCodec = normalizeCodec(selectedAudio?.Codec)
     const browserContainer = ['mp4', 'm4v', 'mov', 'webm'].includes(container)
-    const browserVideo = ['h264', 'hevc', 'vp8', 'vp9', 'av1'].includes(videoCodec)
+    const browserVideo = this.hardwareVideoCodecs.has(videoCodec)
+      && isWithinHardwarePlaybackLimits(video)
     const browserAudio = !audioCodec
       || ['aac', 'mp3', 'ac3', 'eac3', 'opus', 'vorbis'].includes(audioCodec)
     const firstAudioIndex = streamsOfType(source, 'Audio')[0]?.Index

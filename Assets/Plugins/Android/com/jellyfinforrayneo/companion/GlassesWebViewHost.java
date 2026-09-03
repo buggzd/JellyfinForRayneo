@@ -6,6 +6,8 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
 import android.os.Build;
 import android.text.TextUtils;
 import android.view.Display;
@@ -24,7 +26,12 @@ import android.widget.FrameLayout;
 
 import com.unity3d.player.UnityPlayer;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
+
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Set;
 
 final class GlassesWebViewHost {
     private static final String GLASSES_UI_ROOT =
@@ -520,6 +527,36 @@ final class GlassesWebViewHost {
         }
 
         @JavascriptInterface
+        public String getHardwareVideoCodecs() {
+            Set<String> codecs = new LinkedHashSet<>();
+            try {
+                MediaCodecInfo[] codecInfos = new MediaCodecList(
+                        MediaCodecList.ALL_CODECS).getCodecInfos();
+                for (MediaCodecInfo codecInfo : codecInfos) {
+                    if (codecInfo == null
+                            || codecInfo.isEncoder()
+                            || !isHardwareAccelerated(codecInfo)) {
+                        continue;
+                    }
+                    for (String mimeType : codecInfo.getSupportedTypes()) {
+                        String codec = videoCodecForMimeType(mimeType);
+                        if (!TextUtils.isEmpty(codec)) {
+                            codecs.add(codec);
+                        }
+                    }
+                }
+            } catch (RuntimeException ignored) {
+                codecs.clear();
+            }
+
+            JSONArray result = new JSONArray();
+            for (String codec : codecs) {
+                result.put(codec);
+            }
+            return result.toString();
+        }
+
+        @JavascriptInterface
         public void ready() {
             activity.runOnUiThread(new Runnable() {
                 @Override
@@ -539,6 +576,39 @@ final class GlassesWebViewHost {
                     UNITY_RECEIVER,
                     "OnGlassesWebMessage",
                     message);
+        }
+    }
+
+    private static boolean isHardwareAccelerated(MediaCodecInfo codecInfo) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return codecInfo.isHardwareAccelerated();
+        }
+
+        String name = codecInfo.getName().toLowerCase(Locale.ROOT);
+        return !name.startsWith("omx.google.")
+                && !name.startsWith("c2.android.")
+                && !name.startsWith("c2.google.")
+                && !name.contains(".sw.")
+                && !name.endsWith(".sw");
+    }
+
+    private static String videoCodecForMimeType(String mimeType) {
+        if (mimeType == null) {
+            return "";
+        }
+        switch (mimeType.toLowerCase(Locale.ROOT)) {
+            case "video/avc":
+                return "h264";
+            case "video/hevc":
+                return "hevc";
+            case "video/x-vnd.on2.vp8":
+                return "vp8";
+            case "video/x-vnd.on2.vp9":
+                return "vp9";
+            case "video/av01":
+                return "av1";
+            default:
+                return "";
         }
     }
 }

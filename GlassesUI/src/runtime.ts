@@ -19,6 +19,7 @@ export type RuntimeBootstrap = {
 
 type NativeGlassesBridge = {
   getBootstrapState: () => string
+  getHardwareVideoCodecs: () => string
   ready: () => void
   postMessage: (message: string) => void
 }
@@ -36,6 +37,15 @@ declare global {
 
 const listeners = new Set<(bootstrap: RuntimeBootstrap) => void>()
 let latestNativeBootstrap: RuntimeBootstrap | null = null
+let cachedHardwareVideoCodecs: readonly string[] | null | undefined
+
+const supportedHardwareVideoCodecs = new Set([
+  'h264',
+  'hevc',
+  'vp8',
+  'vp9',
+  'av1',
+])
 
 function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : ''
@@ -215,6 +225,39 @@ export function subscribeRuntime(listener: (bootstrap: RuntimeBootstrap) => void
   listeners.add(listener)
   if (latestNativeBootstrap) listener(latestNativeBootstrap)
   return () => listeners.delete(listener)
+}
+
+export function getNativeHardwareVideoCodecs(): readonly string[] | null {
+  if (cachedHardwareVideoCodecs !== undefined) return cachedHardwareVideoCodecs
+
+  const native = window.RayNeoGlasses
+  if (!native || typeof native.getHardwareVideoCodecs !== 'function') {
+    cachedHardwareVideoCodecs = null
+    return cachedHardwareVideoCodecs
+  }
+
+  try {
+    const payload = native.getHardwareVideoCodecs()
+    if (typeof payload !== 'string' || payload.length > 1_024) {
+      cachedHardwareVideoCodecs = []
+      return cachedHardwareVideoCodecs
+    }
+
+    const parsed = JSON.parse(payload) as unknown
+    if (!Array.isArray(parsed) || parsed.length > 16) {
+      cachedHardwareVideoCodecs = []
+      return cachedHardwareVideoCodecs
+    }
+
+    cachedHardwareVideoCodecs = [...new Set(parsed
+      .filter((value): value is string => typeof value === 'string' && value.length <= 16)
+      .map((value) => value.trim().toLocaleLowerCase())
+      .filter((value) => supportedHardwareVideoCodecs.has(value)))]
+    return cachedHardwareVideoCodecs
+  } catch {
+    cachedHardwareVideoCodecs = []
+    return cachedHardwareVideoCodecs
+  }
 }
 
 export function postNativeMessage(message: Record<string, unknown>) {
