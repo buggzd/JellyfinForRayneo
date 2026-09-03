@@ -128,7 +128,7 @@ adb install -r Builds/Android/JellyfinForRayNeo.apk
 
 Editor 中无法真实创建 Android 外接显示器的 `Presentation` 或 Android WebView，因此用两个窗口替代：`RayNeo Phone` 模拟手机，`Game View` 验证 Unity 场景和显示控制器；Lucent 页面本身在 Vite 浏览器中调试。登录桥、状态切换和密码清理逻辑与 Android 真机共用。
 
-真机的 `Mirror2D` 模式让一个 WebView 铺满外接显示帧，由眼镜硬件向双眼显示同一画面。`StereoVirtualScreen` 模式只创建一个播放器 WebView，把它按单眼宽度布局，再将同一 Android 渲染结果分别绘制到 SBS 左右半帧；不会启动第二个视频、第二路音频或第二组 Jellyfin 播放上报。2D/3D 硬件切换期间，WebView 会暂时隐藏，让 Unity 黑帧遮住中间状态。
+真机的 `Mirror2D` 模式让一个 WebView 铺满外接显示帧，由眼镜硬件向双眼显示同一画面。`StereoVirtualScreen` 模式只创建一个播放器 WebView，把它按单眼宽度布局，再将同一 Android 渲染结果分别绘制到 SBS 左右半帧；不会启动第二个视频、第二路音频或第二组 Jellyfin 播放上报。2D/3D 硬件切换期间，`displayModeTransitioning` 会暂时隐藏 WebView，让 Unity 黑帧遮住中间状态；切换确认或安全回退结束后必须重新显示 WebView。`displayModeApplied` 只表示用户所选模式得到硬件确认，不能用于长期控制可见性。若切换结束后眼镜仍稳定显示 Unity `Main` 场景，应按眼镜 WebView 挂载故障处理。
 
 在 macOS 上首次连接局域网 Jellyfin 前，还要到 `系统设置 > 隐私与安全性 > 本地网络` 允许 Unity 访问本地网络。若 curl 可以访问服务器、Unity 却报告 `Cannot connect to destination host`，可用以下命令确认是否被系统权限拦截：
 
@@ -190,7 +190,7 @@ EditMode 测试覆盖 URL、认证响应、浏览查询、媒体元数据、会�
   -logFile /tmp/jellyfin-rayneo-playmode.log
 ```
 
-当前验证结果：眼镜端 TypeScript 检查与两套 Vite 生产构建通过，EditMode `71/71`、PlayMode `34/34`，Android ARM64 IL2CPP 开发 APK 构建成功；浏览器连接真实 Jellyfin 后已人工确认播放与文字字幕显示。Android 真机已通过两端 WebView 调试通道确认上、下、左、右、确认和返回六类手机遥控命令抵达眼镜 DOM，焦点移动与确认点击生效且没有脚本异常。包名为 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29。SBS 双眼观感仍需佩戴 RayNeo Air 验收。
+当前验证结果：眼镜端 TypeScript 检查与两套 Vite 生产构建通过，EditMode `71/71`、PlayMode `34/34`，Android ARM64 IL2CPP 开发 APK 构建成功；浏览器连接真实 Jellyfin 后已人工确认播放与文字字幕显示。Android 真机已通过两端 WebView 调试通道确认上、下、左、右、确认和返回六类手机遥控命令抵达眼镜 DOM，焦点移动与确认点击生效且没有脚本异常；外接显示的 1920×1080 真机截图也已确认 Lucent `GlassesUI` 覆盖 Unity 场景，并能在 RayNeo SDK 模式切换失败后以 `Mirror2D` 安全回退继续显示。包名为 `com.jellyfinforrayneo.client`，min SDK 26、target SDK 29。SBS 双眼观感仍需佩戴 RayNeo Air 验收。
 
 ## 播放降级策略
 
