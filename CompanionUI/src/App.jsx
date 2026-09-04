@@ -981,7 +981,7 @@ function HomeScreen({
   }
 
   return (
-    <section className="screen home-screen with-nav">
+    <section className={`screen home-screen with-nav ${mediaError ? 'has-runtime-error' : ''}`}>
       <header className="top-row home-top">
         <Brand compact />
         <button className="profile-button glass-soft" onClick={onSettings}>

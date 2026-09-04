@@ -19,6 +19,11 @@
   --shadow: 0 22px 64px rgba(43, 105, 133, 0.13), 0 2px 8px rgba(39, 99, 124, 0.06);
   --spring: cubic-bezier(.2, .9, .25, 1.25);
   --smooth: cubic-bezier(.16, 1, .3, 1);
+  --page-inline: clamp(14px, 4.65vw, 20px);
+  --bottom-nav-height: 70px;
+  --bottom-nav-offset: max(14px, env(safe-area-inset-bottom));
+  --bottom-nav-gap: clamp(12px, 1.6dvh, 16px);
+  --bottom-nav-clearance: calc(var(--bottom-nav-height) + var(--bottom-nav-offset) + var(--bottom-nav-gap));
 }
 
 * {
@@ -250,7 +255,7 @@ input:focus-visible {
 }
 
 .screen.with-nav {
-  padding-bottom: 116px;
+  padding-bottom: var(--bottom-nav-clearance);
 }
 
 .top-row,
@@ -1141,7 +1146,31 @@ input:focus-visible {
   cursor: pointer;
 }
 
-.home-top { margin-bottom: 22px; }
+.home-screen {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  gap: clamp(8px, 1.35dvh, 12px);
+  height: calc(100vh - 31px);
+  height: calc(100dvh - 31px);
+  min-height: 0;
+  padding: clamp(10px, 1.8dvh, 14px) var(--page-inline) var(--bottom-nav-clearance);
+  overflow: hidden;
+}
+
+.home-screen.has-runtime-error {
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto auto;
+}
+
+.home-top,
+.home-screen .welcome-line,
+.home-screen .mode-card,
+.home-screen .runtime-status-card,
+.home-screen .touchpad-launch,
+.home-screen .connection-card {
+  margin: 0;
+}
+
+.home-top { min-height: 35px; }
 
 .profile-button {
   position: relative;
@@ -1172,7 +1201,12 @@ input:focus-visible {
   display: flex;
   align-items: end;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 14px;
+}
+
+.welcome-line > div {
+  min-width: 0;
 }
 
 .welcome-line h1,
@@ -1183,7 +1217,12 @@ input:focus-visible {
   letter-spacing: -.045em;
 }
 
+.home-screen .welcome-line h1 {
+  font-size: clamp(19px, 5.35vw, 23px);
+}
+
 .online-label {
+  flex: 0 0 auto;
   margin-bottom: 2px;
   color: #3a8274;
 }
@@ -1205,6 +1244,14 @@ input:focus-visible {
   border-radius: 34px 23px 34px 24px;
   color: #123d52;
   isolation: isolate;
+}
+
+.home-screen .device-hero {
+  align-self: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: min(300px, 70vw);
 }
 
 .device-hero > img {
@@ -1233,7 +1280,7 @@ input:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 17px 17px 0;
+  padding: clamp(11px, 1.95dvh, 17px) clamp(12px, 4vw, 17px) 0;
 }
 
 .device-hero__head button {
@@ -1254,8 +1301,8 @@ input:focus-visible {
 .device-hero__info {
   position: absolute;
   z-index: 4;
-  bottom: 18px;
-  left: 19px;
+  bottom: clamp(12px, 2.1dvh, 18px);
+  left: clamp(13px, 4.4vw, 19px);
   display: flex;
   flex-direction: column;
   text-shadow: 0 1px 9px rgba(255,255,255,.78);
@@ -1309,6 +1356,10 @@ input:focus-visible {
   border-radius: 25px 19px 25px 20px;
 }
 
+.home-screen .mode-card {
+  padding: clamp(11px, 1.85dvh, 16px);
+}
+
 .card-title-row {
   display: flex;
   align-items: center;
@@ -1319,11 +1370,19 @@ input:focus-visible {
 .mode-card h2 { font-size: 16px; }
 .mode-card > p { margin: 11px 2px 0; color: #6f8792; font-size: 8px; }
 
+.home-screen .mode-card > p {
+  margin-top: clamp(6px, 1.25dvh, 11px);
+}
+
 .mode-selector {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 7px;
   margin-top: 12px;
+}
+
+.home-screen .mode-selector {
+  margin-top: clamp(7px, 1.4dvh, 12px);
 }
 
 .mode-selector > button {
@@ -1340,6 +1399,10 @@ input:focus-visible {
   text-align: left;
   cursor: pointer;
   transition: transform 420ms var(--spring), background 300ms ease, border-color 300ms ease, box-shadow 300ms ease;
+}
+
+.home-screen .mode-selector > button {
+  padding-block: clamp(7px, 1.15dvh, 10px);
 }
 
 .mode-selector > button:hover { transform: translateY(-1px); }
@@ -1400,6 +1463,11 @@ input:focus-visible {
   cursor: pointer;
 }
 
+.home-screen .touchpad-launch {
+  height: clamp(66px, 9.5dvh, 82px);
+  padding-block: clamp(9px, 1.5dvh, 13px);
+}
+
 .touchpad-launch__orb {
   position: relative;
   z-index: 2;
@@ -1411,6 +1479,11 @@ input:focus-visible {
   border: 1px solid rgba(186,240,251,.2);
   border-radius: 50%;
   background: radial-gradient(circle, rgba(73,205,232,.14), transparent 67%);
+}
+
+.home-screen .touchpad-launch__orb {
+  width: clamp(43px, 6dvh, 51px);
+  height: clamp(43px, 6dvh, 51px);
 }
 
 .touchpad-launch__orb::before,
@@ -1442,6 +1515,11 @@ input:focus-visible {
   border-radius: 19px;
 }
 
+.home-screen .connection-card {
+  min-height: 51px;
+  padding-block: clamp(8px, 1.25dvh, 11px);
+}
+
 .connection-card > span:nth-child(2) { display: flex; flex: 1; min-width: 0; flex-direction: column; }
 .connection-card small { color: #78909b; font-size: 7px; }
 .connection-card strong { margin: 1px 0; font-size: 10px; }
@@ -1451,12 +1529,12 @@ input:focus-visible {
 .bottom-nav {
   position: fixed;
   z-index: 20;
-  right: max(calc((100vw - 430px) / 2 + 20px), 20px);
-  bottom: max(14px, env(safe-area-inset-bottom));
-  left: max(calc((100vw - 430px) / 2 + 20px), 20px);
+  right: max(calc((100vw - 430px) / 2 + var(--page-inline)), var(--page-inline));
+  bottom: var(--bottom-nav-offset);
+  left: max(calc((100vw - 430px) / 2 + var(--page-inline)), var(--page-inline));
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  height: 70px;
+  height: var(--bottom-nav-height);
   padding: 6px 14px;
   border-radius: 25px 19px 25px 19px;
   background:
@@ -2103,7 +2181,10 @@ input:focus-visible {
 }
 
 @media (min-width: 680px) {
-  .prototype-shell { padding: 26px 0; }
+  .prototype-shell {
+    --bottom-nav-offset: 43px;
+    padding: 26px 0;
+  }
   .phone-stage {
     min-height: min(900px, calc(100dvh - 52px));
     border: 8px solid rgba(9,31,42,.92);
@@ -2111,6 +2192,10 @@ input:focus-visible {
     box-shadow: 0 0 0 1px rgba(255,255,255,.35), 0 45px 120px rgba(20,67,88,.3);
   }
   .screen { min-height: calc(min(900px, 100dvh - 52px) - 47px); }
+  .home-screen {
+    height: calc(min(900px, 100dvh - 52px) - 47px);
+    min-height: 0;
+  }
   .touchpad-screen { min-height: calc(min(900px, 100dvh - 52px) - 16px); border-radius: 37px; }
   .bottom-nav {
     right: calc(50% - 195px);
@@ -2122,9 +2207,25 @@ input:focus-visible {
 
 @media (max-height: 760px) {
   .art-hero { height: 178px; }
-  .device-hero { height: 226px; }
-  .mode-card { padding: 13px; }
-  .touchpad-launch { height: 72px; }
+}
+
+@media (max-height: 680px) {
+  .home-screen.has-runtime-error .device-hero__info {
+    display: none;
+  }
+}
+
+@media (max-height: 600px) {
+  .home-screen .welcome-line .eyebrow,
+  .home-screen .mode-card .card-title-row .eyebrow,
+  .home-screen .mode-card > p {
+    display: none;
+  }
+
+  .home-screen .welcome-line h1,
+  .home-screen .mode-card h2 {
+    margin-top: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2141,12 +2242,16 @@ input:focus-visible {
 /* Native Android integration keeps the supplied visual system while allowing
    the real system status bar and bridge-driven discovery states to take over. */
 .is-native.prototype-shell {
+  --bottom-nav-offset: max(16px, env(safe-area-inset-bottom));
   place-items: stretch;
+  padding: 0;
 }
 
 .is-native .phone-stage {
   width: 100%;
   max-width: none;
+  border: 0;
+  border-radius: 0;
   box-shadow: none;
 }
 
@@ -2160,13 +2265,20 @@ input:focus-visible {
   padding-top: max(18px, env(safe-area-inset-top));
 }
 
+.is-native .home-screen {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  padding-top: clamp(10px, 2.1dvh, 18px);
+}
+
 .is-native .touchpad-screen {
   min-height: 100vh;
   min-height: 100dvh;
 }
 
 .is-native .bottom-nav {
-  bottom: max(16px, env(safe-area-inset-bottom));
+  bottom: var(--bottom-nav-offset);
 }
 
 .brand strong {
