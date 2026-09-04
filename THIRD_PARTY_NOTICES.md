@@ -34,5 +34,5 @@ Jellyfin names and trademarks belong to their respective owners. This
 third-party client communicates with Jellyfin through its public API and does
 not redistribute Jellyfin server software.
 
-The application no longer embeds or links LibVLC, Google Cardboard, or a Unity
+The application does not embed or link LibVLC, Google Cardboard, or a Unity
 runtime.

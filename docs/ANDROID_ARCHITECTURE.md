@@ -149,11 +149,11 @@ request mode
      -> rejection/timeout/SDK error: use visible Mirror2D and stop retrying
 ```
 
-Only an active transition hides the WebView. A failed switch therefore ends in
-a visible single-frame 2D layout even though the requested mode remains
-unconfirmed. A new attempt occurs only after an explicit phone selection,
-glasses reconnect, or lifecycle resume. Pause, destroy, and disconnect also
-request or settle on safe 2D.
+Only an active transition hides the WebView. SDK rejection, an exception, or
+the 1.5-second confirmation timeout ends in a visible single-frame 2D layout
+even though the requested mode remains unconfirmed. A new attempt occurs only
+after an explicit phone selection, glasses reconnect, or lifecycle resume.
+Pause, destroy, and disconnect also request or settle on safe 2D.
 
 ## Field diagnostics without ADB
 
@@ -179,10 +179,11 @@ reports.
 
 The native bridge enumerates hardware-accelerated `MediaCodec` decoders.
 `GlassesUI` intersects those codec families with WebView container support and
-advertises only bounded direct-play profiles to Jellyfin. H.264/VP8 are limited
-to 8-bit and HEVC/VP9/AV1 to 10-bit. Unknown, software-only, incompatible, or
-out-of-limit media uses the H.264/AAC HLS fallback. `hls.js` handles transport
-and MSE demuxing; Chromium still selects the actual Android decoder.
+advertises only bounded direct-play profiles to Jellyfin. Those profiles stop
+at 3840×2160 and 120 Mbps; H.264/VP8 are limited to 8-bit and HEVC/VP9/AV1 to
+10-bit. Unknown, software-only, incompatible, or out-of-limit media uses the
+24 Mbps, two-channel H.264/AAC HLS fallback. `hls.js` handles transport and MSE
+demuxing; Chromium still selects the actual Android decoder.
 
 ## Verification
 
@@ -192,3 +193,23 @@ must additionally cover display attach/detach, 2D/3D callbacks and timeout,
 login/session restore/logout, browse and playback flows, remote focus,
 renderer recovery, one audio/report stream, and the selected `MediaCodec`
 component during representative playback.
+
+Build commands and APK inspection details live in
+[DEVELOPMENT.md](DEVELOPMENT.md#验证). The following matrix is the
+minimum device regression set for any device-facing change.
+
+### Device regression matrix
+
+| Area | Required cases | Pass condition |
+| --- | --- | --- |
+| Install and lifecycle | First launch, cold launch, background/foreground, Activity recreation | Phone UI and glasses Presentation recover without a stale or duplicate session |
+| Authentication | IPv4 discovery, manual hostname/IPv6 URL, Quick Connect, password login, remembered and non-persistent login | Exactly one validated session reaches the glasses; passwords never persist |
+| Session cleanup | Logout, account change, restored `401`/`403` | Repository, bootstrap, pending commands, playback state, and both UIs clear together |
+| Display connection | Glasses attached before launch, attached after launch, disconnected and reconnected | The intended external display is selected and phone UI stays on the default display |
+| Display modes | Confirmed Mirror 2D and stereo switch, SDK rejection, exception, missing callback/timeout | The WebView hides only during an active transition; every failure settles on visible Mirror 2D without an automatic retry |
+| Browse and focus | Home, search, filters, folders, details, long lists, dialogs, remote back | Exactly one visible spatial focus target exists and overlays prevent background input |
+| Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, text and bitmap subtitle | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |
+| Single-instance invariants | Mirror and stereo during representative playback | One glasses WebView, one HTML `<video>`, one audio stream, and one Jellyfin reporting stream remain active |
+| Renderer recovery | Kill or crash the glasses WebView renderer during browse and playback | The WebView is rebuilt, session bootstrap is republished, and the phone receives a safe state |
+| Codec selection | Representative H.264, HEVC/VP9/AV1 where hardware advertises support, plus an unsupported source | The actual Chromium `MediaCodec` component matches expectations; incompatible media requests the bounded HLS fallback |
+| Field diagnostics | Network, HTTP, response, and unknown failures; Android share flow | The phone shows the correct fixed category and the exported report contains no URL, account, title, code, token, password, body, or arbitrary exception text |
