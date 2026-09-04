@@ -8,6 +8,8 @@ readonly GLASSES_URL="http://127.0.0.1:4175/"
 readonly HARNESS_URL="http://127.0.0.1:4177/"
 
 declare -a child_pids=()
+development_config_path=""
+development_config_source=""
 
 cleanup()
 {
@@ -45,7 +47,53 @@ wait_for_service()
     exit 1
 }
 
+resolve_development_config()
+{
+    local configured_path="${RAYNEO_JELLYFIN_DEV_CONFIG:-}"
+    local common_git_directory=""
+    local primary_worktree_config=""
+
+    if [[ -n "${configured_path}" ]]; then
+        if [[ ! -f "${configured_path}" ]]; then
+            echo "RAYNEO_JELLYFIN_DEV_CONFIG 指向的文件不存在。" >&2
+            exit 1
+        fi
+        development_config_path="$(
+            cd "$(dirname "${configured_path}")"
+            printf '%s/%s\n' "$(pwd)" "$(basename "${configured_path}")"
+        )"
+        development_config_source="configured"
+        return
+    fi
+
+    if [[ -f "${PROJECT_DIR}/.jellyfin-dev.json" ]]; then
+        development_config_path="${PROJECT_DIR}/.jellyfin-dev.json"
+        development_config_source="worktree"
+        return
+    fi
+
+    if common_git_directory="$(
+        git -C "${PROJECT_DIR}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null
+    )"; then
+        primary_worktree_config="$(dirname "${common_git_directory}")/.jellyfin-dev.json"
+        if [[ -f "${primary_worktree_config}" ]]; then
+            development_config_path="${primary_worktree_config}"
+            development_config_source="primary-worktree"
+        fi
+    fi
+}
+
 cd "${PROJECT_DIR}"
+
+resolve_development_config
+if [[ -n "${development_config_path}" ]]; then
+    export RAYNEO_JELLYFIN_DEV_CONFIG="${development_config_path}"
+    if [[ "${development_config_source}" == "primary-worktree" ]]; then
+        echo "已复用 Git 主工作区中的本地 Jellyfin 开发登录配置。"
+    elif [[ "${development_config_source}" == "configured" ]]; then
+        echo "已加载 RAYNEO_JELLYFIN_DEV_CONFIG 指定的本地登录配置。"
+    fi
+fi
 
 if [[ ! -x "GlassesUI/node_modules/.bin/vite" \
         || ! -x "CompanionUI/node_modules/.bin/vite" ]]; then
