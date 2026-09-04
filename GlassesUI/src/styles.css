@@ -3245,26 +3245,6 @@ kbd {
   background-repeat: no-repeat;
   background-size: auto 132%;
   filter: saturate(1.06) contrast(1.05) brightness(.78);
-  -webkit-mask-image: radial-gradient(
-    ellipse 35% 74% at 83% 48%,
-    #000 0%,
-    #000 43%,
-    rgba(0, 0, 0, .96) 52%,
-    rgba(0, 0, 0, .78) 63%,
-    rgba(0, 0, 0, .48) 75%,
-    rgba(0, 0, 0, .18) 87%,
-    transparent 100%
-  );
-  mask-image: radial-gradient(
-    ellipse 35% 74% at 83% 48%,
-    #000 0%,
-    #000 43%,
-    rgba(0, 0, 0, .96) 52%,
-    rgba(0, 0, 0, .78) 63%,
-    rgba(0, 0, 0, .48) 75%,
-    rgba(0, 0, 0, .18) 87%,
-    transparent 100%
-  );
   transform: none;
   animation: none;
 }
@@ -3275,14 +3255,14 @@ kbd {
 
 .ambient--home-cover .ambient__veil {
   background:
-    radial-gradient(
-      ellipse 40% 80% at 83% 48%,
-      rgba(2, 7, 13, .03) 0%,
-      rgba(2, 7, 13, .05) 42%,
-      rgba(2, 7, 13, .16) 58%,
-      rgba(2, 7, 13, .48) 75%,
-      rgba(2, 7, 13, .88) 91%,
-      #02070d 100%),
+    linear-gradient(90deg,
+      #02070d 0%,
+      #02070d 52%,
+      rgba(2, 7, 13, .98) 58%,
+      rgba(2, 7, 13, .76) 68%,
+      rgba(2, 7, 13, .38) 78%,
+      rgba(2, 7, 13, .1) 88%,
+      transparent 97%),
     linear-gradient(0deg,
       #02070d 0%,
       rgba(2, 7, 13, .72) 8%,
