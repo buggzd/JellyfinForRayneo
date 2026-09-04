@@ -2803,12 +2803,12 @@ kbd {
 .track-panel {
   position: absolute;
   z-index: 42;
-  top: 108px;
   right: var(--safe-x);
+  bottom: calc(100% + 14px);
   display: flex;
   width: min(430px, 38vw);
-  max-height: calc(100vh - 132px);
-  max-height: calc(100dvh - 132px);
+  max-height: calc(100vh - 224px);
+  max-height: calc(100dvh - 224px);
   padding: 21px;
   flex-direction: column;
   border-radius: 25px;
@@ -2816,7 +2816,7 @@ kbd {
 }
 
 @keyframes panel-in {
-  from { opacity: 0; transform: translateY(-10px) scale(.96); }
+  from { opacity: 0; transform: translateY(10px) scale(.96); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 

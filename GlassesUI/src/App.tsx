@@ -2272,24 +2272,23 @@ function PlayerPage({
         </div>
       )}
 
-      {panel && controls && (
-        <aside ref={trackPanelRef} className="track-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="track-panel-title">
-          <header><div><small>PLAYBACK OPTIONS</small><h2 id="track-panel-title">{panel === 'audio' ? '选择音轨' : '选择字幕'}</h2></div><FocusButton className="track-panel__close" variant="round" label="关闭面板" onClick={() => closeTrackPanel()}><X size={20} /></FocusButton></header>
-          <div className="track-list">
-            {(panel === 'audio'
-              ? audioTracks
-              : [{ index: -1, label: '关闭字幕', language: '', codec: '', default: false, forced: false, external: false, text: true }, ...subtitleTracks]
-            ).map((track) => {
-              const selected = panel === 'audio'
-                ? plan?.audioStreamIndex === track.index
-                : plan?.subtitleStreamIndex === track.index
-              return <FocusButton key={`${panel}-${track.index}`} className="track-panel__option" variant="glass" active={selected} trailing={selected ? <Check size={19} /> : undefined} onClick={() => chooseTrack(panel, track.index)}>{track.label}</FocusButton>
-            })}
-          </div>
-        </aside>
-      )}
-
       <div className={cx('player-chrome player-chrome--bottom', !controls && 'is-hidden')}>
+        {panel && controls && (
+          <aside ref={trackPanelRef} className="track-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="track-panel-title">
+            <header><div><small>PLAYBACK OPTIONS</small><h2 id="track-panel-title">{panel === 'audio' ? '选择音轨' : '选择字幕'}</h2></div><FocusButton className="track-panel__close" variant="round" label="关闭面板" onClick={() => closeTrackPanel()}><X size={20} /></FocusButton></header>
+            <div className="track-list">
+              {(panel === 'audio'
+                ? audioTracks
+                : [{ index: -1, label: '关闭字幕', language: '', codec: '', default: false, forced: false, external: false, text: true }, ...subtitleTracks]
+              ).map((track) => {
+                const selected = panel === 'audio'
+                  ? plan?.audioStreamIndex === track.index
+                  : plan?.subtitleStreamIndex === track.index
+                return <FocusButton key={`${panel}-${track.index}`} className="track-panel__option" variant="glass" active={selected} trailing={selected ? <Check size={19} /> : undefined} onClick={() => chooseTrack(panel, track.index)}>{track.label}</FocusButton>
+              })}
+            </div>
+          </aside>
+        )}
         <section className="player-controls glass-panel">
           <div className="player-progress" style={{ '--played': `${progress}%` } as CSSProperties}>
             <span className="player-progress__time">{formatTime(current)}</span>
