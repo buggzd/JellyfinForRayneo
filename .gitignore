@@ -1,47 +1,24 @@
-[Ll]ibrary/
-[Tt]emp/
-[Oo]bj/
-[Bb]uild/
-[Bb]uilds/
-[Ll]ogs/
-[Uu]ser[Ss]ettings/
-[Mm]emoryCaptures/
-[Rr]ecordings/
-[Cc]aptures/
-[Tt]est[Rr]esults/
-[Pp]rofiling/
-[Cc]rash[Rr]eports/
-
-# Temporary scenes emitted by Unity Test Framework initialization.
-/Assets/InitTestScene*.unity
-/Assets/InitTestScene*.unity.meta
-
-# Unity Package Manager UI state is machine-specific.
-/ProjectSettings/PackageManagerSettings.asset
-
-# IDE and generated project files
+# IDE state
 .idea/
 .vscode/
 .vs/
 .fleet/
-*.csproj
-*.sln
-*.suo
-*.user
-*.userprefs
-*.pidb
-*.booproj
-*.svd
-*.pdb
-*.mdb
-*.opendb
-*.VC.db
+*.iml
 
 # Android/Gradle machine state and native intermediates
 .gradle/
 local.properties
 .externalNativeBuild/
 .cxx/
+/AndroidApp/app/build/
+/AndroidApp/build/
+/AndroidApp/app/release/
+
+# Downloaded SDK binaries and local release signing material
+/AndroidApp/app/libs/*.aar
+keystore.properties
+*.jks
+*.keystore
 
 # Local dependencies for the embedded phone companion frontend.
 /CompanionUI/node_modules/
@@ -56,19 +33,6 @@ local.properties
 .DS_Store
 Thumbs.db
 
-# Unity-generated crash reports and Android artifacts
-sysinfo.txt
+# Generated Android packages
 *.apk
 *.aab
-*.unitypackage
-
-# RayNeo's redistributable SDK is installed from the official source by script.
-Packages/com.ffalcon.plugin.xr/
-Packages/com.google.xr.cardboard/
-
-# Optional local-only Unity MCP editor package.
-/Packages/com.coplaydev.unity-mcp
-
-# Verified LGPL software-decoder binaries installed by script.
-Assets/Plugins/Android/libs/
-Assets/Plugins/Android/libs.meta
