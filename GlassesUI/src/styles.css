@@ -1406,15 +1406,11 @@ kbd {
   min-height: 100vh;
 }
 
-.home-page.page-enter {
-  animation: home-enter-from-right 760ms cubic-bezier(.33, 0, .2, 1) backwards;
+.ambient.ambient--home .ambient__image {
+  animation: home-hero-image-enter-from-right 760ms cubic-bezier(.33, 0, .2, 1) backwards;
 }
 
-.ambient--home {
-  animation: home-enter-from-right 760ms cubic-bezier(.33, 0, .2, 1) backwards;
-}
-
-@keyframes home-enter-from-right {
+@keyframes home-hero-image-enter-from-right {
   from {
     transform: translate3d(100vw, 0, 0);
   }
