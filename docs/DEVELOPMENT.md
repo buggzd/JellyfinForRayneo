@@ -161,7 +161,37 @@ npm --prefix CompanionUI run build
 
 修改 WebView 或跨端交互后，不能只依赖浏览器预览；必须重新生成两套前端资源并完成 Android 验证。
 
+### 浏览器双端联调
+
+需要同时观察手机和眼镜交互时，在仓库根目录运行：
+
+```bash
+./scripts/dev-dual-ui.sh
+```
+
+脚本会启动两套 Vite 开发服务器和 `http://127.0.0.1:4177/` 联调页，并自动在浏览器中打开。左侧是具有可选 CSS 视口尺寸的 CompanionUI，右侧是按 1920 × 1080 渲染后等比缩放的 GlassesUI。两个 iframe 均保留自己的真实响应式布局与热更新，不是截图或重新实现的测试 UI。
+
+联调桥只在 Vite DEV、指定 iframe 角色和本机父页面来源同时满足时安装。它模拟 Android 层的有限职责：
+
+- 手机登录后把内存会话发布给眼镜端；
+- 眼镜运行与播放状态回写手机端；
+- 手机触控板的方向、确认和返回指令控制眼镜焦点；
+- 显示模式、重试、退出登录和未授权清理在两端同步；
+- 密码只经过本机联调服务转发，Token 只保存在当前联调页内存中。
+
+若仓库根目录存在被 Git 忽略的 `.jellyfin-dev.json`，联调页启动后会自动建立开发会话。点击“清除会话”即可从连接页开始测试完整的手动地址、账号密码或 Quick Connect 流程；点击“读取开发会话”可重新使用该配置。联调服务只监听 `127.0.0.1`，校验 API 来源、限制消息与响应大小，并且不会打印凭据、Token 或服务器响应。
+
+只想启动服务而不自动打开浏览器时：
+
+```bash
+RAYNEO_DUAL_UI_NO_OPEN=1 ./scripts/dev-dual-ui.sh
+```
+
+这套页面用于快速联调 WebView 消息和响应式 UI，不能模拟 RayNeo SDK、外接 Display、MediaCodec 或 Android WebView 的设备差异；上述部分仍需执行真机回归矩阵。
+
 ## Release 签名与旧版本升级
+
+版本号、Git 标签、发布前检查和 GitHub Actions 规则统一见 [版本与发布规则](VERSIONING.md)。
 
 在本机创建被 Git 忽略的 `AndroidApp/keystore.properties`：
 

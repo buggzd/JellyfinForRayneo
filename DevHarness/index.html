@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Jellyfin for RayNeo · 双端联调</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="toolbar">
+        <div class="brand">
+          <span class="brand__mark" aria-hidden="true"><i></i></span>
+          <span>
+            <strong>双端联调</strong>
+            <small>JELLYFIN FOR RAYNEO</small>
+          </span>
+        </div>
+
+        <div class="runtime-status" aria-live="polite">
+          <span id="phone-status" class="status-pill"><i></i> 手机等待中</span>
+          <span id="glasses-status" class="status-pill"><i></i> 眼镜等待中</span>
+          <span id="session-status" class="status-pill"><i></i> 尚未登录</span>
+        </div>
+
+        <div class="toolbar__actions">
+          <label class="viewport-select">
+            <span>手机视口</span>
+            <select id="phone-preset">
+              <option value="360x800">360 × 800</option>
+              <option value="393x852">393 × 852</option>
+              <option value="412x915">412 × 915</option>
+              <option value="430x932">430 × 932</option>
+            </select>
+          </label>
+          <button id="load-session" type="button">读取开发会话</button>
+          <button id="clear-session" type="button">清除会话</button>
+          <button id="reload-frames" type="button" class="button--primary">重载两端</button>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="panel panel--phone" aria-labelledby="phone-title">
+          <header class="panel__header">
+            <span>
+              <small>COMPANION WEBVIEW</small>
+              <strong id="phone-title">手机端</strong>
+            </span>
+            <code id="phone-size">360 × 800 CSS px</code>
+          </header>
+          <div id="phone-canvas" class="viewport-canvas viewport-canvas--phone">
+            <div id="phone-frame" class="scaled-frame device-frame device-frame--phone">
+              <iframe
+                id="companion-frame"
+                title="手机 CompanionUI"
+                allow="clipboard-write"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              ></iframe>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel panel--glasses" aria-labelledby="glasses-title">
+          <header class="panel__header">
+            <span>
+              <small>GLASSES WEBVIEW</small>
+              <strong id="glasses-title">眼镜端</strong>
+            </span>
+            <code>1920 × 1080 CSS px</code>
+          </header>
+          <div id="glasses-canvas" class="viewport-canvas viewport-canvas--glasses">
+            <div id="glasses-frame" class="scaled-frame device-frame device-frame--glasses">
+              <iframe
+                id="glasses-ui-frame"
+                title="眼镜 GlassesUI"
+                allow="autoplay; fullscreen; picture-in-picture"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+              ></iframe>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="activity-bar">
+        <span id="activity-dot" class="activity-dot" aria-hidden="true"></span>
+        <span id="activity-message">正在启动两套 Vite 页面…</span>
+        <span class="activity-bar__hint">手机触控板会直接控制右侧眼镜焦点</span>
+      </footer>
+    </div>
+    <script type="module" src="/harness.js"></script>
+  </body>
+</html>
