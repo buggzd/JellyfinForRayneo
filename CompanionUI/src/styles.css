@@ -251,7 +251,6 @@ input:focus-visible {
   min-height: calc(100vh - 31px);
   min-height: calc(100dvh - 31px);
   padding: 14px 20px 34px;
-  animation: screen-enter 620ms var(--smooth) backwards;
 }
 
 .screen.with-nav {
@@ -2074,11 +2073,6 @@ input:focus-visible {
 .toast svg { flex: 0 0 auto; color: #6fe3ca; }
 
 .stagger-in { animation: item-enter 540ms var(--smooth) backwards; animation-delay: var(--delay); }
-
-@keyframes screen-enter {
-  from { opacity: 0; transform: translateY(13px) scale(.992); filter: blur(4px); }
-  to { opacity: 1; transform: none; filter: none; }
-}
 
 @keyframes mode-enter {
   from { opacity: 0; transform: translateX(9px) scale(.99); }

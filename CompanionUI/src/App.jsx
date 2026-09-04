@@ -409,7 +409,7 @@ function App() {
         <GlassOptics />
         {screen !== 'touchpad' && <StatusBar />}
 
-        <div className="screen-stack" key={screen}>
+        <div className="screen-stack">
           {screen === 'connect' && (
             <ConnectScreen
               session={session}
