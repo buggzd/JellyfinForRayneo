@@ -40,6 +40,8 @@ git push origin main v<versionName>
 
 推送标签后，[Release Action](../.github/workflows/release.yml) 会重新验证版本、构建并校验正式签名 APK，生成 SHA-256 文件，再创建 GitHub Release。不要手工上传未经该工作流验证的 APK。
 
+若已推送的标签在创建 Release 前因 CI 或基础设施故障失败，先在 `main` 修复工作流，再从 Actions 手动运行同一工作流并输入原标签。恢复任务仍会检出并验证原 annotated tag；不得移动或覆盖标签。
+
 ## 发布签名
 
 Release 必须持续使用同一份长期保存的自有证书。更换证书会阻止已安装版本原位升级；若需要兼容旧 Unity 版本，还必须使用旧版本的同一证书。禁止使用 Debug、临时或仅保存在 CI 中且没有离线备份的证书。

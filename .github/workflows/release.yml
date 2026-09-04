@@ -4,12 +4,18 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing annotated release tag to build
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.release_tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -18,16 +24,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
     steps:
+      - name: Validate release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${RELEASE_TAG}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$ ]]
+
       - name: Check out release tag
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Restore annotated release tag object
+        shell: bash
+        run: git fetch --force origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
 
       - name: Require complete signing configuration
         shell: bash
@@ -69,7 +87,7 @@ jobs:
 
       - name: Verify release version
         shell: bash
-        run: ./scripts/verify-version.sh "${GITHUB_REF_NAME}"
+        run: ./scripts/verify-version.sh "${RELEASE_TAG}"
 
       - name: Restore release signing key
         shell: bash
@@ -97,7 +115,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
+          version="${RELEASE_TAG#v}"
           asset_name="JellyfinForRayneo-${version}-arm64-v8a.apk"
           release_directory="${RUNNER_TEMP}/release"
           mkdir -p "${release_directory}"
@@ -119,15 +137,15 @@ jobs:
           release_flags=(
             --verify-tag
             --generate-notes
-            --title "Jellyfin for RayNeo ${GITHUB_REF_NAME}"
+            --title "Jellyfin for RayNeo ${RELEASE_TAG}"
             --notes "正式签名的 ARM64 APK；安装前可使用随附 SHA-256 文件校验下载。"
           )
-          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+          if [[ "${RELEASE_TAG}" == *-* ]]; then
             release_flags+=(--prerelease)
           else
             release_flags+=(--latest)
           fi
-          gh release create "${GITHUB_REF_NAME}" \
+          gh release create "${RELEASE_TAG}" \
             "${RELEASE_DIRECTORY}/${RELEASE_ASSET}#Signed ARM64 APK" \
             "${RELEASE_DIRECTORY}/${RELEASE_ASSET}.sha256#SHA-256 checksum" \
             "${release_flags[@]}"
