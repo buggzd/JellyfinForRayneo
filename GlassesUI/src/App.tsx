@@ -384,11 +384,13 @@ function AmbientBackground({
   imageUrl,
   dim = 0.45,
   homeCover = false,
+  imageVisible = true,
 }: {
   tone: number
   imageUrl?: string
   dim?: number
   homeCover?: boolean
+  imageVisible?: boolean
 }) {
   const fallbackImage = new URL(
     tone % 3 === 1 ? './assets/monochrome-flow.png' : './assets/crystal-flow.png',
@@ -403,7 +405,7 @@ function AmbientBackground({
 
   return (
     <div className={cx('ambient', homeCover && 'ambient--home-cover')} aria-hidden="true">
-      <div className="ambient__image" style={style} />
+      {imageVisible && <div className="ambient__image" style={style} />}
       <div className={`ambient__spectrum ambient__spectrum--${tone % 4}`} />
       <div className="ambient__veil" />
       <div className="ambient__grain" />
@@ -2495,6 +2497,7 @@ export default function App() {
             : backdropItem.backdropUrl}
           dim={page === 'home' ? 0.94 : page === 'detail' ? 0.48 : 0.42}
           homeCover={page === 'home'}
+          imageVisible={page !== 'detail'}
         />
       )}
       {pageNode}
