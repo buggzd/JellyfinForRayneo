@@ -1165,6 +1165,7 @@ function SearchPage({
                       onFocus={() => { onResultFocus(item.id); onPreview(item) }}
                     >
                       <ArtFrame item={item} className="series-search-result__art" />
+                      <span className="series-search-result__title">{item.title}</span>
                     </button>
                   )
                 })}
