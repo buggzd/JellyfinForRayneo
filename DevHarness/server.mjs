@@ -7,7 +7,12 @@ import { fileURLToPath } from 'node:url'
 
 const harnessDirectory = dirname(fileURLToPath(import.meta.url))
 const projectDirectory = resolve(harnessDirectory, '..')
-const developmentConfigPath = resolve(projectDirectory, '.jellyfin-dev.json')
+const configuredDevelopmentConfigPath = String(
+  process.env.RAYNEO_JELLYFIN_DEV_CONFIG || '',
+).trim()
+const developmentConfigPath = configuredDevelopmentConfigPath
+  ? resolve(configuredDevelopmentConfigPath)
+  : resolve(projectDirectory, '.jellyfin-dev.json')
 const versionPropertiesPath = resolve(projectDirectory, 'version.properties')
 const host = '127.0.0.1'
 const port = 4_177

@@ -16,6 +16,11 @@ function applicationVersion() {
 }
 
 function developmentCredentials(): Plugin {
+  const configuredPath = process.env.RAYNEO_JELLYFIN_DEV_CONFIG?.trim()
+  const developmentConfigPath = configuredPath
+    ? resolve(configuredPath)
+    : resolve(import.meta.dirname, '../.jellyfin-dev.json')
+
   return {
     name: 'jellyfin-development-credentials',
     apply: 'serve',
@@ -24,8 +29,7 @@ function developmentCredentials(): Plugin {
         response.setHeader('Content-Type', 'application/json; charset=utf-8')
         response.setHeader('Cache-Control', 'no-store')
         try {
-          const path = resolve(import.meta.dirname, '../.jellyfin-dev.json')
-          const config = JSON.parse(readFileSync(path, 'utf8')) as unknown
+          const config = JSON.parse(readFileSync(developmentConfigPath, 'utf8')) as unknown
           response.statusCode = 200
           response.end(JSON.stringify(config))
         } catch {
