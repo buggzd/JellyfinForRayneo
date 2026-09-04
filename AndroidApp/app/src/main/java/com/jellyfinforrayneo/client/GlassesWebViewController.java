@@ -32,6 +32,7 @@ final class GlassesWebViewController
 {
     private static final String GLASSES_URL = WebNavigationPolicy.GLASSES_ROOT + "index.html";
     private static final long RECREATE_DELAY_MS = 400L;
+    private static final int MAX_REMOTE_COMMAND_LENGTH = 64;
 
     interface BootstrapProvider
     {
@@ -94,7 +95,8 @@ final class GlassesWebViewController
 
     boolean dispatchCommand(String command)
     {
-        if (!ready || webView == null || command == null || command.length() > 32)
+        if (!ready || webView == null || command == null
+                || command.length() > MAX_REMOTE_COMMAND_LENGTH)
         {
             return false;
         }

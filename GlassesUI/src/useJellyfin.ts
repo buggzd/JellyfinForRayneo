@@ -16,6 +16,7 @@ import {
 } from './runtime'
 
 export type JellyfinUiStatus = 'booting' | 'loading' | 'ready' | 'no-session' | 'error'
+export type SeriesIndexStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 function patchCatalogItem(
   snapshot: CatalogSnapshot,
@@ -43,7 +44,11 @@ export function useJellyfin() {
   const [error, setError] = useState('')
   const [errorCode, setErrorCode] = useState<JellyfinFailureCode>('none')
   const [refreshing, setRefreshing] = useState(false)
+  const [seriesIndex, setSeriesIndex] = useState<MediaItem[]>([])
+  const [seriesIndexStatus, setSeriesIndexStatus] = useState<SeriesIndexStatus>('idle')
   const loadGeneration = useRef(0)
+  const seriesIndexGeneration = useRef(0)
+  const seriesIndexAbort = useRef<AbortController | null>(null)
   const snapshotRef = useRef<CatalogSnapshot | null>(null)
 
   useEffect(() => {
@@ -128,10 +133,45 @@ export function useJellyfin() {
     return client.loadFolder(parentId)
   }, [client])
 
-  const search = useCallback(async (term: string) => {
-    if (!client) return []
-    return client.search(term)
+  const loadSeriesIndex = useCallback(async () => {
+    if (!client) return false
+    seriesIndexAbort.current?.abort()
+    const controller = new AbortController()
+    seriesIndexAbort.current = controller
+    const generation = ++seriesIndexGeneration.current
+    setSeriesIndexStatus('loading')
+    try {
+      const next = await client.loadSeriesIndex(controller.signal)
+      if (generation !== seriesIndexGeneration.current) return false
+      setSeriesIndex(next)
+      setSeriesIndexStatus('ready')
+      return true
+    } catch {
+      if (generation !== seriesIndexGeneration.current) return false
+      setSeriesIndexStatus('error')
+      return false
+    } finally {
+      if (seriesIndexAbort.current === controller) seriesIndexAbort.current = null
+    }
   }, [client])
+
+  useEffect(() => {
+    seriesIndexAbort.current?.abort()
+    if (!client) {
+      seriesIndexGeneration.current += 1
+      setSeriesIndex([])
+      setSeriesIndexStatus('idle')
+      return
+    }
+
+    setSeriesIndex([])
+    void loadSeriesIndex()
+    return () => {
+      seriesIndexAbort.current?.abort()
+      seriesIndexAbort.current = null
+      seriesIndexGeneration.current += 1
+    }
+  }, [catalogGeneration, client, loadSeriesIndex])
 
   const loadDetail = useCallback(async (itemId: string, seasonId?: string) => {
     if (!client) throw new Error('Jellyfin 会话不可用。')
@@ -152,6 +192,9 @@ export function useJellyfin() {
           : patched.favorites.filter((candidate) => candidate.id !== item.id),
       }
     })
+    setSeriesIndex((current) => current.map((candidate) => (
+      candidate.id === item.id ? { ...candidate, favorite } : candidate
+    )))
     return true
   }, [client])
 
@@ -165,6 +208,16 @@ export function useJellyfin() {
           playbackPositionTicks: played ? 0 : item.playbackPositionTicks,
         })
       : current)
+    setSeriesIndex((current) => current.map((candidate) => (
+      candidate.id === item.id
+        ? {
+            ...candidate,
+            watched: played,
+            progress: played ? undefined : item.progress,
+            playbackPositionTicks: played ? 0 : item.playbackPositionTicks,
+          }
+        : candidate
+    )))
     return true
   }, [client])
 
@@ -195,8 +248,20 @@ export function useJellyfin() {
     failed = false,
   ) => client?.reportPlaybackStopped(plan, positionTicks, failed) ?? Promise.resolve(), [client])
 
-  const refresh = useCallback(() => loadCatalog(true), [loadCatalog])
-  const retry = useCallback(() => loadCatalog(false), [loadCatalog])
+  const refresh = useCallback(async () => {
+    const [catalogSucceeded] = await Promise.all([
+      loadCatalog(true),
+      loadSeriesIndex(),
+    ])
+    return catalogSucceeded
+  }, [loadCatalog, loadSeriesIndex])
+  const retry = useCallback(async () => {
+    const [catalogSucceeded] = await Promise.all([
+      loadCatalog(false),
+      loadSeriesIndex(),
+    ])
+    return catalogSucceeded
+  }, [loadCatalog, loadSeriesIndex])
 
   return {
     runtime,
@@ -205,10 +270,11 @@ export function useJellyfin() {
     error,
     errorCode,
     refreshing,
+    seriesIndex,
+    seriesIndexStatus,
     refresh,
     retry,
     loadFolder,
-    search,
     loadDetail,
     setFavorite,
     setPlayed,

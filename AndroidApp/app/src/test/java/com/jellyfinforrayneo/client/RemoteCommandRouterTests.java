@@ -18,9 +18,10 @@ public final class RemoteCommandRouterTests
 
         assertTrue(router.submit("up"));
         assertTrue(router.submit("submit"));
+        assertTrue(router.submit("search-submit"));
         assertFalse(router.submit("javascript:alert(1)"));
         assertFalse(router.submit("volume:999"));
-        assertEquals(2, router.pendingCount());
+        assertEquals(3, router.pendingCount());
     }
 
     @Test
@@ -62,5 +63,35 @@ public final class RemoteCommandRouterTests
         router.submit("submit");
 
         assertEquals(List.of("enter"), delivered);
+    }
+
+    @Test
+    public void submitSearchText_PreservesBoundedAsciiQuery()
+    {
+        RemoteCommandRouter router = new RemoteCommandRouter();
+        List<String> delivered = new ArrayList<>();
+        router.setSink(command ->
+        {
+            delivered.add(command);
+            return true;
+        });
+        router.setReady(true);
+
+        assertTrue(router.submitSearchText("QYN 12 "));
+        assertTrue(router.submitSearchText(""));
+        assertFalse(router.submitSearchText("庆余年"));
+        assertFalse(router.submitSearchText(repeat('a', RemoteCommandRouter.MAX_SEARCH_QUERY_LENGTH + 1)));
+
+        assertEquals(List.of("search-text:qyn 12 ", "search-text:"), delivered);
+    }
+
+    private static String repeat(char value, int count)
+    {
+        StringBuilder result = new StringBuilder(count);
+        for (int index = 0; index < count; index++)
+        {
+            result.append(value);
+        }
+        return result.toString();
     }
 }

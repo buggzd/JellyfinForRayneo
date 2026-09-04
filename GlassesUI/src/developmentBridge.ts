@@ -1,12 +1,24 @@
 const channel = 'jellyfin-rayneo-dual-ui-v1'
 const maximumMessageLength = 16_384
-const remoteCommands = new Set(['up', 'down', 'left', 'right', 'submit', 'enter', 'back'])
+const remoteCommands = new Set([
+  'up',
+  'down',
+  'left',
+  'right',
+  'submit',
+  'enter',
+  'back',
+  'search-submit',
+  'search-keyboard-visible',
+  'search-keyboard-hidden',
+])
 const glassesMessageTypes = new Set([
   'manage_login',
   'logout',
   'unauthorized',
   'playback_state',
   'runtime_state',
+  'search_state',
 ])
 
 type BridgeMessage = {
@@ -87,9 +99,12 @@ export function installDevelopmentBridge() {
     if (message.type === 'remote-command') {
       const requestedCommand = boundedText(
         (message.payload as { command?: unknown } | null)?.command,
-        32,
+        64,
       ).toLowerCase()
-      if (!remoteCommands.has(requestedCommand) && !/^volume:(?:100|[1-9]?\d)$/.test(requestedCommand)) return
+      const validSearchText = /^search-text:[a-z0-9 ]{0,48}$/.test(requestedCommand)
+      if (!remoteCommands.has(requestedCommand)
+        && !validSearchText
+        && !/^volume:(?:100|[1-9]?\d)$/.test(requestedCommand)) return
       const command = requestedCommand === 'submit' ? 'enter' : requestedCommand
       window.dispatchEvent(new CustomEvent('rayneo-remote-command', { detail: command }))
       const keys: Record<string, string | undefined> = {

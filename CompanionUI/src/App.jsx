@@ -22,6 +22,7 @@ import {
   RefreshCw,
   RotateCcw,
   Router,
+  Search,
   Server,
   Settings2,
   Share2,
@@ -114,6 +115,15 @@ function formatPlaybackTime(ticks) {
     : `${minutes}:${String(remaining).padStart(2, '0')}`
 }
 
+function normalizeRemoteSearchQuery(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, '')
+    .replace(/ {2,}/g, ' ')
+    .slice(0, 48)
+}
+
 function useStoredState(key, initialValue) {
   const [value, setValue] = useState(() => {
     try {
@@ -146,6 +156,7 @@ function App() {
   const toastTimer = useRef(null)
   const screenRef = useRef(screen)
   const touchpadReadyRef = useRef(false)
+  const searchInputActiveRef = useRef(false)
   const lastNativeErrorRef = useRef('')
   const lastNativePayloadRef = useRef('')
   const opticsFrameRef = useRef(0)
@@ -234,6 +245,12 @@ function App() {
       const touchpadBecameReady = Boolean(next.touchpadReady) && !touchpadReadyRef.current
       touchpadReadyRef.current = Boolean(next.touchpadReady)
       if (touchpadBecameReady && (screenRef.current === 'home' || screenRef.current === 'settings')) {
+        go('touchpad')
+      }
+
+      const searchInputBecameActive = Boolean(next.searchInputActive) && !searchInputActiveRef.current
+      searchInputActiveRef.current = Boolean(next.searchInputActive)
+      if (searchInputBecameActive && (screenRef.current === 'home' || screenRef.current === 'settings')) {
         go('touchpad')
       }
     }
@@ -481,8 +498,12 @@ function App() {
               displayMode={displayMode}
               haptics={haptics}
               playback={nativeState?.playback}
+              searchActive={Boolean(nativeState?.searchInputActive)}
+              searchQuery={nativeState?.searchQuery || ''}
               onExit={() => go('home')}
               onCommand={(command) => callNative('remoteCommand', command, haptics)}
+              onSearchAction={(command) => callNative('remoteCommand', command, false)}
+              onSearchText={(value) => callNative('searchText', value)}
               native={isNative}
             />
           )}
@@ -1215,8 +1236,20 @@ function BottomNav({ active, onHome, onTouchpad, onSettings }) {
   )
 }
 
-function TouchpadScreen({ displayMode, haptics, playback, onExit, onCommand, native }) {
+function TouchpadScreen({
+  displayMode,
+  haptics,
+  playback,
+  searchActive,
+  searchQuery,
+  onExit,
+  onCommand,
+  onSearchAction,
+  onSearchText,
+  native,
+}) {
   const surfaceRef = useRef(null)
+  const searchInputRef = useRef(null)
   const glowRef = useRef(null)
   const point = useRef({ x: 50, y: 50, tx: 50, ty: 50, vx: 0, vy: 0 })
   const glowFrameRef = useRef(0)
@@ -1228,6 +1261,7 @@ function TouchpadScreen({ displayMode, haptics, playback, onExit, onCommand, nat
   const [pressed, setPressed] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [introVisible, setIntroVisible] = useState(true)
+  const [searchValue, setSearchValue] = useState(() => normalizeRemoteSearchQuery(searchQuery))
 
   const animateGlow = () => {
     glowFrameRef.current = 0
@@ -1277,6 +1311,23 @@ function TouchpadScreen({ displayMode, haptics, playback, onExit, onCommand, nat
       window.clearTimeout(tapTimer.current)
     }
   }, [])
+
+  useEffect(() => {
+    setSearchValue(searchActive ? normalizeRemoteSearchQuery(searchQuery) : '')
+  }, [searchActive, searchQuery])
+
+  useEffect(() => {
+    if (!searchActive) return undefined
+    setIntroVisible(false)
+    const timer = window.setTimeout(() => {
+      try {
+        searchInputRef.current?.focus({ preventScroll: true })
+      } catch {
+        searchInputRef.current?.focus()
+      }
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [searchActive])
 
   const vibrate = (pattern = 8) => {
     if (haptics && navigator.vibrate) navigator.vibrate(pattern)
@@ -1388,7 +1439,7 @@ function TouchpadScreen({ displayMode, haptics, playback, onExit, onCommand, nat
   return (
     <section
       ref={surfaceRef}
-      className={`touchpad-screen ${pressed ? 'is-pressed' : ''}`}
+      className={`touchpad-screen ${pressed ? 'is-pressed' : ''} ${searchActive ? 'is-search-input' : ''}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -1414,7 +1465,62 @@ function TouchpadScreen({ displayMode, haptics, playback, onExit, onCommand, nat
         <em>{displayMode === 'stereo' ? '3D' : '2D'}</em>
       </header>
 
-      {showPlayback && (
+      {searchActive && (
+        <aside
+          className="touchpad-search-input"
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerMove={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+        >
+          <span className="touchpad-search-input__status"><i /> 眼镜搜索已连接</span>
+          <label>
+            <Search size={18} />
+            <input
+              ref={searchInputRef}
+              type="search"
+              inputMode="search"
+              enterKeyHint="search"
+              autoCapitalize="none"
+              autoComplete="off"
+              spellCheck="false"
+              maxLength={48}
+              value={searchValue}
+              placeholder="输入拼音首字母、完整拼音或英文"
+              aria-label="眼镜端剧集搜索"
+              onFocus={() => onSearchAction('search-keyboard-visible')}
+              onBlur={() => onSearchAction('search-keyboard-hidden')}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter') return
+                event.preventDefault()
+                onSearchAction('search-submit')
+                event.currentTarget.blur()
+              }}
+              onChange={(event) => {
+                const next = normalizeRemoteSearchQuery(event.target.value)
+                setSearchValue(next)
+                onSearchText(next)
+              }}
+            />
+            {searchValue && (
+              <button
+                type="button"
+                aria-label="清空搜索"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setSearchValue('')
+                  onSearchText('')
+                  searchInputRef.current?.focus()
+                }}
+              >
+                <X size={15} />
+              </button>
+            )}
+          </label>
+          <small>手机键盘输入会实时显示在眼镜中</small>
+        </aside>
+      )}
+
+      {showPlayback && !searchActive && (
         <aside
           className={`touchpad-playback is-${playbackState}`}
           style={{ '--playback-progress': `${playbackProgress}%` }}
@@ -1438,14 +1544,16 @@ function TouchpadScreen({ displayMode, haptics, playback, onExit, onCommand, nat
         <small>{feedback === 'CONFIRM' ? '确认' : feedback === 'BACK' ? '返回' : feedback ? `向${{ UP: '上', DOWN: '下', LEFT: '左', RIGHT: '右' }[feedback]}` : ''}</small>
       </div>
 
-      <div className={`touchpad-intro ${introVisible ? 'is-visible' : ''}`}>
+      <div className={`touchpad-intro ${introVisible && !searchActive ? 'is-visible' : ''}`}>
         <span className="touchpad-intro__mark"><i /></span>
         <strong>触控已就绪</strong>
         <small>在任意位置开始</small>
       </div>
 
-      <footer className={introVisible ? 'is-visible' : ''}>
-        滑动移动 &nbsp;·&nbsp; 单击确认 &nbsp;·&nbsp; 双击返回
+      <footer className={introVisible || searchActive ? 'is-visible' : ''}>
+        {searchActive
+          ? '输入完成后点键盘“搜索”，焦点会进入眼镜端结果'
+          : '滑动移动 · 单击确认 · 双击返回'}
       </footer>
     </section>
   )

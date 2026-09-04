@@ -2,11 +2,13 @@ package com.jellyfinforrayneo.client;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -70,6 +72,9 @@ final class CompanionWebViewController
 
         @android.webkit.JavascriptInterface
         void remoteCommand(String value, boolean haptic);
+
+        @android.webkit.JavascriptInterface
+        void searchText(String value);
 
         @android.webkit.JavascriptInterface
         void previewHaptic();
@@ -176,6 +181,44 @@ final class CompanionWebViewController
         }
     }
 
+    void showSearchKeyboard()
+    {
+        WebView current = webView;
+        if (current == null)
+        {
+            return;
+        }
+        current.requestFocus();
+        current.postDelayed(() ->
+        {
+            if (current != webView || destroyed)
+            {
+                return;
+            }
+            InputMethodManager keyboard = (InputMethodManager) activity.getSystemService(
+                    Context.INPUT_METHOD_SERVICE);
+            if (keyboard != null)
+            {
+                keyboard.showSoftInput(current, InputMethodManager.SHOW_IMPLICIT);
+            }
+        }, 240L);
+    }
+
+    void hideSearchKeyboard()
+    {
+        WebView current = webView;
+        if (current == null)
+        {
+            return;
+        }
+        InputMethodManager keyboard = (InputMethodManager) activity.getSystemService(
+                Context.INPUT_METHOD_SERVICE);
+        if (keyboard != null)
+        {
+            keyboard.hideSoftInputFromWindow(current.getWindowToken(), 0);
+        }
+    }
+
     boolean isHardwareAccelerated()
     {
         return webView != null && webView.isHardwareAccelerated();
@@ -183,6 +226,7 @@ final class CompanionWebViewController
 
     void destroy()
     {
+        hideSearchKeyboard();
         destroyed = true;
         root.removeCallbacks(recreate);
         destroyWebView();

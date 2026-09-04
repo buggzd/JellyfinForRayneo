@@ -4,6 +4,8 @@ export type MediaItem = {
   id: string
   title: string
   original?: string
+  sortName?: string
+  aliases?: string[]
   subtitle: string
   kind: MediaKind
   year?: string

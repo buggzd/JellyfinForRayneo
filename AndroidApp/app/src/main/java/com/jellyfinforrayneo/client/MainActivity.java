@@ -62,11 +62,13 @@ public final class MainActivity extends Activity
     private String webScreen = "connect";
     private String glassesRuntimeState = "booting";
     private String glassesRuntimeErrorCode = "none";
+    private String glassesSearchQuery = "";
     private int glassesCatalogGeneration;
     private boolean error;
     private boolean busy;
     private boolean discoveryScanning;
     private boolean glassesWebReady;
+    private boolean glassesSearchActive;
     private boolean destroyed;
 
     @Override
@@ -116,6 +118,12 @@ public final class MainActivity extends Activity
                         {
                             glassesRuntimeState = "booting";
                             glassesRuntimeErrorCode = "none";
+                            glassesSearchActive = false;
+                            glassesSearchQuery = "";
+                            if (companionWebView != null)
+                            {
+                                companionWebView.hideSearchKeyboard();
+                            }
                             if (sessions != null && sessions.hasSession())
                             {
                                 state = "session_ready";
@@ -380,6 +388,9 @@ public final class MainActivity extends Activity
         sessions.clear();
         remoteCommands.clear();
         playback.clear();
+        glassesSearchActive = false;
+        glassesSearchQuery = "";
+        companionWebView.hideSearchKeyboard();
         quickConnectCode = "";
         glassesRuntimeState = "no-session";
         glassesRuntimeErrorCode = "none";
@@ -513,6 +524,26 @@ public final class MainActivity extends Activity
                 }
                 pushCompanionState();
                 break;
+            case SEARCH_STATE:
+            {
+                boolean wasSearchActive = glassesSearchActive;
+                glassesSearchActive = "active".equals(incoming.state);
+                glassesSearchQuery = glassesSearchActive ? incoming.query : "";
+                if (!glassesSearchActive)
+                {
+                    remoteCommands.clear();
+                }
+                pushCompanionState();
+                if (glassesSearchActive && !wasSearchActive)
+                {
+                    companionWebView.showSearchKeyboard();
+                }
+                else if (!glassesSearchActive && wasSearchActive)
+                {
+                    companionWebView.hideSearchKeyboard();
+                }
+                break;
+            }
             default:
                 break;
         }
@@ -568,6 +599,8 @@ public final class MainActivity extends Activity
             result.put("glassesRuntimeErrorCode", glassesRuntimeErrorCode);
             result.put("mediaReady", mediaReady);
             result.put("touchpadReady", glassesWebReady && mediaReady);
+            result.put("searchInputActive", glassesSearchActive);
+            result.put("searchQuery", glassesSearchQuery);
             result.put("displayMode", displayState.requestedMode);
             result.put("activeDisplayMode", displayState.activeMode);
             result.put("displayModeApplied", displayState.displayModeApplied);
@@ -1080,7 +1113,14 @@ public final class MainActivity extends Activity
         @JavascriptInterface
         public void ready()
         {
-            runOnUiThread(() -> companionWebView.onJavascriptReady());
+            runOnUiThread(() ->
+            {
+                companionWebView.onJavascriptReady();
+                if (glassesSearchActive)
+                {
+                    companionWebView.showSearchKeyboard();
+                }
+            });
         }
 
         @JavascriptInterface
@@ -1235,6 +1275,23 @@ public final class MainActivity extends Activity
                 if (remoteCommands.submit(command) && haptic)
                 {
                     companionWebView.haptic("back".equals(command));
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void searchText(String value)
+        {
+            if (value == null || value.length() > RemoteCommandRouter.MAX_SEARCH_QUERY_LENGTH)
+            {
+                return;
+            }
+            String query = value;
+            runOnUiThread(() ->
+            {
+                if (glassesSearchActive)
+                {
+                    remoteCommands.submitSearchText(query);
                 }
             });
         }
