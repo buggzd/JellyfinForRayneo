@@ -388,19 +388,28 @@ function AmbientBackground({
   )
 }
 
-function ArtFrame({ item, wide = false, className }: { item: MediaItem; wide?: boolean; className?: string }) {
+function ArtFrame({
+  item,
+  wide = false,
+  className,
+}: {
+  item: MediaItem
+  wide?: boolean
+  className?: string
+}) {
+  const imageUrl = wide ? item.imageUrl : item.coverUrl ?? item.imageUrl
   const fallbackImage = new URL(
     item.art % 3 === 1 ? './assets/monochrome-flow.png' : './assets/crystal-flow.png',
     document.baseURI,
   ).href
   const style = {
-    '--art-hue': item.imageUrl ? '0deg' : `${item.art * 28}deg`,
-    '--art-x': item.imageUrl ? '50%' : `${30 + (item.art % 5) * 14}%`,
-    '--art-y': item.imageUrl ? '50%' : `${30 + (item.art % 4) * 15}%`,
-    backgroundImage: `url(${item.imageUrl ?? fallbackImage})`,
+    '--art-hue': imageUrl ? '0deg' : `${item.art * 28}deg`,
+    '--art-x': imageUrl ? '50%' : `${30 + (item.art % 5) * 14}%`,
+    '--art-y': imageUrl ? '50%' : `${30 + (item.art % 4) * 15}%`,
+    backgroundImage: `url(${imageUrl ?? fallbackImage})`,
   } as CSSProperties
   return (
-    <div className={cx('art-frame', item.imageUrl && 'art-frame--real', wide ? 'art-frame--wide' : 'art-frame--poster', className)}>
+    <div className={cx('art-frame', imageUrl && 'art-frame--real', wide ? 'art-frame--wide' : 'art-frame--poster', className)}>
       <div className="art-frame__image" style={style} />
       <div className={`art-frame__orb art-frame__orb--${item.art % 4}`} />
       <div className="art-frame__flare" />
@@ -521,6 +530,21 @@ function MediaCard({
   )
 }
 
+type HeroTitleDensity = 'regular' | 'medium' | 'compact' | 'dense'
+
+function heroTitleDensity(title: string): HeroTitleDensity {
+  const visualLength = Array.from(title.trim()).reduce((length, character) => {
+    if (/\s/.test(character)) return length + 0.35
+    if (/[\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff]/.test(character)) return length + 1.8
+    return length + 1
+  }, 0)
+
+  if (visualLength > 28) return 'dense'
+  if (visualLength > 18) return 'compact'
+  if (visualLength > 10) return 'medium'
+  return 'regular'
+}
+
 function HomePage({
   featured,
   shelves,
@@ -544,6 +568,8 @@ function HomePage({
   onRefresh: () => void
   onExit: () => void
 }) {
+  const titleDensity = heroTitleDensity(featured.title)
+
   return (
     <div className="home-page page-enter">
       <PageHeader active="home" serverName={serverName} userName={userName} refreshing={refreshing} onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
@@ -551,7 +577,7 @@ function HomePage({
         <div className="hero-section__copy">
           <div className="hero-eyebrow"><Sparkles size={17} /> LUCENT 为你推荐</div>
           <p className="hero-original">{featured.original}</p>
-          <h1>{featured.title}</h1>
+          <h1 className={cx('hero-title', `hero-title--${titleDensity}`)}>{featured.title}</h1>
           {featured.tagline && <p className="hero-tagline">「{featured.tagline}」</p>}
           <MetaRow item={featured} />
           <p className="hero-overview">{featured.overview || featured.subtitle}</p>
@@ -767,6 +793,9 @@ function BrowsePage({
 
   const visibleItems = shownItems.slice(0, visibleCount)
   const hasMore = visibleItems.length < shownItems.length
+  const showsSeriesPosters = mode === 'library'
+    && path.length > 0
+    && shownItems.some((item) => item.sourceType === 'Series')
   const title = mode === 'favorites' ? '我的收藏' : mode === 'search' ? '全局搜索' : path.at(-1)?.item.title ?? '媒体库'
   const eyebrow = mode === 'favorites' ? 'SAVED MOMENTS' : mode === 'search' ? 'SEARCH EVERYWHERE' : path.length ? 'FOLDER VIEW' : 'ALL LIBRARIES'
 
@@ -969,12 +998,17 @@ function BrowsePage({
             <p>从 Jellyfin 读取这个目录的内容…</p>
           </section>
         ) : shownItems.length ? (
-          <section className={cx('media-grid', mode === 'search' && 'search-results', path.length > 0 && 'media-grid--wide')}>
+          <section className={cx(
+            'media-grid',
+            mode === 'search' && 'search-results',
+            path.length > 0 && !showsSeriesPosters && 'media-grid--wide',
+            showsSeriesPosters && 'media-grid--series-posters',
+          )}>
             {visibleItems.map((item, index) => (
               <MediaCard
                 key={item.id}
                 item={item}
-                wide={path.length > 0}
+                wide={path.length > 0 && item.sourceType !== 'Series'}
                 onOpen={openItem}
                 onPreview={onPreview}
                 autoFocusTarget={mode !== 'search' && index === 0 && filter !== 'all'}
@@ -1348,6 +1382,10 @@ function PlayerPage({
   const hideTimer = useRef<number | null>(null)
   const feedbackTimer = useRef<number | null>(null)
   const volumeTimer = useRef<number | null>(null)
+  const trackPanelRef = useRef<HTMLElement>(null)
+  const trackPanelReturnFocus = useRef<HTMLElement | null>(null)
+  const trackPanelFocusFrame = useRef<number | null>(null)
+  const trackPanelRestoreFrame = useRef<number | null>(null)
   const feedbackId = useRef(0)
   const playing = status === 'playing' || status === 'buffering'
 
@@ -1624,6 +1662,113 @@ function PlayerPage({
     if (showControls) reveal()
   }, [reveal])
 
+  const focusTrackPanelTarget = useCallback((target?: HTMLElement | null) => {
+    if (!target) return false
+    focusSpatialElement(target)
+
+    const list = target.closest<HTMLElement>('.track-list')
+    if (!list) return true
+
+    const targetRect = target.getBoundingClientRect()
+    const listRect = list.getBoundingClientRect()
+    const focusInset = 10
+    const scrollDelta = targetRect.top < listRect.top + focusInset
+      ? targetRect.top - listRect.top - focusInset
+      : targetRect.bottom > listRect.bottom - focusInset
+        ? targetRect.bottom - listRect.bottom + focusInset
+        : 0
+
+    if (scrollDelta) {
+      list.scrollTo({
+        top: list.scrollTop + scrollDelta,
+        behavior: 'smooth',
+      })
+    }
+    return true
+  }, [])
+
+  const closeTrackPanel = useCallback((restoreFocus = true) => {
+    const returnTarget = trackPanelReturnFocus.current
+    if (trackPanelFocusFrame.current) window.cancelAnimationFrame(trackPanelFocusFrame.current)
+    if (trackPanelRestoreFrame.current) window.cancelAnimationFrame(trackPanelRestoreFrame.current)
+    setPanel(null)
+    setControls(true)
+
+    if (!restoreFocus) return
+    trackPanelRestoreFrame.current = window.requestAnimationFrame(() => {
+      const target = returnTarget?.isConnected && returnTarget.matches(focusableSelector)
+        ? returnTarget
+        : document.querySelector<HTMLElement>('.player-progress__bar')
+      focusSpatialElement(target)
+      trackPanelRestoreFrame.current = null
+    })
+  }, [])
+
+  const toggleTrackPanel = useCallback((kind: 'audio' | 'subtitles') => {
+    if (panel === kind) {
+      closeTrackPanel()
+      return
+    }
+
+    if (trackPanelRestoreFrame.current) window.cancelAnimationFrame(trackPanelRestoreFrame.current)
+    trackPanelReturnFocus.current = document.querySelector<HTMLElement>(`.player-track-trigger--${kind}`)
+    setPanel(kind)
+    setControls(true)
+  }, [closeTrackPanel, panel])
+
+  const moveTrackPanelFocus = useCallback((direction: Direction) => {
+    const root = trackPanelRef.current
+    if (!root) return false
+
+    const closeButton = root.querySelector<HTMLElement>('.track-panel__close')
+    const options = Array.from(root.querySelectorAll<HTMLElement>('.track-panel__option:not([disabled])'))
+    const current = currentSpatialFocus()
+
+    if (!current || !root.contains(current)) {
+      return focusTrackPanelTarget(root.querySelector<HTMLElement>('.track-panel__option.is-active') ?? options[0] ?? closeButton)
+    }
+
+    if (direction === 'left' || direction === 'right') return true
+
+    if (current === closeButton) {
+      if (direction === 'up') {
+        closeTrackPanel()
+      } else {
+        focusTrackPanelTarget(options[0] ?? closeButton)
+      }
+      return true
+    }
+
+    const currentIndex = options.indexOf(current)
+    if (currentIndex < 0) {
+      return focusTrackPanelTarget(options[0] ?? closeButton)
+    }
+
+    if (direction === 'up') {
+      focusTrackPanelTarget(currentIndex === 0 ? closeButton : options[currentIndex - 1])
+    } else {
+      focusTrackPanelTarget(options[Math.min(options.length - 1, currentIndex + 1)])
+    }
+    return true
+  }, [closeTrackPanel, focusTrackPanelTarget])
+
+  useEffect(() => {
+    if (!panel || !controls) return
+    if (trackPanelFocusFrame.current) window.cancelAnimationFrame(trackPanelFocusFrame.current)
+    trackPanelFocusFrame.current = window.requestAnimationFrame(() => {
+      const root = trackPanelRef.current
+      focusTrackPanelTarget(
+        root?.querySelector<HTMLElement>('.track-panel__option.is-active')
+          ?? root?.querySelector<HTMLElement>('.track-panel__option'),
+      )
+      trackPanelFocusFrame.current = null
+    })
+    return () => {
+      if (trackPanelFocusFrame.current) window.cancelAnimationFrame(trackPanelFocusFrame.current)
+      trackPanelFocusFrame.current = null
+    }
+  }, [controls, focusTrackPanelTarget, panel])
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       focusSpatialElement(document.querySelector<HTMLElement>('.player-controls [data-autofocus="true"]'))
@@ -1637,8 +1782,13 @@ function PlayerPage({
       if (hideTimer.current) window.clearTimeout(hideTimer.current)
       if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current)
       if (volumeTimer.current) window.clearTimeout(volumeTimer.current)
+      if (trackPanelFocusFrame.current) window.cancelAnimationFrame(trackPanelFocusFrame.current)
     }
   }, [scheduleHide])
+
+  useEffect(() => () => {
+    if (trackPanelRestoreFrame.current) window.cancelAnimationFrame(trackPanelRestoreFrame.current)
+  }, [])
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -1673,6 +1823,27 @@ function PlayerPage({
   useEffect(() => {
     const listener = (event: Event) => {
       const key = (event as CustomEvent<string>).detail
+      if (panel) {
+        reveal()
+        if (key === 'left' || key === 'right' || key === 'up' || key === 'down') {
+          moveTrackPanelFocus(key)
+          return
+        }
+        if (key === 'enter') {
+          const active = currentSpatialFocus()
+          if (active && trackPanelRef.current?.contains(active)) {
+            active.click()
+          } else {
+            moveTrackPanelFocus('down')
+          }
+          return
+        }
+        if (key === 'back') {
+          closeTrackPanel()
+          return
+        }
+      }
+
       if (key === 'left' || key === 'right') {
         const active = currentSpatialFocus()
         const progressFocused = active instanceof HTMLElement
@@ -1720,17 +1891,12 @@ function PlayerPage({
         return
       }
       if (key === 'back') {
-        if (panel) {
-          setPanel(null)
-          reveal()
-        } else {
-          onBack()
-        }
+        onBack()
       }
     }
     window.addEventListener('lucent-player-key', listener)
     return () => window.removeEventListener('lucent-player-key', listener)
-  }, [controls, onBack, panel, reveal, seek, togglePlayback])
+  }, [closeTrackPanel, controls, moveTrackPanelFocus, onBack, panel, reveal, seek, togglePlayback])
 
   useEffect(() => {
     const listener = (event: Event) => {
@@ -1757,9 +1923,10 @@ function PlayerPage({
       audioStreamIndex: kind === 'audio' ? index : active.audioStreamIndex,
       subtitleStreamIndex: kind === 'subtitles' ? index : active.subtitleStreamIndex,
     }
+    closeTrackPanel()
     stopPlan(active)
     void prepare(positionTicks(), nextSelection, shouldPlay)
-  }, [positionTicks, prepare, stopPlan])
+  }, [closeTrackPanel, positionTicks, prepare, stopPlan])
 
   const handlePlaying = useCallback(() => {
     const active = planRef.current
@@ -1838,8 +2005,8 @@ function PlayerPage({
           <FocusButton variant="round" label="退出播放器" onClick={onBack}><ArrowLeft size={22} /></FocusButton>
           <div className="player-title"><small>正在播放 · {episodeLabel}</small><strong>{item.title} <span>·</span> {titleDetail}</strong></div>
           {plan && <div className="player-direct"><span /> {playbackMethod} <i /> {formatLabel}</div>}
-          <FocusButton variant="glass" disabled={!audioTracks.length || status === 'preparing'} icon={<AudioLines size={19} />} active={panel === 'audio'} onClick={() => { setPanel((value) => value === 'audio' ? null : 'audio'); setControls(true) }}>音轨</FocusButton>
-          <FocusButton variant="glass" disabled={!subtitleTracks.length || status === 'preparing'} icon={<Captions size={19} />} active={panel === 'subtitles'} onClick={() => { setPanel((value) => value === 'subtitles' ? null : 'subtitles'); setControls(true) }}>字幕</FocusButton>
+          <FocusButton className="player-track-trigger--audio" variant="glass" disabled={!audioTracks.length || status === 'preparing'} icon={<AudioLines size={19} />} active={panel === 'audio'} onClick={() => toggleTrackPanel('audio')}>音轨</FocusButton>
+          <FocusButton className="player-track-trigger--subtitles" variant="glass" disabled={!subtitleTracks.length || status === 'preparing'} icon={<Captions size={19} />} active={panel === 'subtitles'} onClick={() => toggleTrackPanel('subtitles')}>字幕</FocusButton>
         </header>
       </div>
 
@@ -1902,8 +2069,8 @@ function PlayerPage({
       )}
 
       {panel && controls && (
-        <aside className="track-panel glass-panel">
-          <header><div><small>PLAYBACK OPTIONS</small><h2>{panel === 'audio' ? '选择音轨' : '选择字幕'}</h2></div><FocusButton variant="round" label="关闭面板" onClick={() => setPanel(null)}><X size={20} /></FocusButton></header>
+        <aside ref={trackPanelRef} className="track-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="track-panel-title">
+          <header><div><small>PLAYBACK OPTIONS</small><h2 id="track-panel-title">{panel === 'audio' ? '选择音轨' : '选择字幕'}</h2></div><FocusButton className="track-panel__close" variant="round" label="关闭面板" onClick={() => closeTrackPanel()}><X size={20} /></FocusButton></header>
           <div className="track-list">
             {(panel === 'audio'
               ? audioTracks
@@ -1912,7 +2079,7 @@ function PlayerPage({
               const selected = panel === 'audio'
                 ? plan?.audioStreamIndex === track.index
                 : plan?.subtitleStreamIndex === track.index
-              return <FocusButton key={`${panel}-${track.index}`} variant="glass" active={selected} trailing={selected ? <Check size={19} /> : undefined} onClick={() => chooseTrack(panel, track.index)}>{track.label}</FocusButton>
+              return <FocusButton key={`${panel}-${track.index}`} className="track-panel__option" variant="glass" active={selected} trailing={selected ? <Check size={19} /> : undefined} onClick={() => chooseTrack(panel, track.index)}>{track.label}</FocusButton>
             })}
           </div>
         </aside>
