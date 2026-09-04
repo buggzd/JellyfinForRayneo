@@ -14,11 +14,33 @@ local.properties
 /AndroidApp/build/
 /AndroidApp/app/release/
 
-# Downloaded SDK binaries and local release signing material
+# Downloaded SDK binaries
 /AndroidApp/app/libs/*.aar
+
+# Local credentials, environment files, and release signing material
+.env
+.env.*
+!.env.example
+!.env.*.example
 keystore.properties
+signing.properties
 *.jks
+*.jks.*
 *.keystore
+*.keystore.*
+*.p12
+*.p12.*
+*.pfx
+*.pfx.*
+*.pkcs12
+*.pkcs12.*
+*.pem
+*.key
+*.pk8
+*keystore*.base64
+*keystore*.b64
+*signing*.base64
+*signing*.b64
 
 # Local dependencies for the embedded phone companion frontend.
 /CompanionUI/node_modules/
@@ -36,3 +58,4 @@ Thumbs.db
 # Generated Android packages
 *.apk
 *.aab
+*.idsig

@@ -35,7 +35,7 @@ WebView support; otherwise use Jellyfin's H.264/AAC HLS fallback.
 
 ## Build and Verification
 
-Versioning and releases: follow `docs/VERSIONING.md`.
+Versioning: `docs/VERSIONING.md`; releases: `docs/RELEASE.md`.
 
 Use JDK 17+, Android platform 35/build tools 34.0.0, and the pinned RayNeo SDK.
 

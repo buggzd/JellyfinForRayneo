@@ -191,7 +191,7 @@ RAYNEO_DUAL_UI_NO_OPEN=1 ./scripts/dev-dual-ui.sh
 
 ## Release 签名与旧版本升级
 
-版本号、Git 标签、发布前检查和 GitHub Actions 规则统一见 [版本与发布规则](VERSIONING.md)。
+版本号与 Git 标签约束见 [版本与发布规则](VERSIONING.md)，正式发布操作和验收清单见 [Release 发布手册](RELEASE.md)。
 
 在本机创建被 Git 忽略的 `AndroidApp/keystore.properties`：
 

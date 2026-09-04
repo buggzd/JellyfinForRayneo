@@ -1,5 +1,7 @@
 # 版本与发布规则
 
+本文档定义不可变的版本约束；实际发布步骤和验收清单见 [Release 发布手册](RELEASE.md)。
+
 ## 唯一版本源
 
 仓库根目录的 [`version.properties`](../version.properties) 是应用版本的唯一来源：

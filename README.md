@@ -75,6 +75,7 @@
 | 安装、首次连接、显示模式、诊断与常见问题 | [使用指南](docs/USER_GUIDE.md) |
 | 环境准备、构建、签名、浏览器开发与测试 | [开发和构建指南](docs/DEVELOPMENT.md) |
 | 版本号、Git 标签与自动发布 | [版本与发布规则](docs/VERSIONING.md) |
+| 正式发布、签名备份、验签与失败恢复 | [Release 发布手册](docs/RELEASE.md) |
 | 会话边界、WebView 桥、显示状态机与播放架构 | [Android 架构说明](docs/ANDROID_ARCHITECTURE.md) |
 | 已有能力与后续功能优先级 | [功能路线图](docs/JELLYFIN_FEATURE_ROADMAP.md) |
 | Jellyfin Web 的信息架构与交互采样 | [Jellyfin Web 复现规格](docs/Jellyfin-Web-Reproduction-Spec.md) |
