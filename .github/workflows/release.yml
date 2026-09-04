@@ -91,7 +91,7 @@ jobs:
           git diff --exit-code
           apk_path="AndroidApp/app/build/outputs/apk/release/app-release.apk"
           test -f "${apk_path}"
-          apksigner verify --verbose "${apk_path}"
+          "${ANDROID_HOME}/build-tools/34.0.0/apksigner" verify --verbose "${apk_path}"
 
       - name: Prepare release assets
         shell: bash
