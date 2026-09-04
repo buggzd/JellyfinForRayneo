@@ -1406,10 +1406,6 @@ kbd {
   min-height: 100vh;
 }
 
-.ambient.ambient--home .ambient__image {
-  animation: home-hero-image-enter-from-right 760ms cubic-bezier(.33, 0, .2, 1) backwards;
-}
-
 @keyframes home-hero-image-enter-from-right {
   from {
     transform: translate3d(100vw, 0, 0);
@@ -3259,7 +3255,8 @@ kbd {
   background-size: auto 132%;
   filter: saturate(1.06) contrast(1.05) brightness(.78);
   transform: none;
-  animation: none;
+  transition: filter 1.3s ease, opacity 1.2s ease;
+  animation: home-hero-image-enter-from-right 760ms cubic-bezier(.33, 0, .2, 1) backwards;
 }
 
 .ambient--home-cover .ambient__spectrum {
