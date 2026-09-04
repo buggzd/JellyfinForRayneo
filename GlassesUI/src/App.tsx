@@ -155,6 +155,29 @@ function moveFocus(direction: Direction) {
       return
     }
 
+    const episodeSection = node.closest<HTMLElement>('.episode-section')
+    if (episodeSection) {
+      const episodeRail = node.closest<HTMLElement>('.episode-rail')
+      if (episodeRail) {
+        const targetRect = node.getBoundingClientRect()
+        const railRect = episodeRail.getBoundingClientRect()
+        const horizontalDelta = targetRect.left + targetRect.width / 2
+          - (railRect.left + railRect.width / 2)
+        episodeRail.scrollTo({
+          left: episodeRail.scrollLeft + horizontalDelta,
+          behavior: 'smooth',
+        })
+      }
+
+      const topInset = Math.max(24, Math.min(48, window.innerHeight * .04))
+      const sectionTop = window.scrollY + episodeSection.getBoundingClientRect().top
+      window.scrollTo({
+        top: Math.max(0, sectionTop - topInset),
+        behavior: 'smooth',
+      })
+      return
+    }
+
     node.scrollIntoView({
       behavior: 'smooth',
       block: direction === 'up' || direction === 'down' ? 'center' : 'nearest',
@@ -1085,6 +1108,7 @@ function DetailPage({
   const [expanded, setExpanded] = useState(false)
   const [infoTab, setInfoTab] = useState<'credits' | 'media'>('credits')
   const [detailSection, setDetailSection] = useState<'episodes' | 'similar' | 'clips' | 'details'>('episodes')
+  const [episodePreview, setEpisodePreview] = useState<MediaItem | null>(null)
 
   useEffect(() => {
     setFavorite(Boolean(resolvedItem.favorite))
@@ -1095,6 +1119,10 @@ function DetailPage({
     if (!detail || loading || episodes.length || detailSection !== 'episodes') return
     setDetailSection(similar.length ? 'similar' : 'details')
   }, [detail, detailSection, episodes.length, loading, similar.length])
+
+  useEffect(() => {
+    setEpisodePreview(null)
+  }, [detail?.selectedSeasonId, resolvedItem.id])
 
   const playTarget = resolvedItem.canPlay
     ? resolvedItem
@@ -1110,6 +1138,9 @@ function DetailPage({
   const premiere = resolvedItem.dateCreated
     ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long' }).format(new Date(resolvedItem.dateCreated))
     : '未提供'
+  const episodePreviewUrl = detailSection === 'episodes'
+    ? episodePreview?.imageUrl ?? episodePreview?.backdropUrl
+    : undefined
 
   const toggleFavorite = async () => {
     if (actionBusy) return
@@ -1191,18 +1222,23 @@ function DetailPage({
           <FocusButton variant="ghost" active={detailSection === 'details'} onClick={() => setDetailSection('details')}>详细信息</FocusButton>
         </nav>
 
-        <div className="detail-tab-stage">
+        <div className={cx('detail-tab-stage', episodePreviewUrl && 'has-episode-preview')}>
+          <div
+            className="detail-tab-stage__episode-background"
+            style={{ backgroundImage: episodePreviewUrl ? `url(${JSON.stringify(episodePreviewUrl)})` : undefined }}
+            aria-hidden="true"
+          />
           {detailSection === 'episodes' && (
             <section className="episode-section detail-tab-panel">
               <header className="section-heading">
                 <div><small>EPISODES</small><h2>剧集与章节</h2></div>
                 <div className="season-switcher">
-                  {detail?.seasons.map((season) => <FocusButton key={season.id} variant="chip" disabled={loading} active={detail.selectedSeasonId === season.id} onClick={() => onSelectSeason(season.id)}>{season.original || season.title}</FocusButton>)}
+                  {detail?.seasons.map((season) => <FocusButton key={season.id} variant="chip" disabled={loading} active={detail.selectedSeasonId === season.id} onClick={() => { setEpisodePreview(null); onSelectSeason(season.id) }}>{season.original || season.title}</FocusButton>)}
                 </div>
               </header>
               <div className="episode-rail">
                 {episodes.map((episode, index) => (
-                    <button key={episode.id} type="button" data-focusable="true" className="episode-card" onClick={() => onPlay(episode)} onFocus={() => onPreview(episode)}>
+                    <button key={episode.id} type="button" data-focusable="true" className="episode-card" onClick={() => onPlay(episode)} onFocus={() => { setEpisodePreview(episode); onPreview(episode) }}>
                       <ArtFrame item={episode} wide />
                       <span className="episode-card__number">{String(episode.indexNumber ?? index + 1).padStart(2, '0')}</span>
                       <span className="episode-card__play"><Play size={19} fill="currentColor" /></span>
