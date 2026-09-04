@@ -445,7 +445,7 @@ function AmbientBackground({
   } as CSSProperties
 
   return (
-    <div className={cx('ambient', homeCover && 'ambient--home-cover', homeShelfPreview && 'ambient--home-shelf')} aria-hidden="true">
+    <div className={cx('ambient', (homeCover || homeShelfPreview) && 'ambient--home', homeCover && 'ambient--home-cover', homeShelfPreview && 'ambient--home-shelf')} aria-hidden="true">
       {imageVisible && <div className="ambient__image" style={style} />}
       <div className={`ambient__spectrum ambient__spectrum--${tone % 4}`} />
       <div className="ambient__veil" />
