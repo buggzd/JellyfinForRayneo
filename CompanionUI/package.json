@@ -1,11 +1,11 @@
 {
   "name": "jellyfin-rayneo-companion-ui",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build --base=./ --outDir ../Assets/StreamingAssets/CompanionUI --emptyOutDir",
+    "build": "vite build --base=./ --outDir ../AndroidApp/app/src/main/assets/CompanionUI --emptyOutDir",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

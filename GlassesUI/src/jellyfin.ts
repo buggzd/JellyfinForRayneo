@@ -162,6 +162,34 @@ export type PlaybackSelection = {
   forceTranscode?: boolean
 }
 
+export type JellyfinFailureCode = 'none' | 'network' | 'http' | 'response' | 'unknown'
+
+const requestTimeoutMs = 20_000
+
+class JellyfinRequestError extends Error {
+  readonly code: Exclude<JellyfinFailureCode, 'none'>
+
+  constructor(code: Exclude<JellyfinFailureCode, 'none'>, message: string) {
+    super(message)
+    this.name = 'JellyfinRequestError'
+    this.code = code
+  }
+}
+
+export function describeJellyfinFailure(reason: unknown): {
+  code: Exclude<JellyfinFailureCode, 'none'>
+  message: string
+} {
+  if (reason instanceof JellyfinRequestError) {
+    return { code: reason.code, message: reason.message }
+  }
+  const message = reason instanceof Error ? reason.message.trim() : ''
+  return {
+    code: 'unknown',
+    message: (message || '无法读取 Jellyfin 数据。').slice(0, 240),
+  }
+}
+
 const itemFields = [
   'Overview',
   'Genres',
@@ -316,19 +344,27 @@ function normalizeContainer(value: string | undefined) {
 }
 
 function inferredVideoBitDepth(stream: JellyfinMediaStream | undefined) {
-  if (stream?.BitDepth) return stream.BitDepth
+  if (stream?.BitDepth && Number.isFinite(stream.BitDepth)) return stream.BitDepth
   const pixelFormat = stream?.PixelFormat?.toLocaleLowerCase() ?? ''
-  const match = pixelFormat.match(/(?:p|yuv\d{3}p)(\d{2})(?:le|be)?$/)
-  return match ? Number(match[1]) : undefined
+  const planar = pixelFormat.match(/(?:yuvj?\d{3}p|gbrp|gray)(\d{2})(?:le|be)?$/)
+  if (planar) return Number(planar[1])
+  const packed = pixelFormat.match(/^p0?(\d{2})(?:le|be)?$/)
+  if (packed) return Number(packed[1])
+  if (/^(?:yuvj?\d{3}p|nv12|nv21)$/.test(pixelFormat)) return 8
+  return undefined
 }
 
 function isHardwareProfileCompatible(stream: JellyfinMediaStream | undefined) {
-  if (!stream) return true
+  if (!stream) return false
   const codec = normalizeCodec(stream.Codec)
   const profile = stream.Profile?.trim().toLocaleLowerCase() ?? ''
+  const pixelFormat = stream.PixelFormat?.trim().toLocaleLowerCase() ?? ''
   const bitDepth = inferredVideoBitDepth(stream)
+  if (!knownWebViewVideoCodecs.some((candidate) => candidate === codec)) return false
+  if (bitDepth === undefined || bitDepth <= 0) return false
+  if (/(?:422|444|gbr|rgb)/.test(pixelFormat)) return false
   const maximumBitDepth = codec === 'h264' || codec === 'vp8' ? 8 : 10
-  if (bitDepth !== undefined && bitDepth > maximumBitDepth) return false
+  if (bitDepth > maximumBitDepth) return false
 
   if (codec === 'h264') {
     return !/(?:high\s*10|high\s*4:2:2|high\s*4:4:4|cavlc\s*4:4:4)/.test(profile)
@@ -345,10 +381,21 @@ function isHardwareProfileCompatible(stream: JellyfinMediaStream | undefined) {
   return true
 }
 
-function isWithinHardwarePlaybackLimits(stream: JellyfinMediaStream | undefined) {
-  return (!stream?.Width || stream.Width <= maximumDirectPlayWidth)
-    && (!stream?.Height || stream.Height <= maximumDirectPlayHeight)
-    && (!stream?.BitRate || stream.BitRate <= directPlayMaxBitrate)
+function isWithinHardwarePlaybackLimits(
+  stream: JellyfinMediaStream | undefined,
+  sourceBitrate: number | undefined,
+) {
+  const bitrate = stream?.BitRate ?? sourceBitrate
+  return Boolean(stream)
+    && Number.isFinite(stream?.Width)
+    && Number(stream?.Width) > 0
+    && Number(stream?.Width) <= maximumDirectPlayWidth
+    && Number.isFinite(stream?.Height)
+    && Number(stream?.Height) > 0
+    && Number(stream?.Height) <= maximumDirectPlayHeight
+    && Number.isFinite(bitrate)
+    && Number(bitrate) > 0
+    && Number(bitrate) <= directPlayMaxBitrate
     && isHardwareProfileCompatible(stream)
 }
 
@@ -528,11 +575,14 @@ export class JellyfinClient {
   readonly session: JellyfinSession
   private readonly hardwareVideoCodecs: ReadonlySet<string>
   private readonly deviceProfile: ReturnType<typeof createWebViewDeviceProfile>
+  private readonly onUnauthorized: () => void
+  private unauthorizedPublished = false
 
-  constructor(session: JellyfinSession) {
+  constructor(session: JellyfinSession, onUnauthorized: () => void = () => undefined) {
     this.session = session
     this.hardwareVideoCodecs = detectHardwareVideoCodecs()
     this.deviceProfile = createWebViewDeviceProfile(this.hardwareVideoCodecs)
+    this.onUnauthorized = onUnauthorized
   }
 
   private url(path: string, query: Record<string, string | number | boolean | undefined> = {}) {
@@ -554,24 +604,59 @@ export class JellyfinClient {
     headers.set('X-Emby-Token', this.session.accessToken)
     headers.set(
       'X-Emby-Authorization',
-      `MediaBrowser Client="Lucent for RayNeo", Device="RayNeo Air", DeviceId="${this.session.deviceId}", Version="0.1.0", Token="${this.session.accessToken}"`,
+      `MediaBrowser Client="Lucent for RayNeo", Device="RayNeo Air", DeviceId="${this.session.deviceId}", Version="0.2.0", Token="${this.session.accessToken}"`,
     )
     if (init.body) headers.set('Content-Type', 'application/json')
 
-    const response = await fetch(this.url(path, query), { ...init, headers, cache: 'no-store' })
-    if (!response.ok) {
-      let message = ''
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), requestTimeoutMs)
+    try {
+      let response: Response
       try {
-        message = (await response.text()).trim()
+        response = await fetch(this.url(path, query), {
+          ...init,
+          headers,
+          cache: 'no-store',
+          signal: controller.signal,
+        })
       } catch {
-        message = ''
+        throw new JellyfinRequestError(
+          'network',
+          controller.signal.aborted
+            ? '眼镜端连接 Jellyfin 超过 20 秒，请检查 WebView 网络与服务器可达性。'
+            : '眼镜端无法访问 Jellyfin。请检查当前网络和服务器地址；IPv6 带端口时必须使用方括号。',
+        )
       }
-      throw new Error(message || `Jellyfin 请求失败（${response.status}）。`)
+      if (!response.ok) {
+        if ((response.status === 401 || response.status === 403) && !this.unauthorizedPublished) {
+          this.unauthorizedPublished = true
+          this.onUnauthorized()
+        }
+        throw new JellyfinRequestError(
+          'http',
+          `Jellyfin 请求失败（HTTP ${response.status}）。`,
+        )
+      }
+      if (response.status === 204 || response.headers.get('Content-Length') === '0') {
+        return undefined as T
+      }
+      try {
+        return await response.json() as T
+      } catch {
+        if (controller.signal.aborted) {
+          throw new JellyfinRequestError(
+            'network',
+            '眼镜端读取 Jellyfin 响应超过 20 秒，请检查网络质量。',
+          )
+        }
+        throw new JellyfinRequestError(
+          'response',
+          'Jellyfin 已响应，但返回的数据格式无法解析。',
+        )
+      }
+    } finally {
+      window.clearTimeout(timeout)
     }
-    if (response.status === 204 || response.headers.get('Content-Length') === '0') {
-      return undefined as T
-    }
-    return response.json() as Promise<T>
   }
 
   private imageUrl(
@@ -967,8 +1052,8 @@ export class JellyfinClient {
     const audioCodec = normalizeCodec(selectedAudio?.Codec)
     const browserContainer = ['mp4', 'm4v', 'mov', 'webm'].includes(container)
     const browserVideo = this.hardwareVideoCodecs.has(videoCodec)
-      && isWithinHardwarePlaybackLimits(video)
-    const browserAudio = !audioCodec
+      && isWithinHardwarePlaybackLimits(video, source.Bitrate)
+    const browserAudio = !selectedAudio
       || ['aac', 'mp3', 'ac3', 'eac3', 'opus', 'vorbis'].includes(audioCodec)
     const firstAudioIndex = streamsOfType(source, 'Audio')[0]?.Index
     const nonDefaultAudioSelection = selection.audioStreamIndex !== undefined

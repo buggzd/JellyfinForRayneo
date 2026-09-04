@@ -24,6 +24,7 @@ import {
   Router,
   Server,
   Settings2,
+  Share2,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -324,9 +325,11 @@ function App() {
 
   const openTouchpad = () => {
     if (isNative && !nativeState?.touchpadReady) {
-      notify(nativeState?.glassesConnected
-        ? '眼镜画面仍在启动，请稍候'
-        : '连接 RayNeo Air 后即可使用触控板')
+      notify(nativeState?.glassesRuntimeState === 'error'
+        ? nativeState.message || '眼镜端媒体库连接失败，请先检查服务器地址和网络'
+        : nativeState?.glassesConnected
+          ? '眼镜画面或媒体库仍在启动，请稍候'
+          : '连接 RayNeo Air 后即可使用触控板')
       return
     }
     go('touchpad')
@@ -339,7 +342,8 @@ function App() {
   }
 
   const moveButtonOptics = (event) => {
-    const button = event.target.closest?.('button')
+    const target = event.target instanceof Element ? event.target : null
+    const button = target?.closest('button')
     if (!button || button.classList.contains('sheet-scrim')) return
 
     const sample = opticsSampleRef.current || {}
@@ -377,7 +381,8 @@ function App() {
   }
 
   const resetButtonOptics = (event) => {
-    const button = event.target.closest?.('button')
+    const target = event.target instanceof Element ? event.target : null
+    const button = target?.closest('button')
     if (!button || (event.relatedTarget && button.contains(event.relatedTarget))) return
     if (opticsSampleRef.current?.button === button) opticsSampleRef.current.button = null
     if (opticsButtonRef.current === button) {
@@ -444,6 +449,7 @@ function App() {
               displayMode={displayMode}
               setDisplayMode={changeDisplayMode}
               onTouchpad={openTouchpad}
+              onRetry={() => callNative('retryGlasses')}
               onSettings={() => go('settings')}
               deviceState={nativeState}
               notify={notify}
@@ -461,6 +467,10 @@ function App() {
               onChangeAccount={changeAccount}
               onChangeServer={changeServer}
               onReset={resetPreferences}
+              onShareDiagnostics={() => {
+                if (isNative) callNative('shareDiagnostics')
+                else notify('原生应用会打开系统分享面板')
+              }}
               nativeState={nativeState}
               notify={notify}
             />
@@ -933,6 +943,7 @@ function HomeScreen({
   displayMode,
   setDisplayMode,
   onTouchpad,
+  onRetry,
   onSettings,
   deviceState,
   notify,
@@ -942,12 +953,32 @@ function HomeScreen({
   const connected = deviceState ? Boolean(deviceState.glassesConnected) : true
   const displayReady = deviceState ? Boolean(deviceState.glassesPresentationReady) : true
   const mediaReady = deviceState ? Boolean(deviceState.mediaReady) : true
-  const welcomeTitle = displayReady
-    ? '设备已准备就绪'
-    : connected
-      ? '眼镜画面正在启动'
-      : '等待连接 RayNeo Air'
-  const connectionLabel = displayReady ? '显示中' : connected ? '已连接' : '待连接'
+  const runtimeState = deviceState?.glassesRuntimeState || (mediaReady ? 'ready' : displayReady ? 'loading' : 'booting')
+  const mediaError = runtimeState === 'error'
+  const runtimeErrorLabel = {
+    network: 'NETWORK',
+    http: 'HTTP',
+    response: 'RESPONSE',
+    unknown: 'UNKNOWN',
+  }[deviceState?.glassesRuntimeErrorCode] || 'UNKNOWN'
+  let welcomeTitle = '等待连接 RayNeo Air'
+  let connectionLabel = '待连接'
+  if (connected) {
+    welcomeTitle = '眼镜画面正在启动'
+    connectionLabel = '已连接'
+  }
+  if (displayReady) {
+    welcomeTitle = '眼镜画面已启动'
+    connectionLabel = '画面已启动'
+  }
+  if (mediaError) {
+    welcomeTitle = '媒体库连接失败'
+    connectionLabel = '加载失败'
+  }
+  if (mediaReady) {
+    welcomeTitle = '媒体库已准备就绪'
+    connectionLabel = '媒体已连接'
+  }
 
   return (
     <section className="screen home-screen with-nav">
@@ -964,7 +995,7 @@ function HomeScreen({
           <span className="eyebrow">GOOD MORNING</span>
           <h1>{welcomeTitle}</h1>
         </div>
-        <span className={`online-label ${connected ? '' : 'is-offline'}`}><i /> {connectionLabel}</span>
+        <span className={`online-label ${!connected || mediaError ? 'is-offline' : ''}`}><i /> {connectionLabel}</span>
       </div>
 
       <div className="device-hero glass-panel">
@@ -977,9 +1008,21 @@ function HomeScreen({
         <div className="device-hero__info">
           <small>RAYNEO AIR 3S</small>
           <strong>空间显示器</strong>
-          <span><Zap size={13} fill="currentColor" /> {mediaReady ? '媒体库已就绪' : displayReady ? '画面显示中' : connected ? '正在准备画面' : 'USB-C 待连接'}</span>
+          <span><Zap size={13} fill="currentColor" /> {mediaReady ? '媒体库已就绪' : mediaError ? '媒体库连接失败' : displayReady ? '画面已启动，正在连接媒体库' : connected ? '正在准备画面' : 'USB-C 待连接'}</span>
         </div>
       </div>
+
+      {mediaError && (
+        <div className="runtime-status-card is-error" role="alert">
+          <span className="runtime-status-card__copy">
+            <strong>眼镜端诊断 · {runtimeErrorLabel}</strong>
+            <span>{deviceState?.message || '眼镜端加载媒体库失败，请检查服务器地址和当前网络。'}</span>
+          </span>
+          <button className="runtime-status-card__retry" onClick={onRetry}>
+            <RefreshCw size={12} /> 重试
+          </button>
+        </div>
+      )}
 
       <section className="mode-card glass-panel">
         <div className="card-title-row">
@@ -1048,6 +1091,7 @@ function SettingsScreen({
   onChangeAccount,
   onChangeServer,
   onReset,
+  onShareDiagnostics,
   nativeState,
   notify,
 }) {
@@ -1116,6 +1160,17 @@ function SettingsScreen({
             <small>跟随手指的低亮度光点</small>
           </span>
           <span className="setting-value">柔和</span>
+        </button>
+      </SettingsGroup>
+
+      <SettingsGroup title="诊断">
+        <button className="setting-row" onClick={onShareDiagnostics}>
+          <span className="setting-row__icon blue"><Share2 size={19} /></span>
+          <span className="setting-row__copy">
+            <strong>分享诊断日志</strong>
+            <small>已脱敏，可一键分享到 QQ 等应用</small>
+          </span>
+          <span className="setting-action">分享 <ChevronRight size={15} /></span>
         </button>
       </SettingsGroup>
 
@@ -1425,7 +1480,7 @@ function ManualServerSheet({ onClose, onContinue }) {
           </div>
           <button className="icon-button glass-soft" onClick={onClose}><X size={18} /></button>
         </div>
-        <p>可填写 IP、局域网域名或带端口的 HTTPS 地址。</p>
+        <p>支持域名、IPv4 和 IPv6；IPv6 带端口时需要使用方括号。</p>
         <label className="address-field">
           <Link2 size={18} />
           <span>
@@ -1438,7 +1493,7 @@ function ManualServerSheet({ onClose, onContinue }) {
             />
           </span>
         </label>
-        <div className="address-example">例如：jellyfin.local:8096</div>
+        <div className="address-example">例如：jellyfin.local:8096 或 http://[2001:db8::20]:8096</div>
         <button className="primary-button pressable" onClick={submit}>
           <span>继续登录</span><ArrowRight size={19} />
         </button>

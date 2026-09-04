@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MediaItem } from './data'
 import {
+  describeJellyfinFailure,
   JellyfinClient,
   type CatalogSnapshot,
+  type JellyfinFailureCode,
   type PlaybackPlan,
   type PlaybackSelection,
 } from './jellyfin'
 import {
   discoverRuntime,
+  postNativeMessage,
   subscribeRuntime,
   type RuntimeBootstrap,
 } from './runtime'
@@ -38,6 +41,7 @@ export function useJellyfin() {
   const [snapshot, setSnapshot] = useState<CatalogSnapshot | null>(null)
   const [status, setStatus] = useState<JellyfinUiStatus>('booting')
   const [error, setError] = useState('')
+  const [errorCode, setErrorCode] = useState<JellyfinFailureCode>('none')
   const [refreshing, setRefreshing] = useState(false)
   const loadGeneration = useRef(0)
   const snapshotRef = useRef<CatalogSnapshot | null>(null)
@@ -60,11 +64,15 @@ export function useJellyfin() {
   }, [])
 
   const session = runtime?.session ?? null
+  const catalogGeneration = runtime?.catalogGeneration ?? 0
   const sessionKey = session
     ? `${session.serverUrl}\n${session.userId}\n${session.accessToken}\n${session.deviceId}`
     : ''
   const client = useMemo(
-    () => session ? new JellyfinClient(session) : null,
+    () => session ? new JellyfinClient(
+      session,
+      () => postNativeMessage({ type: 'unauthorized' }),
+    ) : null,
     // The key deliberately includes the access token so a phone-side relogin replaces the client.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessionKey],
@@ -79,6 +87,7 @@ export function useJellyfin() {
       setSnapshot(null)
     }
     setError('')
+    setErrorCode('none')
 
     try {
       const next = await client.loadHome()
@@ -88,7 +97,9 @@ export function useJellyfin() {
       return true
     } catch (reason) {
       if (generation !== loadGeneration.current) return false
-      setError(reason instanceof Error ? reason.message : '媒体库加载失败。')
+      const failure = describeJellyfinFailure(reason)
+      setError(failure.message)
+      setErrorCode(failure.code)
       if (!background || !snapshotRef.current) setStatus('error')
       return false
     } finally {
@@ -105,11 +116,12 @@ export function useJellyfin() {
     if (!client) {
       setSnapshot(null)
       setError(runtime.error ?? '')
+      setErrorCode(runtime.error ? 'unknown' : 'none')
       setStatus(runtime.source === 'android' && !runtime.error ? 'no-session' : 'error')
       return
     }
     void loadCatalog()
-  }, [client, loadCatalog, runtime])
+  }, [catalogGeneration, client, loadCatalog, runtime?.error, runtime?.source])
 
   const loadFolder = useCallback(async (parentId: string) => {
     if (!client) return []
@@ -191,6 +203,7 @@ export function useJellyfin() {
     snapshot,
     status,
     error,
+    errorCode,
     refreshing,
     refresh,
     retry,

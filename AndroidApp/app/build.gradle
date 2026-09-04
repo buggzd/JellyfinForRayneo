@@ -1,0 +1,143 @@
+plugins {
+    id "com.android.application"
+}
+
+def repositoryRoot = rootProject.projectDir.parentFile
+def rayNeoSdk = file("libs/ffalcon-sdk-client-1.0.3.aar")
+def signingPropertiesFile = rootProject.file("keystore.properties")
+def signingProperties = new Properties()
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.withInputStream { signingProperties.load(it) }
+}
+
+android {
+    namespace "com.jellyfinforrayneo.client"
+    compileSdk 35
+    buildToolsVersion "34.0.0"
+
+    defaultConfig {
+        applicationId "com.jellyfinforrayneo.client"
+        minSdk 26
+        targetSdk 29
+        versionCode 2
+        versionName "0.2.0"
+
+        testInstrumentationRunner "android.app.Instrumentation"
+        ndk {
+            abiFilters "arm64-v8a"
+        }
+    }
+
+    if (signingPropertiesFile.exists()) {
+        signingConfigs {
+            release {
+                storeFile rootProject.file(signingProperties.getProperty("storeFile"))
+                storePassword signingProperties.getProperty("storePassword")
+                keyAlias signingProperties.getProperty("keyAlias")
+                keyPassword signingProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            if (signingPropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging true
+        }
+        resources {
+            excludes += ["META-INF/LICENSE*", "META-INF/NOTICE*"]
+        }
+    }
+
+    lint {
+        abortOnError true
+        checkReleaseBuilds true
+    }
+}
+
+tasks.register("buildGlassesUi", Exec) {
+    workingDir repositoryRoot
+    commandLine "npm", "--prefix", "GlassesUI", "run", "build"
+    inputs.files(
+            fileTree("${repositoryRoot}/GlassesUI/src"),
+            fileTree("${repositoryRoot}/GlassesUI/public"),
+            file("${repositoryRoot}/GlassesUI/index.html"),
+            file("${repositoryRoot}/GlassesUI/package.json"),
+            file("${repositoryRoot}/GlassesUI/package-lock.json"),
+            file("${repositoryRoot}/GlassesUI/tsconfig.json"),
+            file("${repositoryRoot}/GlassesUI/tsconfig.app.json"),
+            file("${repositoryRoot}/GlassesUI/tsconfig.node.json"),
+            file("${repositoryRoot}/GlassesUI/vite.config.ts"))
+    outputs.dir("src/main/assets/GlassesUI")
+}
+
+tasks.register("buildCompanionUi", Exec) {
+    workingDir repositoryRoot
+    commandLine "npm", "--prefix", "CompanionUI", "run", "build"
+    inputs.files(
+            fileTree("${repositoryRoot}/CompanionUI/src"),
+            fileTree("${repositoryRoot}/CompanionUI/public"),
+            file("${repositoryRoot}/CompanionUI/index.html"),
+            file("${repositoryRoot}/CompanionUI/package.json"),
+            file("${repositoryRoot}/CompanionUI/package-lock.json"))
+    outputs.dir("src/main/assets/CompanionUI")
+}
+
+tasks.register("verifyProductionAssets") {
+    dependsOn "buildGlassesUi", "buildCompanionUi"
+    doLast {
+        if (!rayNeoSdk.isFile()) {
+            throw new GradleException(
+                    "RayNeo SDK is missing. Run ../scripts/install-rayneo-sdk.sh first.")
+        }
+        def forbidden = fileTree("src/main/assets") {
+            include "**/.jellyfin-dev.json", "**/*jellyfin-dev*"
+        }.files
+        if (!forbidden.isEmpty()) {
+            throw new GradleException("Development Jellyfin configuration must not enter APK assets.")
+        }
+        ["GlassesUI/index.html", "CompanionUI/index.html"].each { relativePath ->
+            if (!file("src/main/assets/${relativePath}").isFile()) {
+                throw new GradleException("Missing production asset: ${relativePath}")
+            }
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn "verifyProductionAssets"
+}
+
+dependencies {
+    implementation files("libs/ffalcon-sdk-client-1.0.3.aar")
+
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.json:json:20240303"
+}

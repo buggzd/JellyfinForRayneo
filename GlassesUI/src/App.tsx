@@ -1965,6 +1965,14 @@ export default function App() {
   const userName = jellyfin.runtime?.session?.userName || 'Jellyfin 用户'
 
   useEffect(() => {
+    postNativeMessage({
+      type: 'runtime_state',
+      state: jellyfin.status,
+      errorCode: jellyfin.status === 'error' ? jellyfin.errorCode : 'none',
+    })
+  }, [jellyfin.errorCode, jellyfin.status])
+
+  useEffect(() => {
     const snapshot = jellyfin.snapshot
     if (!snapshot) return
     const available = [

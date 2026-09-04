@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, rmSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
@@ -25,37 +25,16 @@ function developmentCredentials(): Plugin {
   }
 }
 
-function preserveUnityMetadata(): Plugin {
-  const outputRoot = resolve(import.meta.dirname, '../Assets/StreamingAssets/GlassesUI')
-  const assetRoot = resolve(outputRoot, 'assets')
-  return {
-    name: 'preserve-unity-metadata',
-    apply: 'build',
-    closeBundle() {
-      try {
-        const index = readFileSync(resolve(outputRoot, 'index.html'), 'utf8')
-        for (const file of readdirSync(assetRoot)) {
-          if (!/^index-.*\.(?:css|js)$/.test(file) || index.includes(`assets/${file}`)) continue
-          rmSync(resolve(assetRoot, file), { force: true })
-          rmSync(resolve(assetRoot, `${file}.meta`), { force: true })
-        }
-      } catch {
-        // Unity creates the output folders and .meta files after the first build.
-      }
-    },
-  }
-}
-
 export default defineConfig({
   base: './',
-  plugins: [react(), developmentCredentials(), preserveUnityMetadata()],
+  plugins: [react(), developmentCredentials()],
   server: {
     host: '0.0.0.0',
     port: 4175,
   },
   build: {
-    outDir: '../Assets/StreamingAssets/GlassesUI',
-    emptyOutDir: false,
+    outDir: '../AndroidApp/app/src/main/assets/GlassesUI',
+    emptyOutDir: true,
     sourcemap: false,
   },
 })

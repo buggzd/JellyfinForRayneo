@@ -1,0 +1,12 @@
+<resources>
+    <style name="Theme.JellyfinForRayNeo" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#02070D</item>
+        <item name="android:colorAccent">#5DE0D2</item>
+        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:statusBarColor">#EAF7FA</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

@@ -13,6 +13,7 @@ export type RuntimeBootstrap = {
   source: 'android' | 'development' | 'browser'
   displayMode: string
   glassesConnected: boolean
+  catalogGeneration: number
   session: JellyfinSession | null
   error?: string
 }
@@ -37,6 +38,7 @@ declare global {
 
 const listeners = new Set<(bootstrap: RuntimeBootstrap) => void>()
 let latestNativeBootstrap: RuntimeBootstrap | null = null
+let latestNativeBootstrapSignature = ''
 let cachedHardwareVideoCodecs: readonly string[] | null | undefined
 
 const supportedHardwareVideoCodecs = new Set([
@@ -53,6 +55,15 @@ function text(value: unknown) {
 
 function normalizeServerUrl(value: unknown) {
   return text(value).replace(/\/+$/, '')
+}
+
+function boundedGeneration(value: unknown) {
+  return typeof value === 'number'
+    && Number.isSafeInteger(value)
+    && value >= 0
+    && value <= 2_147_483_647
+    ? value
+    : 0
 }
 
 function normalizeSession(value: unknown): JellyfinSession | null {
@@ -85,6 +96,7 @@ function parseBootstrap(value: string | RuntimeBootstrap | unknown): RuntimeBoot
       source: source.source === 'android' ? 'android' : 'browser',
       displayMode: text(source.displayMode) || 'Mirror2D',
       glassesConnected: source.glassesConnected !== false,
+      catalogGeneration: boundedGeneration(source.catalogGeneration),
       session: normalizeSession(source.session),
     }
   } catch {
@@ -95,7 +107,10 @@ function parseBootstrap(value: string | RuntimeBootstrap | unknown): RuntimeBoot
 function publishNativeBootstrap(value: string | RuntimeBootstrap) {
   const bootstrap = parseBootstrap(value)
   if (!bootstrap) return
+  const signature = JSON.stringify(bootstrap)
+  if (signature === latestNativeBootstrapSignature) return
   latestNativeBootstrap = bootstrap
+  latestNativeBootstrapSignature = signature
   listeners.forEach((listener) => listener(bootstrap))
 }
 
@@ -111,7 +126,7 @@ function authorizationHeader(deviceId: string, token?: string) {
     'MediaBrowser Client="Lucent for RayNeo"',
     'Device="RayNeo Air"',
     `DeviceId="${safeDeviceId}"`,
-    'Version="0.1.0"',
+    'Version="0.2.0"',
   ]
   if (token) values.push(`Token="${token.replace(/["\\]/g, '')}"`)
   return values.join(', ')
@@ -163,6 +178,7 @@ async function developmentBootstrap(): Promise<RuntimeBootstrap> {
       source: 'development',
       displayMode: 'Mirror2D',
       glassesConnected: true,
+      catalogGeneration: 0,
       session: {
         serverUrl,
         serverName: text(publicInfo.ServerName),
@@ -179,6 +195,7 @@ async function developmentBootstrap(): Promise<RuntimeBootstrap> {
       source: 'development',
       displayMode: 'Mirror2D',
       glassesConnected: true,
+      catalogGeneration: 0,
       session: null,
       error: error instanceof Error ? error.message : '无法读取开发环境 Jellyfin 会话。',
     }
@@ -191,8 +208,12 @@ export async function discoverRuntime(): Promise<RuntimeBootstrap> {
     if (!latestNativeBootstrap) {
       try {
         latestNativeBootstrap = parseBootstrap(native.getBootstrapState())
+        latestNativeBootstrapSignature = latestNativeBootstrap
+          ? JSON.stringify(latestNativeBootstrap)
+          : ''
       } catch {
         latestNativeBootstrap = null
+        latestNativeBootstrapSignature = ''
       }
     }
 
@@ -206,6 +227,7 @@ export async function discoverRuntime(): Promise<RuntimeBootstrap> {
       source: 'android',
       displayMode: 'Mirror2D',
       glassesConnected: true,
+      catalogGeneration: 0,
       session: null,
       error: '无法读取手机端 Jellyfin 会话。',
     }
@@ -216,6 +238,7 @@ export async function discoverRuntime(): Promise<RuntimeBootstrap> {
     source: 'browser',
     displayMode: 'Mirror2D',
     glassesConnected: true,
+    catalogGeneration: 0,
     session: null,
     error: '生产网页仅在 RayNeo 眼镜 WebView 中运行。',
   }
