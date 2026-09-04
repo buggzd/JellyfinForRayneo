@@ -1408,10 +1408,10 @@ kbd {
 
 @keyframes home-hero-image-enter-from-right {
   from {
-    transform: translate3d(100vw, 0, 0);
+    transform: translate3d(20%, -50%, 0);
   }
   to {
-    transform: translate3d(0, 0, 0);
+    transform: translate3d(0, -50%, 0);
   }
 }
 
@@ -3248,13 +3248,18 @@ kbd {
 }
 
 .ambient--home-cover .ambient__image {
-  inset: 0;
+  top: 50%;
+  right: 0;
+  bottom: auto;
+  left: auto;
+  height: 132%;
+  aspect-ratio: 2 / 3;
   opacity: var(--dim, .94);
   background-position: right center;
   background-repeat: no-repeat;
-  background-size: auto 132%;
+  background-size: cover;
   filter: saturate(1.06) contrast(1.05) brightness(.78);
-  transform: none;
+  transform: translate3d(0, -50%, 0);
   transition: filter 1.3s ease, opacity 1.2s ease;
   animation: home-hero-image-enter-from-right 760ms cubic-bezier(.33, 0, .2, 1) backwards;
 }
