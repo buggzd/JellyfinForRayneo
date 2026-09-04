@@ -1164,8 +1164,18 @@ function DetailPage({
     }
   }
 
+  const restoreSeriesBackdropOutsideEpisodes = (target: EventTarget | null) => {
+    if (target instanceof Element && target.closest('.episode-card')) return
+    setEpisodePreview(null)
+    onPreview(resolvedItem)
+  }
+
   return (
-    <div className="detail-page page-enter">
+    <div
+      className="detail-page page-enter"
+      onFocusCapture={(event) => restoreSeriesBackdropOutsideEpisodes(event.target)}
+      onPointerDownCapture={(event) => restoreSeriesBackdropOutsideEpisodes(event.target)}
+    >
       <PageHeader active="none" minimal serverName={serverName} userName={userName} refreshing={refreshing} onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
       <main className="detail-content">
         <FocusButton variant="round" className="detail-back" label="返回" onClick={() => onNavigate('home')}><ArrowLeft size={22} /></FocusButton>
@@ -1233,12 +1243,12 @@ function DetailPage({
               <header className="section-heading">
                 <div><small>EPISODES</small><h2>剧集与章节</h2></div>
                 <div className="season-switcher">
-                  {detail?.seasons.map((season) => <FocusButton key={season.id} variant="chip" disabled={loading} active={detail.selectedSeasonId === season.id} onClick={() => { setEpisodePreview(null); onSelectSeason(season.id) }}>{season.original || season.title}</FocusButton>)}
+                  {detail?.seasons.map((season) => <FocusButton key={season.id} variant="chip" disabled={loading} active={detail.selectedSeasonId === season.id} onClick={() => { setEpisodePreview(null); onPreview(resolvedItem); onSelectSeason(season.id) }}>{season.original || season.title}</FocusButton>)}
                 </div>
               </header>
               <div className="episode-rail">
                 {episodes.map((episode, index) => (
-                    <button key={episode.id} type="button" data-focusable="true" className="episode-card" onClick={() => onPlay(episode)} onFocus={() => { setEpisodePreview(episode); onPreview(episode) }}>
+                    <button key={episode.id} type="button" data-focusable="true" className="episode-card" onClick={() => onPlay(episode)} onFocus={() => setEpisodePreview(episode)}>
                       <ArtFrame item={episode} wide />
                       <span className="episode-card__number">{String(episode.indexNumber ?? index + 1).padStart(2, '0')}</span>
                       <span className="episode-card__play"><Play size={19} fill="currentColor" /></span>
