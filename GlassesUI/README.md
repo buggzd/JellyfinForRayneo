@@ -22,4 +22,12 @@ npm run build
 ```
 
 The generated production output is written to
-`Assets/StreamingAssets/GlassesUI` and loaded locally by the glasses WebView.
+`AndroidApp/app/src/main/assets/GlassesUI` and loaded locally by the one glasses
+WebView inside Android's external-display `Presentation`. In stereo mode the
+native `StereoMirrorLayout` draws that same WebView frame into both SBS halves;
+do not create a second player WebView.
+
+Native bootstrap values are normalized and deduplicated before notifying
+React. Catalog loading is keyed by the session and bounded
+`catalogGeneration`, so unrelated display-state updates cannot continuously
+cancel and restart the Jellyfin home requests.
