@@ -69,6 +69,7 @@ import {
 
 type Page = 'home' | 'browse' | 'favorites' | 'search' | 'detail' | 'player'
 type Direction = 'up' | 'down' | 'left' | 'right'
+type HomeFocusRegion = 'hero' | 'shelves'
 type PlaybackRequest = {
   item: MediaItem
   startPositionTicks: number
@@ -422,12 +423,14 @@ function AmbientBackground({
   imageUrl,
   dim = 0.45,
   homeCover = false,
+  homeShelfPreview = false,
   imageVisible = true,
 }: {
   tone: number
   imageUrl?: string
   dim?: number
   homeCover?: boolean
+  homeShelfPreview?: boolean
   imageVisible?: boolean
 }) {
   const fallbackImage = new URL(
@@ -442,7 +445,7 @@ function AmbientBackground({
   } as CSSProperties
 
   return (
-    <div className={cx('ambient', homeCover && 'ambient--home-cover')} aria-hidden="true">
+    <div className={cx('ambient', homeCover && 'ambient--home-cover', homeShelfPreview && 'ambient--home-shelf')} aria-hidden="true">
       {imageVisible && <div className="ambient__image" style={style} />}
       <div className={`ambient__spectrum ambient__spectrum--${tone % 4}`} />
       <div className="ambient__veil" />
@@ -611,30 +614,41 @@ function heroTitleDensity(title: string): HeroTitleDensity {
 function HomePage({
   featured,
   shelves,
+  focusRegion,
   serverName,
   userName,
   refreshing,
   onNavigate,
   onOpen,
   onPreview,
+  onFocusRegionChange,
   onRefresh,
   onExit,
 }: {
   featured: MediaItem
   shelves: MediaShelf[]
+  focusRegion: HomeFocusRegion
   serverName: string
   userName: string
   refreshing: boolean
   onNavigate: (page: Page) => void
   onOpen: (item: MediaItem) => void
   onPreview: (item: MediaItem) => void
+  onFocusRegionChange: (region: HomeFocusRegion) => void
   onRefresh: () => void
   onExit: () => void
 }) {
   const titleDensity = heroTitleDensity(featured.title)
 
   return (
-    <div className="home-page page-enter">
+    <div
+      className={cx('home-page', 'page-enter', focusRegion === 'shelves' && 'home-page--shelves-active')}
+      onFocusCapture={(event) => {
+        const target = event.target instanceof Element ? event.target : null
+        if (target?.closest('.hero-section')) onFocusRegionChange('hero')
+        else if (target?.closest('.shelves')) onFocusRegionChange('shelves')
+      }}
+    >
       <PageHeader active="home" serverName={serverName} userName={userName} refreshing={refreshing} onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
       <section className="hero-section">
         <div className="hero-section__copy">
@@ -2363,6 +2377,7 @@ export default function App() {
   const [history, setHistory] = useState<Page[]>([])
   const [selected, setSelected] = useState<MediaItem>(demoFeatured)
   const [backdropItem, setBackdropItem] = useState<MediaItem>(demoFeatured)
+  const [homeFocusRegion, setHomeFocusRegion] = useState<HomeFocusRegion>('hero')
   const [browseEntry, setBrowseEntry] = useState<MediaItem | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchPane, setSearchPane] = useState<SearchPane>('keyboard')
@@ -2416,6 +2431,10 @@ export default function App() {
       errorCode: jellyfin.status === 'error' ? jellyfin.errorCode : 'none',
     })
   }, [jellyfin.errorCode, jellyfin.status])
+
+  useEffect(() => {
+    if (page === 'home') setHomeFocusRegion('hero')
+  }, [page])
 
   const searchInputActive = page === 'search'
     && jellyfin.status === 'ready'
@@ -2738,9 +2757,11 @@ export default function App() {
   }
 
   const snapshot = jellyfin.snapshot
+  const homeShelfPreview = page === 'home' && homeFocusRegion === 'shelves'
+  const homeBackgroundItem = homeShelfPreview ? backdropItem : snapshot.featured
 
   const pageNode = (() => {
-    if (page === 'home') return <HomePage featured={snapshot.featured} shelves={snapshot.shelves} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
+    if (page === 'home') return <HomePage featured={snapshot.featured} shelves={snapshot.shelves} focusRegion={homeFocusRegion} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onFocusRegionChange={setHomeFocusRegion} onRefresh={refreshLibrary} onExit={manageLogin} />
     if (page === 'browse' || page === 'favorites') {
       return <BrowsePage key={`${page}:${page === 'browse' ? browseEntry?.id ?? 'root' : 'root'}`} mode={page === 'browse' ? 'library' : 'favorites'} items={snapshot.libraries} favorites={snapshot.favorites} initialFolder={page === 'browse' ? browseEntry : null} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} onResetLibrary={() => setBrowseEntry(null)} />
     }
@@ -2767,12 +2788,13 @@ export default function App() {
     <div className={cx('app', `app--${page}`)}>
       {page !== 'player' && (
         <AmbientBackground
-          tone={page === 'home' ? snapshot.featured.art : backdropItem.art}
+          tone={page === 'home' ? homeBackgroundItem.art : backdropItem.art}
           imageUrl={page === 'home'
-            ? snapshot.featured.coverUrl ?? snapshot.featured.imageUrl
+            ? homeBackgroundItem.coverUrl ?? homeBackgroundItem.imageUrl ?? homeBackgroundItem.backdropUrl
             : backdropItem.backdropUrl}
-          dim={page === 'home' ? 0.94 : page === 'detail' ? 0.48 : 0.42}
-          homeCover={page === 'home'}
+          dim={page === 'home' ? homeShelfPreview ? 0.32 : 0.94 : page === 'detail' ? 0.48 : 0.42}
+          homeCover={page === 'home' && !homeShelfPreview}
+          homeShelfPreview={homeShelfPreview}
           imageVisible={page !== 'detail'}
         />
       )}

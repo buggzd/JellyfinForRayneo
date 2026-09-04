@@ -3295,6 +3295,31 @@ kbd {
   opacity: .045;
 }
 
+.ambient--home-shelf .ambient__image {
+  inset: -3%;
+  opacity: var(--dim, .32);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: saturate(.9) contrast(1.03) brightness(.72);
+  transform: scale(1.035);
+  animation: none;
+}
+
+.ambient--home-shelf .ambient__spectrum {
+  opacity: .16;
+}
+
+.ambient--home-shelf .ambient__veil {
+  background:
+    linear-gradient(90deg, rgba(2, 7, 13, .74), rgba(2, 7, 13, .48) 48%, rgba(2, 7, 13, .62)),
+    linear-gradient(0deg, rgba(2, 7, 13, .78), rgba(2, 7, 13, .46) 44%, rgba(2, 7, 13, .68));
+}
+
+.home-page--shelves-active::before {
+  background: linear-gradient(180deg, rgba(2, 7, 13, .14), rgba(2, 7, 13, .34));
+}
+
 .focus-button {
   min-height: 56px;
   padding-inline: 23px;
