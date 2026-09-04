@@ -4,7 +4,6 @@ import {
   AudioLines,
   Captions,
   Check,
-  ChevronLeft,
   ChevronRight,
   FastForward,
   Folder,
@@ -66,6 +65,7 @@ type PlaybackRequest = {
   key: number
 }
 
+const BROWSE_BATCH_SIZE = 12
 const focusableSelector = '[data-focusable="true"]:not([disabled])'
 const spatialFocusSelector = '[data-spatial-focus="true"]'
 let sideNavigationReturnTarget: HTMLElement | null = null
@@ -356,7 +356,17 @@ function Logo({ compact = false }: { compact?: boolean }) {
   )
 }
 
-function AmbientBackground({ tone, imageUrl, dim = 0.45 }: { tone: number; imageUrl?: string; dim?: number }) {
+function AmbientBackground({
+  tone,
+  imageUrl,
+  dim = 0.45,
+  homeCover = false,
+}: {
+  tone: number
+  imageUrl?: string
+  dim?: number
+  homeCover?: boolean
+}) {
   const fallbackImage = new URL(
     tone % 3 === 1 ? './assets/monochrome-flow.png' : './assets/crystal-flow.png',
     document.baseURI,
@@ -369,7 +379,7 @@ function AmbientBackground({ tone, imageUrl, dim = 0.45 }: { tone: number; image
   } as CSSProperties
 
   return (
-    <div className="ambient" aria-hidden="true">
+    <div className={cx('ambient', homeCover && 'ambient--home-cover')} aria-hidden="true">
       <div className="ambient__image" style={style} />
       <div className={`ambient__spectrum ambient__spectrum--${tone % 4}`} />
       <div className="ambient__veil" />
@@ -553,20 +563,9 @@ function HomePage({
             </div>
           )}
           <div className="hero-actions">
-            <FocusButton variant="primary" autoFocusTarget icon={featured.folder ? <Grid3X3 size={22} /> : <Play size={22} fill="currentColor" />} onClick={() => featured.folder ? onNavigate('browse') : onOpen(featured)} onFocus={() => onPreview(featured)}>{featured.folder ? '浏览媒体库' : featured.progress ? '继续观看' : '立即观看'}</FocusButton>
+            <FocusButton variant="primary" autoFocusTarget icon={featured.folder ? <Grid3X3 size={22} /> : <Play size={22} fill="currentColor" />} onClick={() => onOpen(featured)} onFocus={() => onPreview(featured)}>{featured.folder ? '浏览媒体库' : featured.progress ? '继续观看' : '立即观看'}</FocusButton>
             <FocusButton variant="glass" icon={<Info size={21} />} onClick={() => onOpen(featured)} onFocus={() => onPreview(featured)}>查看详情</FocusButton>
           </div>
-        </div>
-        <div className="hero-sculpture" aria-hidden="true">
-          <span className="hero-sculpture__orbit hero-sculpture__orbit--outer" />
-          <span className="hero-sculpture__orbit hero-sculpture__orbit--inner" />
-          <span className="hero-sculpture__core"><i /><b /></span>
-          <span className="hero-sculpture__coordinate">JELLYFIN / {featured.id.slice(0, 8).toLocaleUpperCase()}</span>
-        </div>
-        <div className="hero-section__edition">
-          <span>{featured.sourceType ?? 'MEDIA'}</span>
-          <strong>{featured.indexNumber ? String(featured.indexNumber).padStart(2, '0') : '◈'}</strong>
-          <small>{featured.year ?? 'LUCENT'}</small>
         </div>
         <div className="hero-section__scroll-cue"><span /> 向下探索</div>
       </section>
@@ -647,6 +646,7 @@ function BrowsePage({
   items,
   favorites,
   searchSeed,
+  initialFolder,
   serverName,
   userName,
   refreshing,
@@ -657,11 +657,13 @@ function BrowsePage({
   onPreview,
   onRefresh,
   onExit,
+  onResetLibrary,
 }: {
   mode: BrowseMode
   items: MediaItem[]
   favorites: MediaItem[]
   searchSeed: MediaItem[]
+  initialFolder?: MediaItem | null
   serverName: string
   userName: string
   refreshing: boolean
@@ -672,17 +674,21 @@ function BrowsePage({
   onPreview: (item: MediaItem) => void
   onRefresh: () => void
   onExit: () => void
+  onResetLibrary: () => void
 }) {
-  const [path, setPath] = useState<Array<{ item: MediaItem; children: MediaItem[] }>>([])
+  const [path, setPath] = useState<Array<{ item: MediaItem; children: MediaItem[] }>>(() => (
+    mode === 'library' && initialFolder ? [{ item: initialFolder, children: [] }] : []
+  ))
   const [filter, setFilter] = useState<'all' | 'unwatched' | 'continue' | 'favorite'>('all')
   const [sort, setSort] = useState<'最近加入' | '名称' | '评分最高'>('最近加入')
   const [query, setQuery] = useState('')
   const [composition, setComposition] = useState('')
   const [keyboardMode, setKeyboardMode] = useState<'zh' | 'en'>('zh')
-  const [page, setPage] = useState(1)
-  const [folderLoading, setFolderLoading] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(BROWSE_BATCH_SIZE)
+  const [folderLoading, setFolderLoading] = useState(mode === 'library' && Boolean(initialFolder))
   const [searching, setSearching] = useState(false)
   const [searchResults, setSearchResults] = useState<MediaItem[]>([])
+  const loadMoreRef = useRef<HTMLElement | null>(null)
 
   const keyboardRows = keyboardMode === 'zh'
     ? qwertyRows
@@ -692,6 +698,28 @@ function BrowsePage({
       ]
   const pinyinCandidates = useMemo(() => findPinyinCandidates(composition), [composition])
   const keyboardSuggestions = composition ? pinyinCandidates : ['深海', '科幻', '4K', '课程', '收藏']
+
+  useEffect(() => {
+    if (mode !== 'library' || !initialFolder) {
+      setPath([])
+      setFolderLoading(false)
+      return
+    }
+
+    let active = true
+    setPath([{ item: initialFolder, children: [] }])
+    setFolderLoading(true)
+    void onLoadFolder(initialFolder.id).then((children) => {
+      if (active) setPath([{ item: initialFolder, children }])
+    }).catch(() => {
+      if (active) setPath([{ item: initialFolder, children: [] }])
+    }).finally(() => {
+      if (active) setFolderLoading(false)
+    })
+    return () => {
+      active = false
+    }
+  }, [initialFolder, mode, onLoadFolder])
 
   useEffect(() => {
     if (mode !== 'search') return
@@ -737,14 +765,37 @@ function BrowsePage({
     return result
   }, [baseItems, filter, sort])
 
-  const totalPages = Math.max(1, Math.ceil(shownItems.length / 12))
-  const pagedItems = shownItems.slice((page - 1) * 12, page * 12)
+  const visibleItems = shownItems.slice(0, visibleCount)
+  const hasMore = visibleItems.length < shownItems.length
   const title = mode === 'favorites' ? '我的收藏' : mode === 'search' ? '全局搜索' : path.at(-1)?.item.title ?? '媒体库'
   const eyebrow = mode === 'favorites' ? 'SAVED MOMENTS' : mode === 'search' ? 'SEARCH EVERYWHERE' : path.length ? 'FOLDER VIEW' : 'ALL LIBRARIES'
 
   useEffect(() => {
-    setPage((value) => Math.min(value, totalPages))
-  }, [totalPages])
+    setVisibleCount(BROWSE_BATCH_SIZE)
+  }, [shownItems])
+
+  useEffect(() => {
+    if (!hasMore) return
+    if (typeof window.IntersectionObserver !== 'function') {
+      setVisibleCount(shownItems.length)
+      return
+    }
+
+    const target = loadMoreRef.current
+    if (!target) return
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return
+      setVisibleCount((count) => Math.min(count + BROWSE_BATCH_SIZE, shownItems.length))
+    }, { rootMargin: '480px 0px' })
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [hasMore, shownItems.length, visibleCount])
+
+  const resetLibrary = () => {
+    setPath([])
+    setVisibleCount(BROWSE_BATCH_SIZE)
+    onResetLibrary()
+  }
 
   const openItem = async (item: MediaItem) => {
     if (item.folder && mode === 'library') {
@@ -752,7 +803,7 @@ function BrowsePage({
       try {
         const children = await onLoadFolder(item.id)
         setPath((current) => [...current, { item, children }])
-        setPage(1)
+        setVisibleCount(BROWSE_BATCH_SIZE)
         window.scrollTo({ top: 0, behavior: 'smooth' })
       } finally {
         setFolderLoading(false)
@@ -769,14 +820,14 @@ function BrowsePage({
     }
     setQuery((value) => `${value}${key}`.slice(0, 24))
     setFilter('all')
-    setPage(1)
+    setVisibleCount(BROWSE_BATCH_SIZE)
   }
 
   const commitCandidate = (term: string, replace = false) => {
     setQuery((value) => (replace ? term : `${value}${term}`).slice(0, 24))
     setComposition('')
     setFilter('all')
-    setPage(1)
+    setVisibleCount(BROWSE_BATCH_SIZE)
   }
 
   const eraseSearchCharacter = () => {
@@ -788,7 +839,7 @@ function BrowsePage({
     setQuery('')
     setComposition('')
     setFilter('all')
-    setPage(1)
+    setVisibleCount(BROWSE_BATCH_SIZE)
   }
 
   const enterSpace = () => {
@@ -820,9 +871,9 @@ function BrowsePage({
       />
       <main className="browse-content">
         <div className="breadcrumbs">
-          <FocusButton variant="round" label="返回上一级" onClick={() => path.length ? setPath((current) => current.slice(0, -1)) : onNavigate('home')}><ArrowLeft size={20} /></FocusButton>
+          <FocusButton variant="round" label="返回上一级" onClick={() => path.length > 1 ? setPath((current) => current.slice(0, -1)) : path.length ? resetLibrary() : onNavigate('home')}><ArrowLeft size={20} /></FocusButton>
           <FocusButton variant="ghost" onClick={() => { setPath([]); onNavigate('home') }}><Home size={16} /> 首页</FocusButton>
-          {mode === 'library' && <><ChevronRight size={15} /><FocusButton variant="ghost" active={!path.length} onClick={() => setPath([])}>媒体库</FocusButton></>}
+          {mode === 'library' && <><ChevronRight size={15} /><FocusButton variant="ghost" active={!path.length} onClick={resetLibrary}>媒体库</FocusButton></>}
           {path.map((crumb, index) => <span className="breadcrumb-part" key={crumb.item.id}><ChevronRight size={15} /><FocusButton variant="ghost" active={index === path.length - 1} onClick={() => setPath((current) => current.slice(0, index + 1))}>{crumb.item.title}</FocusButton></span>)}
         </div>
 
@@ -898,7 +949,7 @@ function BrowsePage({
               ['continue', '可继续'],
               ['favorite', '已收藏'],
             ] as const).map(([value, label], index) => (
-              <FocusButton key={value} variant="chip" active={filter === value} autoFocusTarget={mode !== 'search' && index === 0} onClick={() => { setFilter(value); setPage(1) }}>{label}</FocusButton>
+              <FocusButton key={value} variant="chip" active={filter === value} autoFocusTarget={mode !== 'search' && index === 0} onClick={() => { setFilter(value); setVisibleCount(BROWSE_BATCH_SIZE) }}>{label}</FocusButton>
             ))}
           </div>
           <span className="toolbar-divider" />
@@ -919,7 +970,7 @@ function BrowsePage({
           </section>
         ) : shownItems.length ? (
           <section className={cx('media-grid', mode === 'search' && 'search-results', path.length > 0 && 'media-grid--wide')}>
-            {pagedItems.map((item, index) => (
+            {visibleItems.map((item, index) => (
               <MediaCard
                 key={item.id}
                 item={item}
@@ -940,14 +991,15 @@ function BrowsePage({
           </section>
         )}
 
-        <footer className="pagination">
-          <span>第 {(page - 1) * 12 + (shownItems.length ? 1 : 0)}–{Math.min(page * 12, shownItems.length)} 项 / 共 {shownItems.length} 项</span>
-          <div>
-            <FocusButton variant="round" label="上一页" disabled={page === 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={21} /></FocusButton>
-            <span className="pagination__page">{String(page).padStart(2, '0')} <i /> {String(totalPages).padStart(2, '0')}</span>
-            <FocusButton variant="round" label="下一页" disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))}><ChevronRight size={21} /></FocusButton>
-          </div>
-        </footer>
+        {!folderLoading && shownItems.length > 0 && (
+          <footer ref={loadMoreRef} className="infinite-scroll-status" aria-live="polite">
+            <span>已显示 {visibleItems.length} 项 / 共 {shownItems.length} 项</span>
+            <span className={cx('infinite-scroll-status__state', hasMore && 'is-loading')}>
+              {hasMore && <LoaderCircle size={15} />}
+              {hasMore ? '继续向下浏览，自动载入更多' : '已加载全部内容'}
+            </span>
+          </footer>
+        )}
       </main>
       <RemoteHint />
     </div>
@@ -1086,7 +1138,7 @@ function DetailPage({
               </div>
             )}
             <div className="detail-actions">
-              <FocusButton variant="primary" autoFocusTarget disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">ENTER</span>} onClick={() => playTarget && onPlay(playTarget)}>{playTarget?.progress ? `继续 · ${playTarget.subtitle}` : '立即播放'}</FocusButton>
+              <FocusButton variant="primary" autoFocusTarget disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">ENTER</span>} onClick={() => playTarget && onPlay(playTarget)}>{playTarget?.progress ? '继续播放' : '立即播放'}</FocusButton>
               <FocusButton variant="glass" disabled={!playTarget || loading} icon={<RotateCcw size={20} />} onClick={() => playTarget && onPlay(playTarget, true)}>从头播放</FocusButton>
               {extras[0] && <FocusButton variant="round" label="播放预告片" onClick={() => onPlay(extras[0], true)}><MonitorPlay size={20} /></FocusButton>}
               <FocusButton variant="round" disabled={actionBusy} active={favorite} label={favorite ? '取消收藏' : '收藏'} onClick={() => { void toggleFavorite() }}><Heart size={20} fill={favorite ? 'currentColor' : 'none'} /></FocusButton>
@@ -1764,13 +1816,6 @@ function PlayerPage({
 
   return (
     <div className="player-page page-enter" onMouseMove={reveal} onClick={reveal}>
-      <div className="player-visual" aria-hidden="true">
-        <div className="player-visual__image" style={item.backdropUrl || item.imageUrl ? { backgroundImage: `url(${item.backdropUrl || item.imageUrl})` } : undefined} />
-        <div className="player-visual__caustics" />
-        <div className="player-visual__vignette" />
-        <div className="player-visual__grain" />
-      </div>
-
       <video
         ref={videoRef}
         className="player-video"
@@ -1960,6 +2005,7 @@ export default function App() {
   const [history, setHistory] = useState<Page[]>([])
   const [selected, setSelected] = useState<MediaItem>(demoFeatured)
   const [backdropItem, setBackdropItem] = useState<MediaItem>(demoFeatured)
+  const [browseEntry, setBrowseEntry] = useState<MediaItem | null>(null)
   const [detail, setDetail] = useState<DetailSnapshot | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
@@ -2022,6 +2068,7 @@ export default function App() {
   }, [page])
 
   const navigateDirect = useCallback((next: Page) => {
+    if (next === 'browse') setBrowseEntry(null)
     setHistory([])
     setPage(next)
     window.scrollTo({ top: 0, behavior: 'instant' })
@@ -2061,8 +2108,17 @@ export default function App() {
     setBackdropItem(item)
     setDetail(null)
     setDetailError('')
-    if (item.folder) navigate('browse')
-    else navigate('detail')
+    if (item.folder) {
+      setBrowseEntry(item)
+      navigate('browse')
+    } else {
+      navigate('detail')
+    }
+  }, [navigate])
+
+  const navigateFromMenu = useCallback((next: Page) => {
+    if (next === 'browse') setBrowseEntry(null)
+    navigate(next)
   }, [navigate])
 
   const selectSeason = useCallback((seasonId: string) => {
@@ -2200,11 +2256,11 @@ export default function App() {
   const snapshot = jellyfin.snapshot
 
   const pageNode = (() => {
-    if (page === 'home') return <HomePage featured={snapshot.featured} shelves={snapshot.shelves} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={navigate} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
+    if (page === 'home') return <HomePage featured={snapshot.featured} shelves={snapshot.shelves} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     if (page === 'browse' || page === 'favorites' || page === 'search') {
-      return <BrowsePage key={page} mode={page === 'browse' ? 'library' : page} items={snapshot.libraries} favorites={snapshot.favorites} searchSeed={snapshot.allItems} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onSearch={jellyfin.search} onNavigate={navigate} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
+      return <BrowsePage key={`${page}:${page === 'browse' ? browseEntry?.id ?? 'root' : 'root'}`} mode={page === 'browse' ? 'library' : page} items={snapshot.libraries} favorites={snapshot.favorites} searchSeed={snapshot.allItems} initialFolder={page === 'browse' ? browseEntry : null} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onSearch={jellyfin.search} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} onResetLibrary={() => setBrowseEntry(null)} />
     }
-    if (page === 'detail') return <DetailPage key={selected.id} item={selected} detail={detail} loading={detailLoading} error={detailError} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigate(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? '已加入收藏' : '已取消收藏'); return saved } catch { showToast('收藏状态更新失败'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? '已标记为看过' : '已标记为未看'); return saved } catch { showToast('观看状态更新失败'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
+    if (page === 'detail') return <DetailPage key={selected.id} item={selected} detail={detail} loading={detailLoading} error={detailError} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigateFromMenu(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? '已加入收藏' : '已取消收藏'); return saved } catch { showToast('收藏状态更新失败'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? '已标记为看过' : '已标记为未看'); return saved } catch { showToast('观看状态更新失败'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     const request = playback ?? {
       item: selected.canPlay
         ? selected
@@ -2218,7 +2274,16 @@ export default function App() {
 
   return (
     <div className={cx('app', `app--${page}`)}>
-      {page !== 'player' && <AmbientBackground tone={backdropItem.art} imageUrl={backdropItem.backdropUrl} dim={page === 'home' ? 0.72 : page === 'detail' ? 0.48 : 0.42} />}
+      {page !== 'player' && (
+        <AmbientBackground
+          tone={page === 'home' ? snapshot.featured.art : backdropItem.art}
+          imageUrl={page === 'home'
+            ? snapshot.featured.coverUrl ?? snapshot.featured.imageUrl
+            : backdropItem.backdropUrl}
+          dim={page === 'home' ? 0.94 : page === 'detail' ? 0.48 : 0.42}
+          homeCover={page === 'home'}
+        />
+      )}
       {pageNode}
       {toast && <div className="toast"><span><Check size={18} /></span>{toast}</div>}
       <svg className="svg-filters" aria-hidden="true">

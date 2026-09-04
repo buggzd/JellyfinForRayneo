@@ -772,6 +772,12 @@ export class JellyfinClient {
         ? source.SeriesId
         : ''
     const primaryTag = source.ImageTags?.Primary ?? source.SeriesPrimaryImageTag
+    const coverOwner = source.SeriesPrimaryImageTag && source.SeriesId
+      ? source.SeriesId
+      : primaryOwner
+    const coverTag = source.SeriesPrimaryImageTag && source.SeriesId
+      ? source.SeriesPrimaryImageTag
+      : primaryTag
     const backdropTag = source.BackdropImageTags?.[0]
     const progress = progressFor(source)
     const playableTypes = ['Movie', 'Episode', 'Video', 'MusicVideo', 'Audio']
@@ -820,6 +826,9 @@ export class JellyfinClient {
       playbackPositionTicks: source.UserData?.PlaybackPositionTicks,
       imageUrl: primaryOwner && primaryTag
         ? this.imageUrl(primaryOwner, 'Primary', primaryTag)
+        : undefined,
+      coverUrl: coverOwner && coverTag
+        ? this.imageUrl(coverOwner, 'Primary', coverTag)
         : undefined,
       backdropUrl: backdropTag
         ? this.imageUrl(id, 'Backdrop', backdropTag, true)

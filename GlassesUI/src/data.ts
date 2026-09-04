@@ -35,6 +35,7 @@ export type MediaItem = {
   runtimeTicks?: number
   playbackPositionTicks?: number
   imageUrl?: string
+  coverUrl?: string
   backdropUrl?: string
   logoUrl?: string
   videoCodec?: string
