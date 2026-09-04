@@ -2089,7 +2089,7 @@ function PlayerPage({
         <section className="player-controls glass-panel">
           <div className="player-progress" style={{ '--played': `${progress}%` } as CSSProperties}>
             <span className="player-progress__time">{formatTime(current)}</span>
-            <button type="button" data-focusable="true" aria-label="播放进度，左右键快退或快进十秒" className="player-progress__bar" onClick={() => undefined}><i><b /></i></button>
+            <button type="button" data-focusable="true" aria-label="播放进度，左右键快退或快进十秒，确认键播放或暂停" className="player-progress__bar" onClick={() => { togglePlayback(); reveal() }}><i><b /></i></button>
             <span className="player-progress__time">{formatTime(total)}</span>
           </div>
           <div className="player-control-row">
