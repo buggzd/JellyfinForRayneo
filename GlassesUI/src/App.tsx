@@ -2211,8 +2211,6 @@ function PlayerPage({
           <FocusButton variant="round" label="退出播放器" onClick={onBack}><ArrowLeft size={22} /></FocusButton>
           <div className="player-title"><small>正在播放 · {episodeLabel}</small><strong>{item.title} <span>·</span> {titleDetail}</strong></div>
           {plan && <div className="player-direct"><span /> {playbackMethod} <i /> {formatLabel}</div>}
-          <FocusButton className="player-track-trigger--audio" variant="glass" disabled={!audioTracks.length || status === 'preparing'} icon={<AudioLines size={19} />} active={panel === 'audio'} onClick={() => toggleTrackPanel('audio')}>音轨</FocusButton>
-          <FocusButton className="player-track-trigger--subtitles" variant="glass" disabled={!subtitleTracks.length || status === 'preparing'} icon={<Captions size={19} />} active={panel === 'subtitles'} onClick={() => toggleTrackPanel('subtitles')}>字幕</FocusButton>
         </header>
       </div>
 
@@ -2308,7 +2306,8 @@ function PlayerPage({
             <div className="player-control-group player-control-group--right">
               <FocusButton variant="round" disabled={!previousItem} label="上一集" onClick={() => previousItem && onPlayItem(previousItem, true)}><SkipBack size={21} /></FocusButton>
               <FocusButton variant="round" disabled={!nextItem} label="下一集" onClick={() => nextItem && onPlayItem(nextItem, true)}><SkipForward size={21} /></FocusButton>
-              <FocusButton variant="round" label="音量" onClick={() => { setVolumeVisible(true); if (volumeTimer.current) window.clearTimeout(volumeTimer.current); volumeTimer.current = window.setTimeout(() => setVolumeVisible(false), 1350) }}><Volume2 size={21} /></FocusButton>
+              <FocusButton className="player-track-trigger--audio" variant="round" label="音轨" disabled={!audioTracks.length || status === 'preparing'} active={panel === 'audio'} onClick={() => toggleTrackPanel('audio')}><AudioLines size={21} /></FocusButton>
+              <FocusButton className="player-track-trigger--subtitles" variant="round" label="字幕" disabled={!subtitleTracks.length || status === 'preparing'} active={panel === 'subtitles'} onClick={() => toggleTrackPanel('subtitles')}><Captions size={21} /></FocusButton>
             </div>
           </div>
           <div className="player-hints"><span><kbd>←</kbd><kbd>→</kbd> 进度焦点快退 / 快进 10 秒</span><span><kbd>↓</kbd> 显示 / 进入控制栏</span><span><kbd>ENTER</kbd> 确认</span><span><kbd>ESC</kbd> 返回详情</span></div>
