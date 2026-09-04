@@ -78,6 +78,12 @@ jobs:
             CompanionUI/package-lock.json
             GlassesUI/package-lock.json
 
+      - name: Install release verification tools
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
