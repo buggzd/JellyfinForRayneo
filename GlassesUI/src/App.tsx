@@ -84,20 +84,29 @@ function clearSpatialFocus(except?: HTMLElement | null) {
   })
 }
 
+function currentSpatialFocus() {
+  const active = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  if (active?.matches(focusableSelector)) return active
+
+  // A phone-side pointer gesture can leave the glasses document with body as activeElement.
+  // Keep the glasses-owned spatial marker as the logical focus across that boundary.
+  const marked = document.querySelector<HTMLElement>(spatialFocusSelector)
+  return marked?.matches(focusableSelector) ? marked : null
+}
+
 function focusSpatialElement(element?: HTMLElement | null, options: FocusOptions = { preventScroll: true }) {
   if (!element) return false
   clearSpatialFocus(element)
-  element.focus(options)
-  if (document.activeElement !== element) return false
   element.setAttribute('data-spatial-focus', 'true')
-  return true
+  element.focus(options)
+  return document.activeElement === element || element.matches(spatialFocusSelector)
 }
 
 function moveFocus(direction: Direction) {
   const nodes = visibleFocusables()
   if (!nodes.length) return
 
-  const current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const current = currentSpatialFocus()
   if (!current || !nodes.includes(current)) {
     const firstContent = nodes.find((node) => !node.closest('.side-navigation'))
     focusSpatialElement(document.querySelector<HTMLElement>('[data-autofocus="true"]') ?? firstContent ?? nodes[0])
@@ -212,7 +221,7 @@ function moveFocus(direction: Direction) {
 }
 
 function movePlayerFocus(direction: Direction) {
-  const current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  const current = currentSpatialFocus()
   if (!current) return false
 
   const progress = document.querySelector<HTMLElement>('.player-progress__bar')
@@ -1613,7 +1622,7 @@ function PlayerPage({
     const listener = (event: Event) => {
       const key = (event as CustomEvent<string>).detail
       if (key === 'left' || key === 'right') {
-        const active = document.activeElement
+        const active = currentSpatialFocus()
         const progressFocused = active instanceof HTMLElement
           && active.matches('.player-progress__bar')
 
@@ -1649,8 +1658,9 @@ function PlayerPage({
         return
       }
       if (key === 'enter') {
-        if (controls && document.activeElement instanceof HTMLElement && document.activeElement.matches(focusableSelector)) {
-          document.activeElement.click()
+        const active = currentSpatialFocus()
+        if (controls && active) {
+          active.click()
         } else {
           togglePlayback()
           reveal()
@@ -2087,8 +2097,8 @@ export default function App() {
     }
     const onPointerDown = () => clearSpatialFocus()
     const onRemoteCommand = () => {
-      const active = document.activeElement
-      if (!(active instanceof HTMLElement) || !active.matches(focusableSelector)) return
+      const active = currentSpatialFocus()
+      if (!active) return
       clearSpatialFocus(active)
       active.setAttribute('data-spatial-focus', 'true')
     }
@@ -2154,15 +2164,15 @@ export default function App() {
 
       if (direction) {
         event.preventDefault()
-        const active = document.activeElement
-        if (active instanceof HTMLElement && moveVirtualKeyboardFocus(active, direction)) return
+        const active = currentSpatialFocus()
+        if (active && moveVirtualKeyboardFocus(active, direction)) return
         moveFocus(direction)
         return
       }
 
       if (key === 'enter' || key === ' ') {
-        const active = document.activeElement
-        if (active instanceof HTMLElement && active.matches(focusableSelector)) {
+        const active = currentSpatialFocus()
+        if (active) {
           event.preventDefault()
           active.click()
         }
