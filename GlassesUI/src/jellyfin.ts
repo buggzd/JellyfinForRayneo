@@ -62,6 +62,9 @@ export type JellyfinItemDto = {
   Id?: string
   Name?: string
   OriginalTitle?: string
+  SortName?: string
+  ForcedSortName?: string
+  Aliases?: string[]
   Type?: string
   MediaType?: string
   CollectionType?: string
@@ -206,6 +209,16 @@ const itemFields = [
   'Path',
   'Taglines',
 ].join(',')
+
+const seriesIndexFields = [
+  'ChildCount',
+  'DateCreated',
+  'Genres',
+  'OriginalTitle',
+  'SortName',
+].join(',')
+const seriesIndexPageSize = 200
+const maximumSeriesIndexItems = 50_000
 
 const directPlayMaxBitrate = 120_000_000
 const transcodeMaxBitrate = 24_000_000
@@ -609,6 +622,10 @@ export class JellyfinClient {
     if (init.body) headers.set('Content-Type', 'application/json')
 
     const controller = new AbortController()
+    const externalSignal = init.signal
+    const abortFromExternalSignal = () => controller.abort()
+    if (externalSignal?.aborted) controller.abort()
+    else externalSignal?.addEventListener('abort', abortFromExternalSignal, { once: true })
     const timeout = window.setTimeout(() => controller.abort(), requestTimeoutMs)
     try {
       let response: Response
@@ -656,6 +673,7 @@ export class JellyfinClient {
       }
     } finally {
       window.clearTimeout(timeout)
+      externalSignal?.removeEventListener('abort', abortFromExternalSignal)
     }
   }
 
@@ -788,6 +806,8 @@ export class JellyfinClient {
       original: source.Type === 'Episode' && sourceName !== title
         ? sourceName
         : source.OriginalTitle?.trim() || undefined,
+      sortName: source.ForcedSortName?.trim() || source.SortName?.trim() || undefined,
+      aliases: (source.Aliases ?? []).map((alias) => alias.trim()).filter(Boolean),
       subtitle: itemSubtitle(source),
       kind: mediaKind(source),
       year: source.ProductionYear ? String(source.ProductionYear) : undefined,
@@ -934,22 +954,48 @@ export class JellyfinClient {
     return (response.Items ?? []).map(this.mapItem)
   }
 
-  async search(term: string) {
-    const needle = term.trim()
-    if (!needle) return []
-    const response = await this.request<JellyfinItemsResponse>(
-      `/Users/${encodeURIComponent(this.session.userId)}/Items`,
-      {
-        SearchTerm: needle,
-        Recursive: true,
-        IncludeItemTypes: 'Movie,Series,Episode,Video,BoxSet',
-        Fields: itemFields,
-        ImageTypeLimit: 1,
-        EnableImageTypes: 'Primary,Backdrop,Logo',
-        Limit: 100,
-      },
-    )
-    return (response.Items ?? []).map(this.mapItem)
+  async loadSeriesIndex(signal?: AbortSignal) {
+    const userId = encodeURIComponent(this.session.userId)
+    const indexed: MediaItem[] = []
+    const seen = new Set<string>()
+    let startIndex = 0
+
+    while (startIndex < maximumSeriesIndexItems) {
+      const response = await this.request<JellyfinItemsResponse>(
+        `/Users/${userId}/Items`,
+        {
+          Recursive: true,
+          IncludeItemTypes: 'Series',
+          Fields: seriesIndexFields,
+          ImageTypeLimit: 1,
+          EnableImageTypes: 'Primary,Backdrop,Logo',
+          SortBy: 'SortName',
+          SortOrder: 'Ascending',
+          StartIndex: startIndex,
+          Limit: seriesIndexPageSize,
+          EnableTotalRecordCount: true,
+        },
+        { signal },
+      )
+      const items = response.Items ?? []
+      let added = 0
+      const remaining = maximumSeriesIndexItems - indexed.length
+      for (const source of items.slice(0, remaining)) {
+        const item = this.mapItem(source)
+        if (!seen.has(item.id)) {
+          seen.add(item.id)
+          indexed.push(item)
+          added += 1
+        }
+      }
+
+      if (!items.length || !added || indexed.length >= maximumSeriesIndexItems) break
+      startIndex += items.length
+      const total = response.TotalRecordCount
+      if ((typeof total === 'number' && startIndex >= total) || items.length < seriesIndexPageSize) break
+    }
+
+    return indexed
   }
 
   async loadDetail(itemId: string, requestedSeasonId?: string): Promise<DetailSnapshot> {

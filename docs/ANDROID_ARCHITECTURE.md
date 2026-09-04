@@ -92,16 +92,19 @@ length-limited, and whitelisted before use.
 | `retryGlasses` | Republish the session bootstrap after a catalog failure |
 | `shareDiagnostics` | Open Android's share sheet with a redacted diagnostic report |
 | `selectDisplayMode` | Save and request 2D/3D mode |
-| `remoteCommand`, `previewHaptic` | Bounded touchpad input |
+| `remoteCommand`, `searchText`, `previewHaptic` | Bounded touchpad input and the active Series-search query |
 | `copyQuickConnectCode`, `openQuickConnectAuthorization` | Phone helpers |
 | `screenChanged` | Phone surface and back-navigation state |
 
 Android pushes phone state through `window.LumaNative.receiveState`. This state
-includes connection, display, discovery, and playback UI data, but never the
-access token or password. `glassesPresentationReady` means only that the local
-glasses page is running; `glassesRuntimeState=ready` and `mediaReady=true` mean
-that page actually loaded the Jellyfin catalog. The phone keeps a glasses-side
-failure visible so field testing does not require ADB.
+includes connection, display, discovery, playback, and bounded search UI data,
+but never the access token or password. While the glasses search page is open,
+`searchInputActive=true` moves the phone to its touchpad, focuses its search
+field, and requests the system QWERTY keyboard; `searchQuery` mirrors at most 48
+lowercase ASCII letters, digits, and spaces. `glassesPresentationReady` means
+only that the local glasses page is running; `glassesRuntimeState=ready` and
+`mediaReady=true` mean that page actually loaded the Jellyfin catalog. The phone
+keeps a glasses-side failure visible so field testing does not require ADB.
 
 `GlassesUI` calls `window.RayNeoGlasses`:
 
@@ -112,10 +115,13 @@ failure visible so field testing does not require ADB.
 | `postMessage` | Send validated runtime/playback/session events to Android |
 
 Accepted glasses messages are `manage_login`, `logout`, `unauthorized`,
-`runtime_state`, and `playback_state`. The whole message and every individual
-field have fixed limits. Remote commands are limited to direction, enter,
-back, and a bounded volume percentage; the pending queue holds at most 32
-items.
+`runtime_state`, `playback_state`, and `search_state`. The whole message and
+every individual field have fixed limits. `search_state` carries only
+`active`/`inactive` plus the bounded ASCII query; leaving search, logout, a lost
+glasses WebView, or an unauthorized restore clears the phone input and hides
+the IME. Remote commands are limited to direction, enter, back, a bounded
+volume percentage, bounded `search-text`, search submit, and keyboard visibility
+signals; the pending queue holds at most 32 items.
 
 `runtime_state.errorCode` accepts only `none`, `network`, `http`, `response`, or
 `unknown`. Android maps those categories to fixed Chinese diagnostics and never
@@ -126,6 +132,14 @@ Directional keyboard events originate at `document.activeElement`, falling
 back to `document.body`, and bubble from an element target. `GlassesUI` owns the
 single `data-spatial-focus="true"` marker. While video is active, the player
 scope prevents underlying pages from receiving input.
+
+The glasses search surface uses one Apple TV-style A-Z/0-9 character strip as
+a remote-only fallback and shows Series posters without episode rows. Pressing
+down enters the poster grid; up from its first row or left from its first column
+returns to the strip. Phone QWERTY input updates results on every edit, and the
+phone keyboard's search action focuses the first matching Series. Full pinyin,
+pinyin initials, English titles, and optional season/episode hints are resolved
+locally from the bounded Series index.
 
 ## RayNeo display state
 

@@ -1,7 +1,17 @@
 const CHANNEL = 'jellyfin-rayneo-dual-ui-v1'
 const MAX_MESSAGE_LENGTH = 16_384
 const allowedScreens = new Set(['connect', 'auth', 'home', 'settings', 'touchpad'])
-const allowedRemoteCommands = new Set(['up', 'down', 'left', 'right', 'submit', 'back'])
+const allowedRemoteCommands = new Set([
+  'up',
+  'down',
+  'left',
+  'right',
+  'submit',
+  'back',
+  'search-submit',
+  'search-keyboard-visible',
+  'search-keyboard-hidden',
+])
 
 const initialState = {
   state: 'login_required',
@@ -23,6 +33,8 @@ const initialState = {
   glassesRuntimeErrorCode: 'none',
   mediaReady: false,
   touchpadReady: false,
+  searchInputActive: false,
+  searchQuery: '',
   displayMode: 'mirror_2d',
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
@@ -140,6 +152,10 @@ export function installDevelopmentBridge() {
     remoteCommand: (value, haptic) => {
       const command = boundedText(value, 32).toLowerCase()
       if (allowedRemoteCommands.has(command)) call('remoteCommand', [command, Boolean(haptic)])
+    },
+    searchText: (value) => {
+      const query = boundedText(value, 49).toLowerCase()
+      if (query.length <= 48 && /^[a-z0-9 ]*$/.test(query)) call('searchText', [query])
     },
     previewHaptic: () => navigator.vibrate?.(8),
     screenChanged: (value) => {

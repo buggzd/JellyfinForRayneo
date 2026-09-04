@@ -7,6 +7,7 @@ import java.util.Locale;
 final class GlassesMessage
 {
     static final int MAX_PAYLOAD_LENGTH = 8_192;
+    static final int MAX_SEARCH_QUERY_LENGTH = 48;
     static final long MAX_MEDIA_TICKS = 10_000_000L * 60L * 60L * 24L * 366L;
 
     enum Type
@@ -15,7 +16,8 @@ final class GlassesMessage
         LOGOUT,
         UNAUTHORIZED,
         PLAYBACK_STATE,
-        RUNTIME_STATE
+        RUNTIME_STATE,
+        SEARCH_STATE
     }
 
     final Type type;
@@ -25,6 +27,7 @@ final class GlassesMessage
     final String title;
     final String subtitle;
     final String playMethod;
+    final String query;
     final long positionTicks;
     final long durationTicks;
 
@@ -36,6 +39,7 @@ final class GlassesMessage
             String title,
             String subtitle,
             String playMethod,
+            String query,
             long positionTicks,
             long durationTicks)
     {
@@ -46,6 +50,7 @@ final class GlassesMessage
         this.title = title;
         this.subtitle = subtitle;
         this.playMethod = playMethod;
+        this.query = query;
         this.positionTicks = positionTicks;
         this.durationTicks = durationTicks;
     }
@@ -73,8 +78,17 @@ final class GlassesMessage
             {
                 return null;
             }
+            if (type == Type.SEARCH_STATE && !isSearchState(state))
+            {
+                return null;
+            }
             String errorCode = runtimeErrorCode(source, type, state);
             if (errorCode == null)
+            {
+                return null;
+            }
+            String query = searchQuery(source, type, state);
+            if (query == null)
             {
                 return null;
             }
@@ -86,6 +100,7 @@ final class GlassesMessage
                     text(source, "title", 180),
                     text(source, "subtitle", 240),
                     playMethod(source),
+                    query,
                     boundedLong(source, "positionTicks"),
                     boundedLong(source, "durationTicks"));
         }
@@ -109,6 +124,8 @@ final class GlassesMessage
                 return Type.PLAYBACK_STATE;
             case "runtime_state":
                 return Type.RUNTIME_STATE;
+            case "search_state":
+                return Type.SEARCH_STATE;
             default:
                 return null;
         }
@@ -132,6 +149,45 @@ final class GlassesMessage
                 || "ready".equals(value)
                 || "no-session".equals(value)
                 || "error".equals(value);
+    }
+
+    private static boolean isSearchState(String value)
+    {
+        return "active".equals(value) || "inactive".equals(value);
+    }
+
+    private static String searchQuery(JSONObject source, Type type, String state)
+    {
+        if (type != Type.SEARCH_STATE || "inactive".equals(state))
+        {
+            return "";
+        }
+        Object value = source.opt("query");
+        if (value == null || value == JSONObject.NULL)
+        {
+            return "";
+        }
+        if (!(value instanceof String))
+        {
+            return null;
+        }
+        String normalized = ((String) value).toLowerCase(Locale.US);
+        if (normalized.length() > MAX_SEARCH_QUERY_LENGTH)
+        {
+            return null;
+        }
+        for (int index = 0; index < normalized.length(); index++)
+        {
+            char character = normalized.charAt(index);
+            boolean allowed = character >= 'a' && character <= 'z'
+                    || character >= '0' && character <= '9'
+                    || character == ' ';
+            if (!allowed)
+            {
+                return null;
+            }
+        }
+        return normalized;
     }
 
     private static String runtimeErrorCode(JSONObject source, Type type, String state)

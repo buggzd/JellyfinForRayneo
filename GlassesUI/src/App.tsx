@@ -5,6 +5,7 @@ import {
   Captions,
   Check,
   ChevronRight,
+  Delete as DeleteIcon,
   FastForward,
   Folder,
   Grid3X3,
@@ -12,7 +13,6 @@ import {
   Home,
   Info,
   Keyboard,
-  Languages,
   ListFilter,
   LoaderCircle,
   LogOut,
@@ -55,7 +55,17 @@ import type {
   PlaybackSelection,
 } from './jellyfin'
 import { postNativeMessage } from './runtime'
-import { useJellyfin, type JellyfinUiStatus } from './useJellyfin'
+import {
+  buildSeriesIndex,
+  parseSeriesQuery,
+  searchSeries,
+  type SeriesIndexEntry,
+} from './seriesSearch'
+import {
+  useJellyfin,
+  type JellyfinUiStatus,
+  type SeriesIndexStatus,
+} from './useJellyfin'
 
 type Page = 'home' | 'browse' | 'favorites' | 'search' | 'detail' | 'player'
 type Direction = 'up' | 'down' | 'left' | 'right'
@@ -248,48 +258,76 @@ function movePlayerFocus(direction: Direction) {
   return false
 }
 
-function moveVirtualKeyboardFocus(current: HTMLElement, direction: Direction) {
-  const keyboard = current.closest<HTMLElement>('.virtual-keyboard')
-  if (!keyboard) return false
+function focusSeriesSearchKeyboard(searchPage: HTMLElement) {
+  const keys = Array.from(searchPage.querySelectorAll<HTMLElement>('[data-search-keyboard="true"]:not([disabled])'))
+  const requestedId = searchPage.dataset.keyboardReturnId
+  const target = keys.find((key) => key.dataset.searchFocusId === requestedId) ?? keys[0]
+  return focusSpatialElement(target)
+}
+
+function moveSeriesSearchFocus(current: HTMLElement, direction: Direction) {
+  const searchPage = current.closest<HTMLElement>('.series-search-page')
+  if (!searchPage) return false
 
   const visibleEnabled = (element: HTMLElement) => {
     const rect = element.getBoundingClientRect()
     const style = window.getComputedStyle(element)
     return rect.width > 2 && rect.height > 2 && style.visibility !== 'hidden' && style.display !== 'none'
   }
-
-  const collect = (selector: string) => Array.from(keyboard.querySelectorAll<HTMLElement>(selector)).filter(visibleEnabled)
-  const rows = [
-    collect('.keyboard-suggestions [data-focusable="true"]:not([disabled])'),
-    ...Array.from(keyboard.querySelectorAll<HTMLElement>('.keyboard-row')).map((row) => (
-      Array.from(row.querySelectorAll<HTMLElement>('[data-focusable="true"]:not([disabled])')).filter(visibleEnabled)
-    )),
-    collect('.keyboard-actions [data-focusable="true"]:not([disabled])'),
-  ].filter((row) => row.length)
-
+  const rows = Array.from(searchPage.querySelectorAll<HTMLElement>('[data-search-keyboard-row="true"]'))
+    .map((row) => Array.from(row.querySelectorAll<HTMLElement>('[data-search-keyboard="true"]:not([disabled])')).filter(visibleEnabled))
+    .filter((row) => row.length)
+  const results = Array.from(searchPage.querySelectorAll<HTMLElement>('[data-search-result="true"]:not([disabled])'))
+    .filter(visibleEnabled)
   const rowIndex = rows.findIndex((row) => row.includes(current))
-  if (rowIndex < 0) return false
 
-  if (direction === 'left' || direction === 'right') {
+  if (rowIndex >= 0) {
     const row = rows[rowIndex]
     const columnIndex = row.indexOf(current)
-    const nextIndex = columnIndex + (direction === 'right' ? 1 : -1)
-    const next = row[Math.max(0, Math.min(row.length - 1, nextIndex))]
-    focusSpatialElement(next)
+    searchPage.dataset.keyboardReturnId = current.dataset.searchFocusId ?? ''
+
+    if (direction === 'left' || direction === 'right') {
+      const nextIndex = columnIndex + (direction === 'right' ? 1 : -1)
+      if (nextIndex < 0) return false
+      const target = row[Math.min(row.length - 1, nextIndex)]
+      focusSpatialElement(target)
+      target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+      return true
+    }
+
+    if (direction === 'down') {
+      const target = results.find((result) => result.dataset.previewed === 'true') ?? results[0]
+      if (target) {
+        focusSpatialElement(target)
+        target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+      }
+      return true
+    }
     return true
   }
 
-  const nextRowIndex = rowIndex + (direction === 'down' ? 1 : -1)
-  if (nextRowIndex < 0 || nextRowIndex >= rows.length) return false
-
+  const resultIndex = results.indexOf(current)
+  if (resultIndex < 0) return false
   const source = current.getBoundingClientRect()
-  const sourceCenter = source.left + source.width / 2
-  const next = rows[nextRowIndex].reduce((closest, candidate) => {
-    const rect = candidate.getBoundingClientRect()
-    const distance = Math.abs(rect.left + rect.width / 2 - sourceCenter)
-    return distance < closest.distance ? { element: candidate, distance } : closest
-  }, { element: rows[nextRowIndex][0], distance: Number.POSITIVE_INFINITY }).element
-
+  const sourceX = source.left + source.width / 2
+  const sourceY = source.top + source.height / 2
+  const candidates = results.flatMap((result) => {
+    if (result === current) return []
+    const rect = result.getBoundingClientRect()
+    const dx = rect.left + rect.width / 2 - sourceX
+    const dy = rect.top + rect.height / 2 - sourceY
+    const primary = direction === 'right' ? dx : direction === 'left' ? -dx : direction === 'down' ? dy : -dy
+    if (primary <= 4) return []
+    if ((direction === 'left' || direction === 'right') && Math.abs(dy) > Math.max(source.height, rect.height) * .55) return []
+    const secondary = direction === 'left' || direction === 'right' ? Math.abs(dy) : Math.abs(dx)
+    return [{ result, score: primary + secondary * 2.2 }]
+  }).sort((left, right) => left.score - right.score)
+  const next = candidates[0]?.result
+  if (!next) {
+    return direction === 'left' || direction === 'up'
+      ? focusSeriesSearchKeyboard(searchPage)
+      : true
+  }
   focusSpatialElement(next)
   next.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
   return true
@@ -623,61 +661,17 @@ function HomePage({
   )
 }
 
-type BrowseMode = 'library' | 'favorites' | 'search'
-
-const qwertyRows = [
-  ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
-  ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
-  ['Z', 'X', 'C', 'V', 'B', 'N', 'M'],
-]
-
-const pinyinLexicon = [
-  { pinyin: 'shenhai', words: ['深海', '深海回声'] },
-  { pinyin: 'shen', words: ['深', '神', '身', '沈'] },
-  { pinyin: 'hai', words: ['海', '海面', '海洋'] },
-  { pinyin: 'kehuan', words: ['科幻', '科幻片'] },
-  { pinyin: 'dianying', words: ['电影', '电影库'] },
-  { pinyin: 'juji', words: ['剧集', '剧集库'] },
-  { pinyin: 'jilupian', words: ['纪录片', '纪录'] },
-  { pinyin: 'donghua', words: ['动画', '动画片'] },
-  { pinyin: 'kecheng', words: ['课程', '网课'] },
-  { pinyin: 'yinyue', words: ['音乐', '音乐会'] },
-  { pinyin: 'xiju', words: ['喜剧'] },
-  { pinyin: 'xuanyi', words: ['悬疑', '悬疑片'] },
-  { pinyin: 'shoucang', words: ['收藏', '我的收藏'] },
-  { pinyin: 'sousuo', words: ['搜索'] },
-  { pinyin: 'jixu', words: ['继续', '继续观看'] },
-  { pinyin: 'zuixin', words: ['最新', '最近添加'] },
-  { pinyin: 'gaofen', words: ['高分', '评分最高'] },
-  { pinyin: 'weizhi', words: ['未知'] },
-  { pinyin: 'xinhao', words: ['信号'] },
-]
-
-function findPinyinCandidates(value: string) {
-  const needle = value.trim().toLocaleLowerCase()
-  if (!needle) return []
-
-  const matches = pinyinLexicon
-    .filter((entry) => entry.pinyin.startsWith(needle))
-    .sort((a, b) => {
-      const exactPriority = Number(b.pinyin === needle) - Number(a.pinyin === needle)
-      return exactPriority || a.pinyin.localeCompare(b.pinyin, 'en-US')
-    })
-
-  return Array.from(new Set(matches.flatMap((entry) => entry.words))).slice(0, 5)
-}
+type BrowseMode = 'library' | 'favorites'
 
 function BrowsePage({
   mode,
   items,
   favorites,
-  searchSeed,
   initialFolder,
   serverName,
   userName,
   refreshing,
   onLoadFolder,
-  onSearch,
   onNavigate,
   onOpen,
   onPreview,
@@ -688,13 +682,11 @@ function BrowsePage({
   mode: BrowseMode
   items: MediaItem[]
   favorites: MediaItem[]
-  searchSeed: MediaItem[]
   initialFolder?: MediaItem | null
   serverName: string
   userName: string
   refreshing: boolean
   onLoadFolder: (parentId: string) => Promise<MediaItem[]>
-  onSearch: (query: string) => Promise<MediaItem[]>
   onNavigate: (page: Page) => void
   onOpen: (item: MediaItem) => void
   onPreview: (item: MediaItem) => void
@@ -707,23 +699,9 @@ function BrowsePage({
   ))
   const [filter, setFilter] = useState<'all' | 'unwatched' | 'continue' | 'favorite'>('all')
   const [sort, setSort] = useState<'最近加入' | '名称' | '评分最高'>('最近加入')
-  const [query, setQuery] = useState('')
-  const [composition, setComposition] = useState('')
-  const [keyboardMode, setKeyboardMode] = useState<'zh' | 'en'>('zh')
   const [visibleCount, setVisibleCount] = useState(BROWSE_BATCH_SIZE)
   const [folderLoading, setFolderLoading] = useState(mode === 'library' && Boolean(initialFolder))
-  const [searching, setSearching] = useState(false)
-  const [searchResults, setSearchResults] = useState<MediaItem[]>([])
   const loadMoreRef = useRef<HTMLElement | null>(null)
-
-  const keyboardRows = keyboardMode === 'zh'
-    ? qwertyRows
-    : [
-        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
-        ...qwertyRows,
-      ]
-  const pinyinCandidates = useMemo(() => findPinyinCandidates(composition), [composition])
-  const keyboardSuggestions = composition ? pinyinCandidates : ['深海', '科幻', '4K', '课程', '收藏']
 
   useEffect(() => {
     if (mode !== 'library' || !initialFolder) {
@@ -747,39 +725,10 @@ function BrowsePage({
     }
   }, [initialFolder, mode, onLoadFolder])
 
-  useEffect(() => {
-    if (mode !== 'search') return
-    if (!query.trim()) {
-      setSearchResults(searchSeed.slice(0, 12))
-      setSearching(false)
-      return
-    }
-
-    let active = true
-    setSearching(true)
-    const timer = window.setTimeout(() => {
-      onSearch(query).then((results) => {
-        if (active) setSearchResults(results)
-      }).catch(() => {
-        if (active) setSearchResults([])
-      }).finally(() => {
-        if (active) setSearching(false)
-      })
-    }, 280)
-    return () => {
-      active = false
-      window.clearTimeout(timer)
-    }
-  }, [mode, onSearch, query, searchSeed])
-
   const baseItems = useMemo(() => {
     if (mode === 'favorites') return favorites
-    if (mode === 'search') {
-      if (!query) return searchSeed.slice(0, 12)
-      return searchResults
-    }
     return path.length ? path[path.length - 1].children : items
-  }, [favorites, items, mode, path, query, searchResults, searchSeed])
+  }, [favorites, items, mode, path])
 
   const shownItems = useMemo(() => {
     let result = [...baseItems]
@@ -796,8 +745,8 @@ function BrowsePage({
   const showsSeriesPosters = mode === 'library'
     && path.length > 0
     && shownItems.some((item) => item.sourceType === 'Series')
-  const title = mode === 'favorites' ? '我的收藏' : mode === 'search' ? '全局搜索' : path.at(-1)?.item.title ?? '媒体库'
-  const eyebrow = mode === 'favorites' ? 'SAVED MOMENTS' : mode === 'search' ? 'SEARCH EVERYWHERE' : path.length ? 'FOLDER VIEW' : 'ALL LIBRARIES'
+  const title = mode === 'favorites' ? '我的收藏' : path.at(-1)?.item.title ?? '媒体库'
+  const eyebrow = mode === 'favorites' ? 'SAVED MOMENTS' : path.length ? 'FOLDER VIEW' : 'ALL LIBRARIES'
 
   useEffect(() => {
     setVisibleCount(BROWSE_BATCH_SIZE)
@@ -842,55 +791,10 @@ function BrowsePage({
     onOpen(item)
   }
 
-  const appendSearchKey = (key: string) => {
-    if (keyboardMode === 'zh') {
-      setComposition((value) => `${value}${key.toLocaleLowerCase()}`.slice(0, 18))
-      return
-    }
-    setQuery((value) => `${value}${key}`.slice(0, 24))
-    setFilter('all')
-    setVisibleCount(BROWSE_BATCH_SIZE)
-  }
-
-  const commitCandidate = (term: string, replace = false) => {
-    setQuery((value) => (replace ? term : `${value}${term}`).slice(0, 24))
-    setComposition('')
-    setFilter('all')
-    setVisibleCount(BROWSE_BATCH_SIZE)
-  }
-
-  const eraseSearchCharacter = () => {
-    if (composition) setComposition((value) => value.slice(0, -1))
-    else setQuery((value) => value.slice(0, -1))
-  }
-
-  const clearSearch = () => {
-    setQuery('')
-    setComposition('')
-    setFilter('all')
-    setVisibleCount(BROWSE_BATCH_SIZE)
-  }
-
-  const enterSpace = () => {
-    if (keyboardMode === 'zh' && composition) {
-      if (pinyinCandidates[0]) commitCandidate(pinyinCandidates[0])
-      return
-    }
-    setQuery((value) => `${value} `.slice(0, 24))
-  }
-
-  const focusFirstResult = () => {
-    const firstResult = document.querySelector<HTMLElement>('.search-results .media-card')
-    if (firstResult) {
-      focusSpatialElement(firstResult)
-      firstResult.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
-    }
-  }
-
   return (
-    <div className={cx('browse-page', mode === 'search' && 'browse-page--search', 'page-enter')}>
+    <div className="browse-page page-enter">
       <PageHeader
-        active={mode === 'favorites' ? 'favorites' : mode === 'search' ? 'search' : 'browse'}
+        active={mode === 'favorites' ? 'favorites' : 'browse'}
         serverName={serverName}
         userName={userName}
         refreshing={refreshing}
@@ -907,67 +811,9 @@ function BrowsePage({
         </div>
 
         <header className="browse-title-row">
-          <div><small>{eyebrow}</small><h1>{title}</h1><p>{mode === 'search' ? composition ? `正在输入拼音 “${composition}”` : searching ? `正在 Jellyfin 中查找 “${query}”` : query ? `正在所有媒体库中查找 “${query}”` : '使用遥控器与屏幕键盘搜索全部媒体库' : `${baseItems.length} 个项目 · Jellyfin / ${serverName}`}</p></div>
+          <div><small>{eyebrow}</small><h1>{title}</h1><p>{baseItems.length} 个项目 · Jellyfin / {serverName}</p></div>
           <div className="layout-indicator"><Grid3X3 size={18} /><span>{path.length ? '横向缩略图' : '海报网格'}</span></div>
         </header>
-
-        {mode === 'search' && (
-          <div className="tv-search">
-            <section className="search-console glass-panel" aria-live="polite">
-              <Search size={29} />
-              <div>
-                <small>SEARCH ALL LIBRARIES</small>
-                <strong className={cx(!query && !composition && 'is-placeholder')}>
-                  {!query && !composition ? '输入拼音搜索' : <>{query}<span className="search-console__composition">{composition}</span></>}
-                </strong>
-              </div>
-              <span className="search-console__cursor" />
-              <span className="search-console__count">{composition ? '选择候选词' : searching ? '搜索中…' : query ? `${shownItems.length} 个结果` : '为你推荐'}</span>
-              <FocusButton variant="round" label="删除最后一个字符" disabled={!query && !composition} onClick={eraseSearchCharacter}><ArrowLeft size={21} /></FocusButton>
-            </section>
-
-            <section className="virtual-keyboard glass-panel" aria-label="电视虚拟键盘">
-              <header className="virtual-keyboard__header">
-                <span><Keyboard size={19} /> {keyboardMode === 'zh' ? '拼音输入' : '英文输入'}</span>
-                <div className={cx('keyboard-suggestions', composition && 'is-composing')}>
-                  <small>{composition ? `${composition} · 候选` : '快捷'}</small>
-                  {keyboardSuggestions.map((term, index) => (
-                    <FocusButton key={term} className={cx(composition && index === 0 && 'keyboard-candidate--first')} variant="chip" active={!composition && query === term} onClick={() => commitCandidate(term, !composition)}>{term}</FocusButton>
-                  ))}
-                  {composition && !keyboardSuggestions.length && <span className="keyboard-suggestions__empty">暂无候选，继续输入或切换英文</span>}
-                </div>
-              </header>
-
-              <div className="keyboard-rows">
-                {keyboardRows.map((row, rowIndex) => (
-                  <div className="keyboard-row" style={{ '--key-count': row.length, '--row-width': `${row.length * 10}%` } as CSSProperties} key={`${keyboardMode}-${rowIndex}`}>
-                    {row.map((key, keyIndex) => (
-                      <button
-                        type="button"
-                        data-focusable="true"
-                        data-autofocus={rowIndex === 0 && keyIndex === 0 ? 'true' : undefined}
-                        className="keyboard-key"
-                        key={key}
-                        aria-label={`输入 ${key}`}
-                        onClick={() => appendSearchKey(key)}
-                      >
-                        <span>{key}</span>
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </div>
-
-              <footer className="keyboard-actions">
-                <FocusButton variant="glass" icon={<Languages size={18} />} onClick={() => { setKeyboardMode((value) => value === 'zh' ? 'en' : 'zh'); setComposition('') }}>{keyboardMode === 'zh' ? 'English / 123' : '中文拼音'}</FocusButton>
-                <FocusButton variant="glass" disabled={!query && !composition} onClick={clearSearch}>清空</FocusButton>
-                <FocusButton variant="glass" onClick={enterSpace}>{keyboardMode === 'zh' ? '空格 / 首选词' : '空格'}</FocusButton>
-                <FocusButton variant="glass" icon={<ArrowLeft size={18} />} disabled={!query && !composition} onClick={eraseSearchCharacter}>退格</FocusButton>
-                <FocusButton variant="primary" icon={<Search size={19} />} disabled={!shownItems.length || !!composition} onClick={focusFirstResult}>查看 {shownItems.length} 个结果</FocusButton>
-              </footer>
-            </section>
-          </div>
-        )}
 
         <section className="browse-toolbar glass-panel">
           <div className="toolbar-group">
@@ -978,7 +824,7 @@ function BrowsePage({
               ['continue', '可继续'],
               ['favorite', '已收藏'],
             ] as const).map(([value, label], index) => (
-              <FocusButton key={value} variant="chip" active={filter === value} autoFocusTarget={mode !== 'search' && index === 0} onClick={() => { setFilter(value); setVisibleCount(BROWSE_BATCH_SIZE) }}>{label}</FocusButton>
+              <FocusButton key={value} variant="chip" active={filter === value} autoFocusTarget={index === 0} onClick={() => { setFilter(value); setVisibleCount(BROWSE_BATCH_SIZE) }}>{label}</FocusButton>
             ))}
           </div>
           <span className="toolbar-divider" />
@@ -1000,7 +846,6 @@ function BrowsePage({
         ) : shownItems.length ? (
           <section className={cx(
             'media-grid',
-            mode === 'search' && 'search-results',
             path.length > 0 && !showsSeriesPosters && 'media-grid--wide',
             showsSeriesPosters && 'media-grid--series-posters',
           )}>
@@ -1011,7 +856,7 @@ function BrowsePage({
                 wide={path.length > 0 && item.sourceType !== 'Series'}
                 onOpen={openItem}
                 onPreview={onPreview}
-                autoFocusTarget={mode !== 'search' && index === 0 && filter !== 'all'}
+                autoFocusTarget={index === 0 && filter !== 'all'}
               />
             ))}
           </section>
@@ -1019,9 +864,9 @@ function BrowsePage({
           <section className="empty-state glass-panel">
             <div className="empty-state__orb"><Search size={32} /></div>
             <small>NOTHING IN THIS FREQUENCY</small>
-            <h2>{mode === 'search' ? '没有找到这段信号' : '这里暂时空无一物'}</h2>
-            <p>{mode === 'search' ? '换一个关键词，或清除筛选条件后再试。' : '当前筛选条件下没有内容，试试查看全部项目。'}</p>
-            <FocusButton variant="primary" autoFocusTarget icon={<X size={19} />} onClick={() => { setQuery(''); setFilter('all') }}>清除条件</FocusButton>
+            <h2>这里暂时空无一物</h2>
+            <p>当前筛选条件下没有内容，试试查看全部项目。</p>
+            <FocusButton variant="primary" autoFocusTarget icon={<X size={19} />} onClick={() => setFilter('all')}>清除条件</FocusButton>
           </section>
         )}
 
@@ -1040,11 +885,286 @@ function BrowsePage({
   )
 }
 
+type SearchPane = 'keyboard' | 'results'
+type SearchKeyboardMode = 'letters' | 'numbers'
+type PhoneKeyboardState = 'opening' | 'visible' | 'hidden'
+type SearchEpisodeHint = {
+  seriesId: string
+  season?: number
+  episode?: number
+}
+
+const searchLetterKeys = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ']
+const searchNumberKeys = [...'1234567890']
+
+function SearchPage({
+  series,
+  indexStatus,
+  prioritySeriesIds,
+  query,
+  focusPane,
+  keyboardMode,
+  keyboardFocusId,
+  resultFocusId,
+  phoneKeyboardState,
+  serverName,
+  userName,
+  refreshing,
+  onQueryChange,
+  onKeyboardModeChange,
+  onKeyboardFocus,
+  onResultFocus,
+  onNavigate,
+  onOpen,
+  onPreview,
+  onRefresh,
+  onExit,
+}: {
+  series: MediaItem[]
+  indexStatus: SeriesIndexStatus
+  prioritySeriesIds: string[]
+  query: string
+  focusPane: SearchPane
+  keyboardMode: SearchKeyboardMode
+  keyboardFocusId: string
+  resultFocusId: string
+  phoneKeyboardState: PhoneKeyboardState
+  serverName: string
+  userName: string
+  refreshing: boolean
+  onQueryChange: (value: string) => void
+  onKeyboardModeChange: (mode: SearchKeyboardMode) => void
+  onKeyboardFocus: (id: string) => void
+  onResultFocus: (id: string) => void
+  onNavigate: (page: Page) => void
+  onOpen: (item: MediaItem, hint: Omit<SearchEpisodeHint, 'seriesId'>) => void
+  onPreview: (item: MediaItem) => void
+  onRefresh: () => void
+  onExit: () => void
+}) {
+  const [entries, setEntries] = useState<SeriesIndexEntry[]>([])
+  const [buildingLocalIndex, setBuildingLocalIndex] = useState(Boolean(series.length))
+  const parsedQuery = useMemo(() => parseSeriesQuery(query), [query])
+  const results = useMemo(
+    () => searchSeries(entries, query, 24, prioritySeriesIds),
+    [entries, prioritySeriesIds, query],
+  )
+  const keyboardKeys = keyboardMode === 'letters' ? searchLetterKeys : searchNumberKeys
+  const availableKeyboardIds = new Set([
+    ...keyboardKeys.map((key) => `${keyboardMode}-${key}`),
+    'action-mode',
+    'action-space',
+    'action-clear',
+    'action-backspace',
+  ])
+  const effectiveKeyboardFocusId = availableKeyboardIds.has(keyboardFocusId)
+    ? keyboardFocusId
+    : keyboardMode === 'letters' ? 'letters-A' : 'numbers-1'
+  const effectiveResultId = results.some((result) => result.item.id === resultFocusId)
+    ? resultFocusId
+    : results[0]?.item.id ?? ''
+  const preview = results.find((result) => result.item.id === effectiveResultId) ?? results[0]
+
+  useEffect(() => {
+    let active = true
+    if (!series.length) {
+      setEntries([])
+      setBuildingLocalIndex(false)
+      return
+    }
+    setBuildingLocalIndex(true)
+    void buildSeriesIndex(series).then((next) => {
+      if (active) setEntries(next)
+    }).catch(() => {
+      if (active) setEntries([])
+    }).finally(() => {
+      if (active) setBuildingLocalIndex(false)
+    })
+    return () => {
+      active = false
+    }
+  }, [series])
+
+  useEffect(() => {
+    if (preview) onPreview(preview.item)
+  }, [onPreview, preview])
+
+  const updateQuery = (value: string) => onQueryChange(value.slice(0, 48))
+  const append = (value: string) => updateQuery(`${query}${value.toLocaleLowerCase()}`)
+  const appendSpace = () => {
+    if (query && !query.endsWith(' ')) updateQuery(`${query} `)
+  }
+  const indexLoading = indexStatus === 'loading' || buildingLocalIndex
+  const statusCopy = indexLoading
+    ? `正在同步完整剧集索引 · 已可搜索 ${entries.length} 部`
+    : indexStatus === 'error'
+      ? `完整索引暂不可用 · 当前可搜索 ${entries.length} 部`
+      : `已索引 ${entries.length} 部剧集`
+  const phoneKeyboardCopy = phoneKeyboardState === 'visible'
+    ? '手机键盘已就绪 · 输入实时同步'
+    : phoneKeyboardState === 'hidden'
+      ? '手机键盘已收起 · 点手机搜索框继续'
+      : '正在唤起手机键盘…'
+
+  return (
+    <div
+      className="series-search-page page-enter"
+      data-keyboard-return-id={effectiveKeyboardFocusId}
+    >
+      <PageHeader active="search" serverName={serverName} userName={userName} refreshing={refreshing} onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
+      <main className="series-search-content">
+        <header className="series-search-heading">
+          <div>
+            <small>SEARCH SERIES</small>
+            <h1>搜索剧集</h1>
+          </div>
+          <p><span /> {statusCopy}</p>
+        </header>
+
+        <div className="series-search-workspace">
+          <section className="compact-search-keyboard" aria-label="Apple TV 风格单行搜索键盘">
+            <div className="compact-search-query glass-panel" aria-live="polite">
+              <Search size={24} />
+              <span>
+                <strong className={cx(!query && 'is-placeholder')}>
+                  {query || '输入拼音首字母、完整拼音或英文'}<i />
+                </strong>
+                <small>搜索单位：Series</small>
+              </span>
+              {parsedQuery.episodeHint && (
+                <em>{parsedQuery.seasonHint ? `S${parsedQuery.seasonHint} · ` : ''}定位 E{parsedQuery.episodeHint}</em>
+              )}
+              <div className={cx('compact-search-phone-state', `is-${phoneKeyboardState}`)}>
+                <Keyboard size={16} />
+                <span>{phoneKeyboardCopy}</span>
+              </div>
+            </div>
+
+            <div className="compact-search-strip glass-panel" data-search-keyboard-row="true">
+              <button
+                type="button"
+                data-focusable="true"
+                data-search-keyboard="true"
+                data-search-focus-id="action-mode"
+                data-autofocus={focusPane === 'keyboard' && effectiveKeyboardFocusId === 'action-mode' ? 'true' : undefined}
+                className="compact-search-action compact-search-action--mode"
+                onClick={() => onKeyboardModeChange(keyboardMode === 'letters' ? 'numbers' : 'letters')}
+                onFocus={() => onKeyboardFocus('action-mode')}
+              >
+                {keyboardMode === 'letters' ? '123' : 'ABC'}
+              </button>
+              <button
+                type="button"
+                data-focusable="true"
+                data-search-keyboard="true"
+                data-search-focus-id="action-space"
+                data-autofocus={focusPane === 'keyboard' && effectiveKeyboardFocusId === 'action-space' ? 'true' : undefined}
+                className="compact-search-action compact-search-action--wide"
+                onClick={appendSpace}
+                onFocus={() => onKeyboardFocus('action-space')}
+              >
+                空格
+              </button>
+              {keyboardKeys.map((key) => {
+                const focusId = `${keyboardMode}-${key}`
+                return (
+                  <button
+                    type="button"
+                    data-focusable="true"
+                    data-search-keyboard="true"
+                    data-search-focus-id={focusId}
+                    data-autofocus={focusPane === 'keyboard' && effectiveKeyboardFocusId === focusId ? 'true' : undefined}
+                    className="compact-search-key"
+                    key={key}
+                    aria-label={`输入 ${key}`}
+                    onClick={() => append(key)}
+                    onFocus={(event) => {
+                      onKeyboardFocus(focusId)
+                      event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+                    }}
+                  >
+                    {key}
+                  </button>
+                )
+              })}
+              <button
+                type="button"
+                data-focusable="true"
+                data-search-keyboard="true"
+                data-search-focus-id="action-clear"
+                data-autofocus={focusPane === 'keyboard' && effectiveKeyboardFocusId === 'action-clear' ? 'true' : undefined}
+                className="compact-search-action compact-search-action--clear"
+                onClick={() => updateQuery('')}
+                onFocus={() => onKeyboardFocus('action-clear')}
+              >
+                清空
+              </button>
+              <button
+                type="button"
+                data-focusable="true"
+                data-search-keyboard="true"
+                data-search-focus-id="action-backspace"
+                data-autofocus={focusPane === 'keyboard' && effectiveKeyboardFocusId === 'action-backspace' ? 'true' : undefined}
+                className="compact-search-action compact-search-action--backspace"
+                aria-label="退格"
+                onClick={() => updateQuery(query.slice(0, -1))}
+                onFocus={() => onKeyboardFocus('action-backspace')}
+              >
+                <DeleteIcon size={18} />
+              </button>
+            </div>
+            <footer><span><kbd>↓</kbd> 进入封面结果</span><span><kbd>↑</kbd> 返回字母带</span></footer>
+          </section>
+
+          <section className="series-search-results" aria-label="剧集搜索结果">
+            <header>
+              <div><small>{query ? 'REAL-TIME SERIES' : 'RECOMMENDED SERIES'}</small><h2>{query ? `搜索结果 · ${results.length}` : '推荐剧集'}</h2></div>
+            </header>
+
+            {results.length ? (
+              <div className="series-search-results__list">
+                {results.map((result) => {
+                  const item = result.item
+                  const previewed = item.id === effectiveResultId
+                  return (
+                    <button
+                      type="button"
+                      data-focusable="true"
+                      data-search-result="true"
+                      data-previewed={previewed ? 'true' : undefined}
+                      data-autofocus={focusPane === 'results' && previewed ? 'true' : undefined}
+                      className={cx('series-search-result', previewed && 'is-previewed')}
+                      key={item.id}
+                      aria-label={[item.title, item.year, result.reason].filter(Boolean).join('，')}
+                      onClick={() => onOpen(item, { season: parsedQuery.seasonHint, episode: parsedQuery.episodeHint })}
+                      onFocus={() => { onResultFocus(item.id); onPreview(item) }}
+                    >
+                      <ArtFrame item={item} className="series-search-result__art" />
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className={cx('series-search-empty', indexLoading && 'is-loading')}>
+                {indexLoading ? <LoaderCircle className="is-spinning" size={30} /> : <Search size={30} />}
+                <strong>{indexLoading ? '正在建立剧集索引' : '没有匹配的剧集'}</strong>
+                <span>{indexLoading ? '索引到达后会自动显示在这里' : '试试标题拼音或拼音首字母'}</span>
+              </div>
+            )}
+          </section>
+        </div>
+      </main>
+      <RemoteHint />
+    </div>
+  )
+}
+
 function DetailPage({
   item,
   detail,
   loading,
   error,
+  initialEpisodeNumber,
   serverName,
   userName,
   refreshing,
@@ -1062,6 +1182,7 @@ function DetailPage({
   detail: DetailSnapshot | null
   loading: boolean
   error: string
+  initialEpisodeNumber?: number
   serverName: string
   userName: string
   refreshing: boolean
@@ -1085,6 +1206,8 @@ function DetailPage({
   const [expanded, setExpanded] = useState(false)
   const [infoTab, setInfoTab] = useState<'credits' | 'media'>('credits')
   const [detailSection, setDetailSection] = useState<'episodes' | 'similar' | 'clips' | 'details'>('episodes')
+  const detailPageRef = useRef<HTMLDivElement>(null)
+  const appliedEpisodeHint = useRef('')
 
   useEffect(() => {
     setFavorite(Boolean(resolvedItem.favorite))
@@ -1096,11 +1219,14 @@ function DetailPage({
     setDetailSection(similar.length ? 'similar' : 'details')
   }, [detail, detailSection, episodes.length, loading, similar.length])
 
-  const playTarget = resolvedItem.canPlay
+  const hintedEpisode = initialEpisodeNumber
+    ? episodes.find((episode) => episode.indexNumber === initialEpisodeNumber)
+    : undefined
+  const playTarget = hintedEpisode ?? (resolvedItem.canPlay
     ? resolvedItem
     : episodes.find((episode) => episode.progress && episode.progress > 0)
       ?? episodes.find((episode) => !episode.watched)
-      ?? episodes[0]
+      ?? episodes[0])
   const directors = resolvedItem.people?.filter((person) => person.type === 'Director').map((person) => person.name) ?? []
   const writers = resolvedItem.people?.filter((person) => ['Writer', 'Screenplay'].includes(person.type)).map((person) => person.name) ?? []
   const actors = resolvedItem.people?.filter((person) => person.type === 'Actor').map((person) => person.name) ?? []
@@ -1133,8 +1259,24 @@ function DetailPage({
     }
   }
 
+  useEffect(() => {
+    if (!initialEpisodeNumber || loading || !hintedEpisode) return
+    const hintKey = `${detail?.selectedSeasonId ?? ''}:${hintedEpisode.id}`
+    if (appliedEpisodeHint.current === hintKey) return
+    const timer = window.setTimeout(() => {
+      const target = Array.from(detailPageRef.current?.querySelectorAll<HTMLElement>('[data-episode-number]') ?? [])
+        .find((episode) => Number(episode.dataset.episodeNumber) === initialEpisodeNumber)
+      if (!target) return
+      appliedEpisodeHint.current = hintKey
+      setDetailSection('episodes')
+      focusSpatialElement(target)
+      target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+    }, 120)
+    return () => window.clearTimeout(timer)
+  }, [detail?.selectedSeasonId, hintedEpisode, initialEpisodeNumber, loading])
+
   return (
-    <div className="detail-page page-enter">
+    <div ref={detailPageRef} className="detail-page page-enter">
       <PageHeader active="none" minimal serverName={serverName} userName={userName} refreshing={refreshing} onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
       <main className="detail-content">
         <FocusButton variant="round" className="detail-back" label="返回" onClick={() => onNavigate('home')}><ArrowLeft size={22} /></FocusButton>
@@ -1172,7 +1314,7 @@ function DetailPage({
               </div>
             )}
             <div className="detail-actions">
-              <FocusButton variant="primary" autoFocusTarget disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">ENTER</span>} onClick={() => playTarget && onPlay(playTarget)}>{playTarget?.progress ? '继续播放' : '立即播放'}</FocusButton>
+              <FocusButton variant="primary" autoFocusTarget={!initialEpisodeNumber} disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">ENTER</span>} onClick={() => playTarget && onPlay(playTarget)}>{hintedEpisode ? `${hintedEpisode.progress ? '继续' : '播放'}第 ${initialEpisodeNumber} 集` : playTarget?.progress ? '继续播放' : '立即播放'}</FocusButton>
               <FocusButton variant="glass" disabled={!playTarget || loading} icon={<RotateCcw size={20} />} onClick={() => playTarget && onPlay(playTarget, true)}>从头播放</FocusButton>
               {extras[0] && <FocusButton variant="round" label="播放预告片" onClick={() => onPlay(extras[0], true)}><MonitorPlay size={20} /></FocusButton>}
               <FocusButton variant="round" disabled={actionBusy} active={favorite} label={favorite ? '取消收藏' : '收藏'} onClick={() => { void toggleFavorite() }}><Heart size={20} fill={favorite ? 'currentColor' : 'none'} /></FocusButton>
@@ -1202,7 +1344,7 @@ function DetailPage({
               </header>
               <div className="episode-rail">
                 {episodes.map((episode, index) => (
-                    <button key={episode.id} type="button" data-focusable="true" className="episode-card" onClick={() => onPlay(episode)} onFocus={() => onPreview(episode)}>
+                    <button key={episode.id} type="button" data-focusable="true" data-autofocus={initialEpisodeNumber === episode.indexNumber ? 'true' : undefined} data-episode-number={episode.indexNumber} className="episode-card" onClick={() => onPlay(episode)} onFocus={() => onPreview(episode)}>
                       <ArtFrame item={episode} wide />
                       <span className="episode-card__number">{String(episode.indexNumber ?? index + 1).padStart(2, '0')}</span>
                       <span className="episode-card__play"><Play size={19} fill="currentColor" /></span>
@@ -2173,6 +2315,14 @@ export default function App() {
   const [selected, setSelected] = useState<MediaItem>(demoFeatured)
   const [backdropItem, setBackdropItem] = useState<MediaItem>(demoFeatured)
   const [browseEntry, setBrowseEntry] = useState<MediaItem | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchPane, setSearchPane] = useState<SearchPane>('keyboard')
+  const [searchKeyboardMode, setSearchKeyboardMode] = useState<SearchKeyboardMode>('letters')
+  const [searchKeyboardFocusId, setSearchKeyboardFocusId] = useState('letters-A')
+  const [searchResultFocusId, setSearchResultFocusId] = useState('')
+  const [searchRecentSeriesIds, setSearchRecentSeriesIds] = useState<string[]>([])
+  const [searchEpisodeHint, setSearchEpisodeHint] = useState<SearchEpisodeHint | null>(null)
+  const [phoneKeyboardState, setPhoneKeyboardState] = useState<PhoneKeyboardState>('opening')
   const [detail, setDetail] = useState<DetailSnapshot | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
@@ -2186,6 +2336,29 @@ export default function App() {
     || jellyfin.runtime?.session?.serverUrl.replace(/^https?:\/\//i, '')
     || 'Jellyfin'
   const userName = jellyfin.runtime?.session?.userName || 'Jellyfin 用户'
+  const searchSessionKey = jellyfin.runtime?.session
+    ? `${jellyfin.runtime.session.serverUrl}\n${jellyfin.runtime.session.userId}\n${jellyfin.runtime.session.accessToken}`
+    : ''
+
+  useEffect(() => {
+    setSearchQuery('')
+    setSearchPane('keyboard')
+    setSearchKeyboardMode('letters')
+    setSearchKeyboardFocusId('letters-A')
+    setSearchResultFocusId('')
+    setSearchRecentSeriesIds([])
+    setSearchEpisodeHint(null)
+    setPhoneKeyboardState('opening')
+  }, [searchSessionKey])
+
+  const searchPrioritySeriesIds = useMemo(() => {
+    const shelfIds = jellyfin.snapshot?.shelves
+      .filter((shelf) => shelf.id === 'resume' || shelf.id === 'next-up')
+      .flatMap((shelf) => shelf.items.map((item) => (
+        item.sourceType === 'Series' ? item.id : item.seriesId ?? ''
+      ))) ?? []
+    return Array.from(new Set([...searchRecentSeriesIds, ...shelfIds].filter(Boolean)))
+  }, [jellyfin.snapshot, searchRecentSeriesIds])
 
   useEffect(() => {
     postNativeMessage({
@@ -2194,6 +2367,64 @@ export default function App() {
       errorCode: jellyfin.status === 'error' ? jellyfin.errorCode : 'none',
     })
   }, [jellyfin.errorCode, jellyfin.status])
+
+  const searchInputActive = page === 'search'
+    && jellyfin.status === 'ready'
+    && Boolean(jellyfin.snapshot)
+
+  useEffect(() => {
+    if (!searchInputActive) return
+    setPhoneKeyboardState('opening')
+    return () => {
+      postNativeMessage({ type: 'search_state', state: 'inactive' })
+    }
+  }, [searchInputActive])
+
+  useEffect(() => {
+    if (!searchInputActive) return
+    postNativeMessage({
+      type: 'search_state',
+      state: 'active',
+      query: searchQuery,
+    })
+  }, [searchInputActive, searchQuery])
+
+  useEffect(() => {
+    const onSearchRemoteCommand = (event: Event) => {
+      if (!searchInputActive) return
+      const command = event instanceof CustomEvent && typeof event.detail === 'string'
+        ? event.detail
+        : ''
+
+      if (command.startsWith('search-text:')) {
+        const value = command.slice('search-text:'.length)
+        if (value.length <= 48 && /^[a-z0-9 ]*$/.test(value)) setSearchQuery(value)
+        return
+      }
+      if (command === 'search-keyboard-visible') {
+        setPhoneKeyboardState('visible')
+        return
+      }
+      if (command === 'search-keyboard-hidden') {
+        setPhoneKeyboardState('hidden')
+        return
+      }
+      if (command !== 'search-submit') return
+
+      setSearchPane('results')
+      window.requestAnimationFrame(() => {
+        const searchPage = document.querySelector<HTMLElement>('.series-search-page')
+        const target = searchPage?.querySelector<HTMLElement>('[data-search-result="true"][data-previewed="true"]')
+          ?? searchPage?.querySelector<HTMLElement>('[data-search-result="true"]')
+        if (!target) return
+        focusSpatialElement(target)
+        target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+      })
+    }
+
+    window.addEventListener('rayneo-remote-command', onSearchRemoteCommand)
+    return () => window.removeEventListener('rayneo-remote-command', onSearchRemoteCommand)
+  }, [searchInputActive])
 
   useEffect(() => {
     const snapshot = jellyfin.snapshot
@@ -2214,7 +2445,17 @@ export default function App() {
     const generation = ++detailGeneration.current
     setDetailLoading(true)
     setDetailError('')
-    void jellyfin.loadDetail(selected.id).then((next) => {
+    void (async () => {
+      let next = await jellyfin.loadDetail(selected.id)
+      const hint = searchEpisodeHint?.seriesId === selected.id ? searchEpisodeHint : null
+      if (hint?.season) {
+        const requestedSeason = next.seasons.find((season) => season.indexNumber === hint.season)
+        if (requestedSeason && requestedSeason.id !== next.selectedSeasonId) {
+          next = await jellyfin.loadDetail(selected.id, requestedSeason.id)
+        }
+      }
+      return next
+    })().then((next) => {
       if (generation !== detailGeneration.current) return
       setDetail(next)
       setSelected(next.item)
@@ -2225,7 +2466,7 @@ export default function App() {
     }).finally(() => {
       if (generation === detailGeneration.current) setDetailLoading(false)
     })
-  }, [jellyfin.loadDetail, page, selected.id])
+  }, [jellyfin.loadDetail, page, searchEpisodeHint, selected.id])
 
   const navigate = useCallback((next: Page) => {
     if (next === page) return
@@ -2271,6 +2512,7 @@ export default function App() {
   }, [showToast])
 
   const openItem = useCallback((item: MediaItem) => {
+    setSearchEpisodeHint(null)
     setSelected(item)
     setBackdropItem(item)
     setDetail(null)
@@ -2281,6 +2523,21 @@ export default function App() {
     } else {
       navigate('detail')
     }
+  }, [navigate])
+
+  const openSearchSeries = useCallback((
+    item: MediaItem,
+    hint: Omit<SearchEpisodeHint, 'seriesId'>,
+  ) => {
+    setSearchPane('results')
+    setSearchResultFocusId(item.id)
+    setSearchRecentSeriesIds((items) => [item.id, ...items.filter((id) => id !== item.id)].slice(0, 8))
+    setSearchEpisodeHint({ seriesId: item.id, ...hint })
+    setSelected(item)
+    setBackdropItem(item)
+    setDetail(null)
+    setDetailError('')
+    navigate('detail')
   }, [navigate])
 
   const navigateFromMenu = useCallback((next: Page) => {
@@ -2356,13 +2613,24 @@ export default function App() {
         event.preventDefault()
         if (page === 'player') {
           window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: 'back' }))
+        } else if (page === 'search') {
+          const active = currentSpatialFocus()
+          const searchPage = active?.closest<HTMLElement>('.series-search-page')
+          if (active?.matches('[data-search-result="true"]') && searchPage && focusSeriesSearchKeyboard(searchPage)) {
+            return
+          }
+          if (active?.matches('[data-search-keyboard="true"]') && searchQuery) {
+            setSearchQuery((value) => value.slice(0, -1))
+            return
+          }
+          goBack()
         } else {
           goBack()
         }
         return
       }
 
-      if (import.meta.env.DEV && ['1', '2', '3', '4', '5'].includes(key)) {
+      if (import.meta.env.DEV && page !== 'search' && ['1', '2', '3', '4', '5'].includes(key)) {
         event.preventDefault()
         const pages: Page[] = ['home', 'browse', 'favorites', 'detail', 'player']
         navigateDirect(pages[Number(key) - 1])
@@ -2388,7 +2656,7 @@ export default function App() {
       if (direction) {
         event.preventDefault()
         const active = currentSpatialFocus()
-        if (active && moveVirtualKeyboardFocus(active, direction)) return
+        if (active && moveSeriesSearchFocus(active, direction)) return
         moveFocus(direction)
         return
       }
@@ -2404,7 +2672,7 @@ export default function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [goBack, navigateDirect, page])
+  }, [goBack, navigateDirect, page, searchQuery])
 
   useEffect(() => () => {
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
@@ -2424,10 +2692,17 @@ export default function App() {
 
   const pageNode = (() => {
     if (page === 'home') return <HomePage featured={snapshot.featured} shelves={snapshot.shelves} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
-    if (page === 'browse' || page === 'favorites' || page === 'search') {
-      return <BrowsePage key={`${page}:${page === 'browse' ? browseEntry?.id ?? 'root' : 'root'}`} mode={page === 'browse' ? 'library' : page} items={snapshot.libraries} favorites={snapshot.favorites} searchSeed={snapshot.allItems} initialFolder={page === 'browse' ? browseEntry : null} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onSearch={jellyfin.search} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} onResetLibrary={() => setBrowseEntry(null)} />
+    if (page === 'browse' || page === 'favorites') {
+      return <BrowsePage key={`${page}:${page === 'browse' ? browseEntry?.id ?? 'root' : 'root'}`} mode={page === 'browse' ? 'library' : 'favorites'} items={snapshot.libraries} favorites={snapshot.favorites} initialFolder={page === 'browse' ? browseEntry : null} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} onResetLibrary={() => setBrowseEntry(null)} />
     }
-    if (page === 'detail') return <DetailPage key={selected.id} item={selected} detail={detail} loading={detailLoading} error={detailError} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigateFromMenu(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? '已加入收藏' : '已取消收藏'); return saved } catch { showToast('收藏状态更新失败'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? '已标记为看过' : '已标记为未看'); return saved } catch { showToast('观看状态更新失败'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
+    if (page === 'search') {
+      const fallbackSeries = snapshot.allItems.filter((item) => item.sourceType === 'Series')
+      const searchableSeries = jellyfin.seriesIndexStatus === 'ready'
+        ? jellyfin.seriesIndex
+        : jellyfin.seriesIndex.length ? jellyfin.seriesIndex : fallbackSeries
+      return <SearchPage series={searchableSeries} indexStatus={jellyfin.seriesIndexStatus} prioritySeriesIds={searchPrioritySeriesIds} query={searchQuery} focusPane={searchPane} keyboardMode={searchKeyboardMode} keyboardFocusId={searchKeyboardFocusId} resultFocusId={searchResultFocusId} phoneKeyboardState={phoneKeyboardState} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onQueryChange={setSearchQuery} onKeyboardModeChange={setSearchKeyboardMode} onKeyboardFocus={(id) => { setSearchPane('keyboard'); setSearchKeyboardFocusId(id) }} onResultFocus={(id) => { setSearchPane('results'); setSearchResultFocusId(id) }} onNavigate={navigateFromMenu} onOpen={openSearchSeries} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
+    }
+    if (page === 'detail') return <DetailPage key={selected.id} item={selected} detail={detail} loading={detailLoading} error={detailError} initialEpisodeNumber={searchEpisodeHint?.seriesId === selected.id ? searchEpisodeHint.episode : undefined} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigateFromMenu(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? '已加入收藏' : '已取消收藏'); return saved } catch { showToast('收藏状态更新失败'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? '已标记为看过' : '已标记为未看'); return saved } catch { showToast('观看状态更新失败'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     const request = playback ?? {
       item: selected.canPlay
         ? selected

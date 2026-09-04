@@ -49,6 +49,31 @@ public final class GlassesMessageTests
                 "{\"type\":\"playback_state\",\"state\":\"invalid\"}"));
         assertNull(GlassesMessage.parse(
                 "{\"type\":\"runtime_state\",\"state\":\"error\",\"errorCode\":\"details\"}"));
+        assertNull(GlassesMessage.parse(
+                "{\"type\":\"search_state\",\"state\":\"visible\"}"));
+    }
+
+    @Test
+    public void parse_AcceptsOnlyBoundedAsciiSearchState() throws Exception
+    {
+        GlassesMessage active = GlassesMessage.parse(
+                "{\"type\":\"search_state\",\"state\":\"active\",\"query\":\"QYN 12\"}");
+        GlassesMessage inactive = GlassesMessage.parse(
+                "{\"type\":\"search_state\",\"state\":\"inactive\",\"query\":\"ignored\"}");
+
+        assertNotNull(active);
+        assertEquals(GlassesMessage.Type.SEARCH_STATE, active.type);
+        assertEquals("qyn 12", active.query);
+        assertNotNull(inactive);
+        assertEquals("", inactive.query);
+        assertNull(GlassesMessage.parse(
+                "{\"type\":\"search_state\",\"state\":\"active\",\"query\":\"庆余年\"}"));
+
+        JSONObject oversized = new JSONObject();
+        oversized.put("type", "search_state");
+        oversized.put("state", "active");
+        oversized.put("query", repeat('a', GlassesMessage.MAX_SEARCH_QUERY_LENGTH + 1));
+        assertNull(GlassesMessage.parse(oversized.toString()));
     }
 
     @Test

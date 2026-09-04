@@ -55,6 +55,8 @@ const companionState = {
   glassesRuntimeErrorCode: 'none',
   mediaReady: false,
   touchpadReady: false,
+  searchInputActive: false,
+  searchQuery: '',
   displayMode: 'mirror_2d',
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
@@ -78,7 +80,18 @@ const playbackStates = new Set([
   'error',
   'stopped',
 ])
-const remoteCommands = new Set(['up', 'down', 'left', 'right', 'submit', 'enter', 'back'])
+const remoteCommands = new Set([
+  'up',
+  'down',
+  'left',
+  'right',
+  'submit',
+  'enter',
+  'back',
+  'search-submit',
+  'search-keyboard-visible',
+  'search-keyboard-hidden',
+])
 const phonePresets = new Set(['360x800', '393x852', '412x915', '430x932'])
 
 let session = null
@@ -98,6 +111,12 @@ class ApiError extends Error {
 
 function boundedText(value, maximumLength) {
   return typeof value === 'string' ? value.trim().slice(0, maximumLength) : ''
+}
+
+function normalizedSearchQuery(value) {
+  if (typeof value !== 'string' || value.length > 48) return null
+  const normalized = value.toLowerCase()
+  return /^[a-z0-9 ]*$/.test(normalized) ? normalized : null
 }
 
 function boundedTicks(value) {
@@ -244,6 +263,8 @@ function applySession(nextSession) {
   companionState.quickConnectCode = ''
   companionState.glassesRuntimeState = 'loading'
   companionState.glassesRuntimeErrorCode = 'none'
+  companionState.searchInputActive = false
+  companionState.searchQuery = ''
   companionState.playback = emptyPlayback()
   catalogGeneration += 1
   stopQuickConnect(false)
@@ -265,6 +286,8 @@ function resetSession(unauthorized = false) {
   companionState.quickConnectCode = ''
   companionState.glassesRuntimeState = 'no-session'
   companionState.glassesRuntimeErrorCode = 'none'
+  companionState.searchInputActive = false
+  companionState.searchQuery = ''
   companionState.playback = emptyPlayback()
   catalogGeneration += 1
   publishCompanionState()
@@ -596,6 +619,13 @@ function handleCompanionCall(payload) {
       setActivity(`已转发触控指令：${command.toUpperCase()}`, 'ready')
       break
     }
+    case 'searchText': {
+      if (!companionState.searchInputActive) break
+      const query = normalizedSearchQuery(args[0])
+      if (query === null) break
+      postToFrame('glasses', 'remote-command', { command: `search-text:${query}` })
+      break
+    }
     case 'screenChanged':
       setActivity(`手机端当前页面：${boundedText(args[0], 24) || 'unknown'}`, 'ready')
       break
@@ -666,6 +696,23 @@ function handlePlaybackState(message) {
   publishCompanionState()
 }
 
+function handleSearchState(message) {
+  const state = boundedText(message.state, 32).toLowerCase()
+  if (state !== 'active' && state !== 'inactive') return
+  const query = state === 'active' ? normalizedSearchQuery(message.query ?? '') : ''
+  if (query === null) return
+
+  companionState.searchInputActive = state === 'active'
+  companionState.searchQuery = query
+  publishCompanionState()
+  setActivity(
+    state === 'active'
+      ? '眼镜已进入搜索，手机输入会实时同步。'
+      : '眼镜已退出搜索。',
+    'ready',
+  )
+}
+
 function handleGlassesMessage(payload) {
   if (!payload || typeof payload !== 'object') return
   const type = boundedText(payload.type, 32).toLowerCase()
@@ -675,6 +722,10 @@ function handleGlassesMessage(payload) {
   }
   if (type === 'playback_state') {
     handlePlaybackState(payload)
+    return
+  }
+  if (type === 'search_state') {
+    handleSearchState(payload)
     return
   }
   if (type === 'manage_login') {
@@ -729,6 +780,8 @@ function loadFrames(reload = '') {
   frameReady.glasses = false
   companionState.glassesPresentationReady = false
   companionState.glassesRuntimeState = session ? 'booting' : 'no-session'
+  companionState.searchInputActive = false
+  companionState.searchQuery = ''
   companionFrame.src = frameUrl(origins.companion, 'companion', reload)
   glassesFrame.src = frameUrl(origins.glasses, 'glasses', reload)
   publishCompanionState()
