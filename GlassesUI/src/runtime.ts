@@ -126,7 +126,7 @@ function authorizationHeader(deviceId: string, token?: string) {
     'MediaBrowser Client="Lucent for RayNeo"',
     'Device="RayNeo Air"',
     `DeviceId="${safeDeviceId}"`,
-    'Version="0.2.0"',
+    `Version="${__APP_VERSION__.replace(/["\\]/g, '')}"`,
   ]
   if (token) values.push(`Token="${token.replace(/["\\]/g, '')}"`)
   return values.join(', ')

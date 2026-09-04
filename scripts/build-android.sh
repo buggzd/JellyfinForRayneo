@@ -54,7 +54,11 @@ fi
 
 if [[ "${BUILD_VARIANT}" == release || "${BUILD_VARIANT}" == all ]]; then
     release_apk="AndroidApp/app/build/outputs/apk/release/app-release-unsigned.apk"
-    if [[ -f "${PROJECT_DIR}/AndroidApp/keystore.properties" ]]; then
+    if [[ -f "${PROJECT_DIR}/AndroidApp/keystore.properties" \
+            || ( -n "${ANDROID_KEYSTORE_PATH:-}" \
+                && -n "${ANDROID_KEYSTORE_PASSWORD:-}" \
+                && -n "${ANDROID_KEY_ALIAS:-}" \
+                && -n "${ANDROID_KEY_PASSWORD:-}" ) ]]; then
         release_apk="AndroidApp/app/build/outputs/apk/release/app-release.apk"
     fi
     "${SCRIPT_DIR}/verify-no-unity.sh" --apk-only "${release_apk}"

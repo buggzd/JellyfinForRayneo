@@ -4,11 +4,41 @@ plugins {
 
 def repositoryRoot = rootProject.projectDir.parentFile
 def rayNeoSdk = file("libs/ffalcon-sdk-client-1.0.3.aar")
+def versionPropertiesFile = new File(repositoryRoot, "version.properties")
+if (!versionPropertiesFile.isFile()) {
+    throw new GradleException("Missing version.properties at the repository root.")
+}
+def versionProperties = new Properties()
+versionPropertiesFile.withInputStream { versionProperties.load(it) }
+def appVersionName = versionProperties.getProperty("versionName", "").trim()
+def appVersionCodeValue = versionProperties.getProperty("versionCode", "").trim()
+if (!(appVersionName ==~ /(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?/)) {
+    throw new GradleException("versionName must be a SemVer release in version.properties.")
+}
+if (!(appVersionCodeValue ==~ /[1-9][0-9]*/)) {
+    throw new GradleException("versionCode must be a positive integer in version.properties.")
+}
+def appVersionCode = Integer.parseInt(appVersionCodeValue)
+
 def signingPropertiesFile = rootProject.file("keystore.properties")
 def signingProperties = new Properties()
 if (signingPropertiesFile.exists()) {
     signingPropertiesFile.withInputStream { signingProperties.load(it) }
 }
+def environmentSigning = [
+        path: System.getenv("ANDROID_KEYSTORE_PATH") ?: "",
+        storePassword: System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "",
+        keyAlias: System.getenv("ANDROID_KEY_ALIAS") ?: "",
+        keyPassword: System.getenv("ANDROID_KEY_PASSWORD") ?: ""]
+def anyEnvironmentSigning = environmentSigning.values().any { !it.isEmpty() }
+def hasEnvironmentSigning = environmentSigning.values().every { !it.isEmpty() }
+if (anyEnvironmentSigning && !hasEnvironmentSigning) {
+    throw new GradleException("All Android release signing environment variables must be set together.")
+}
+if (hasEnvironmentSigning && !file(environmentSigning.path).isFile()) {
+    throw new GradleException("ANDROID_KEYSTORE_PATH does not point to a signing file.")
+}
+def hasReleaseSigning = signingPropertiesFile.exists() || hasEnvironmentSigning
 
 android {
     namespace "com.jellyfinforrayneo.client"
@@ -19,8 +49,8 @@ android {
         applicationId "com.jellyfinforrayneo.client"
         minSdk 26
         targetSdk 29
-        versionCode 2
-        versionName "0.2.0"
+        versionCode appVersionCode
+        versionName appVersionName
 
         testInstrumentationRunner "android.app.Instrumentation"
         ndk {
@@ -28,13 +58,21 @@ android {
         }
     }
 
-    if (signingPropertiesFile.exists()) {
+    if (hasReleaseSigning) {
         signingConfigs {
             release {
-                storeFile rootProject.file(signingProperties.getProperty("storeFile"))
-                storePassword signingProperties.getProperty("storePassword")
-                keyAlias signingProperties.getProperty("keyAlias")
-                keyPassword signingProperties.getProperty("keyPassword")
+                storeFile hasEnvironmentSigning
+                        ? file(environmentSigning.path)
+                        : rootProject.file(signingProperties.getProperty("storeFile"))
+                storePassword hasEnvironmentSigning
+                        ? environmentSigning.storePassword
+                        : signingProperties.getProperty("storePassword")
+                keyAlias hasEnvironmentSigning
+                        ? environmentSigning.keyAlias
+                        : signingProperties.getProperty("keyAlias")
+                keyPassword hasEnvironmentSigning
+                        ? environmentSigning.keyPassword
+                        : signingProperties.getProperty("keyPassword")
             }
         }
     }
@@ -48,7 +86,7 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
-            if (signingPropertiesFile.exists()) {
+            if (hasReleaseSigning) {
                 signingConfig signingConfigs.release
             }
         }

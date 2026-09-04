@@ -17,7 +17,7 @@
 
 你需要一台可访问的 Jellyfin 服务器、RayNeo Air 系列眼镜及配套 Android 手机。源码构建还需要 JDK 17+、Node.js/npm，以及 Android SDK platform 35 和 build tools 34.0.0。
 
-1. 克隆并构建 Debug APK：
+1. 从 [GitHub Releases](https://github.com/buggzd/JellyfinForRayneo/releases) 下载正式签名的 ARM64 APK；需要自行构建 Debug APK 时：
 
    ```bash
    git clone https://github.com/buggzd/JellyfinForRayneo.git
@@ -28,10 +28,10 @@
 2. 将 APK 安装到配套手机：
 
    ```bash
-   adb install -r AndroidApp/app/build/outputs/apk/debug/app-debug.apk
+   adb install -r /path/to/downloaded.apk
    ```
 
-   没有 ADB 时，也可以把该 APK 发送到手机并通过文件管理器安装。
+   自行构建时可将路径替换为 `AndroidApp/app/build/outputs/apk/debug/app-debug.apk`。没有 ADB 时，也可以把该 APK 发送到手机并通过文件管理器安装。
 
 3. 接入眼镜并启动应用，在手机端选择 Jellyfin 服务器、完成登录，然后进入触控板控制眼镜界面。
 
@@ -60,7 +60,7 @@
 
 这是一个面向 RayNeo Air 配套设备侧载的可运行 MVP，目前请注意：
 
-- 仅构建 ARM64 Android 包，需要 Android System WebView；仓库暂不提供预编译 APK。
+- GitHub Releases 仅提供 ARM64 Android 包，运行时需要 Android System WebView。
 - `targetSdk 29` 是 RayNeo Air SDK 1.0.3 的兼容选择，不满足当前 Google Play 的上架要求。
 - 尚未实现多服务器切换、离线下载和播放列表编辑。
 - 不兼容的媒体依赖 Jellyfin 服务端转码，本项目不提供原生备用播放器。
@@ -74,6 +74,7 @@
 | --- | --- |
 | 安装、首次连接、显示模式、诊断与常见问题 | [使用指南](docs/USER_GUIDE.md) |
 | 环境准备、构建、签名、浏览器开发与测试 | [开发和构建指南](docs/DEVELOPMENT.md) |
+| 版本号、Git 标签与自动发布 | [版本与发布规则](docs/VERSIONING.md) |
 | 会话边界、WebView 桥、显示状态机与播放架构 | [Android 架构说明](docs/ANDROID_ARCHITECTURE.md) |
 | 已有能力与后续功能优先级 | [功能路线图](docs/JELLYFIN_FEATURE_ROADMAP.md) |
 | Jellyfin Web 的信息架构与交互采样 | [Jellyfin Web 复现规格](docs/Jellyfin-Web-Reproduction-Spec.md) |

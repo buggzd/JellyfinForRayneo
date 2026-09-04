@@ -3,6 +3,18 @@ import { resolve } from 'node:path'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 
+function applicationVersion() {
+  const path = resolve(import.meta.dirname, '../version.properties')
+  const versionLine = readFileSync(path, 'utf8')
+    .split(/\r?\n/)
+    .find((line) => line.startsWith('versionName='))
+  const version = versionLine?.slice('versionName='.length).trim() ?? ''
+  if (!/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+    throw new Error('Invalid versionName in version.properties.')
+  }
+  return version
+}
+
 function developmentCredentials(): Plugin {
   return {
     name: 'jellyfin-development-credentials',
@@ -27,6 +39,9 @@ function developmentCredentials(): Plugin {
 
 export default defineConfig({
   base: './',
+  define: {
+    __APP_VERSION__: JSON.stringify(applicationVersion()),
+  },
   plugins: [react(), developmentCredentials()],
   server: {
     host: '0.0.0.0',

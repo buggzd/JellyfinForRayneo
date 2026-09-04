@@ -604,7 +604,7 @@ export class JellyfinClient {
     headers.set('X-Emby-Token', this.session.accessToken)
     headers.set(
       'X-Emby-Authorization',
-      `MediaBrowser Client="Lucent for RayNeo", Device="RayNeo Air", DeviceId="${this.session.deviceId}", Version="0.2.0", Token="${this.session.accessToken}"`,
+      `MediaBrowser Client="Lucent for RayNeo", Device="RayNeo Air", DeviceId="${this.session.deviceId}", Version="${__APP_VERSION__}", Token="${this.session.accessToken}"`,
     )
     if (init.body) headers.set('Content-Type', 'application/json')
 

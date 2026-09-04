@@ -9,13 +9,13 @@
 - RayNeo Air 系列眼镜及其配套 Android 手机；
 - 一台已经配置好媒体库和用户的 Jellyfin 服务器；
 - 手机能够访问 Jellyfin 服务器，自动发现时两者应位于同一局域网；
-- 自行构建的 APK。仓库当前不提供预编译安装包。
+- 从 [GitHub Releases](https://github.com/buggzd/JellyfinForRayneo/releases) 下载的正式签名 APK，或自行构建的 APK。
 
 应用只构建 ARM64 版本，并依赖手机上的 Android System WebView。
 
 ## 安装
 
-完成 Debug 构建后，APK 位于：
+正式版本可从 GitHub Releases 下载，并使用同页 `.sha256` 文件核对完整性。完成 Debug 构建后，APK 位于：
 
 ```text
 AndroidApp/app/build/outputs/apk/debug/app-debug.apk
