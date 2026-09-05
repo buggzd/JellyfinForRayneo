@@ -12,7 +12,7 @@ versionCode=2
 ```
 
 - `versionName` 使用 SemVer：兼容性修复提升 PATCH，向后兼容功能提升 MINOR，不兼容的安装、会话或公开协议变化提升 MAJOR。允许 `-rc.1` 这类预发布后缀，不使用构建元数据。
-- `versionCode` 是正整数，每个曾分发的 Android 构建都必须严格递增；发布后不得降低、复用或修改同一版本对应的数值。
+- `versionCode` 是正整数，对外发布的 Android 版本必须严格递增；发布后不得降低、复用或修改同一版本对应的数值。同一修复中的本地 Debug 构建和真机调试沿用当前版本号，不因每轮安装递增；修复完成、准备交付时统一定版。
 - Android Gradle 和眼镜端 Jellyfin 请求头直接读取该文件。`CompanionUI`、`GlassesUI` 的 `package.json` 与各自 `package-lock.json` 版本属于同步元数据，必须与它一致。
 
 修改版本时，先更新 `version.properties` 中的两个值，再同步两套前端元数据：

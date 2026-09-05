@@ -1,10 +1,12 @@
 package com.jellyfinforrayneo.client;
 
 import android.annotation.SuppressLint;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.media.MediaCodecInfo;
 import android.media.MediaCodecList;
 import android.os.Build;
@@ -46,7 +48,8 @@ final class GlassesWebViewController
         void onMessage(GlassesMessage message);
     }
 
-    private final FrameLayout root;
+    private FrameLayout root;
+    private final Context rendererContext;
     private final BootstrapProvider bootstrapProvider;
     private final Callback callback;
     private final Runnable recreate = new Runnable()
@@ -65,15 +68,18 @@ final class GlassesWebViewController
     private View blackTransition;
     private WebView webView;
     private DisplayModeStateMachine.State displayState;
+    private StereoScreenSettings stereoSettings = StereoScreenSettings.DEFAULT;
     private String lastBootstrap;
     private boolean ready;
     private boolean destroyed;
 
     GlassesWebViewController(
+            Context rendererContext,
             FrameLayout root,
             BootstrapProvider bootstrapProvider,
             Callback callback)
     {
+        this.rendererContext = rendererContext;
         this.root = root;
         this.bootstrapProvider = bootstrapProvider;
         this.callback = callback;
@@ -86,11 +92,52 @@ final class GlassesWebViewController
         createWebView();
     }
 
+    void attachTo(FrameLayout nextRoot)
+    {
+        root.removeCallbacks(recreate);
+        if (webContainer != null)
+        {
+            root.removeView(webContainer);
+        }
+        if (blackTransition != null)
+        {
+            root.removeView(blackTransition);
+        }
+        root = nextRoot;
+        if (webView == null)
+        {
+            createWebView();
+            return;
+        }
+        root.addView(webContainer, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        root.addView(blackTransition, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        applyDisplayState();
+    }
+
     void setDisplayState(DisplayModeStateMachine.State state)
     {
         displayState = state;
         applyDisplayState();
         refreshBootstrap();
+    }
+
+    void setStereoScreenSettings(StereoScreenSettings settings)
+    {
+        stereoSettings = settings;
+        if (webContainer != null)
+        {
+            webContainer.setScreenSettings(settings);
+        }
+    }
+
+    void setStereoTestPattern(boolean enabled)
+    {
+        if (webContainer != null)
+        {
+            webContainer.setTestPattern(enabled);
+        }
     }
 
     boolean dispatchCommand(String command)
@@ -151,11 +198,16 @@ final class GlassesWebViewController
     private void createWebView()
     {
         destroyWebView();
-        Context context = root.getContext();
-        webContainer = new StereoMirrorLayout(context);
+        Context context = rendererContext;
+        webContainer = new StereoMirrorLayout(root.getContext());
+        webContainer.setScreenSettings(stereoSettings);
         webContainer.setBackgroundColor(Color.BLACK);
         webContainer.setClipChildren(false);
 
+        // Chromium retains the display used at construction. An EDID reconnect can
+        // invalidate a Presentation's display while its compositor keeps the old DPI.
+        // Keep the renderer on the Activity's stable display; measured View pixels and
+        // the eye Canvas transforms still determine the external output dimensions.
         webView = new WebView(context);
         webView.setBackgroundColor(Color.rgb(2, 7, 13));
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
@@ -460,12 +512,19 @@ final class GlassesWebViewController
     static final class StereoMirrorLayout extends FrameLayout
     {
         private boolean stereo;
+        private boolean testPattern;
+        private StereoScreenSettings settings = StereoScreenSettings.DEFAULT;
+        private float normalizedDisparity = settings.normalizedDisparity();
+        private float sizeFraction = settings.sizeFraction();
+        private StereoScreenGeometry geometry;
+        private ValueAnimator settingsAnimator;
+        private final Paint patternPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Runnable invalidator = new Runnable()
         {
             @Override
             public void run()
             {
-                if (!stereo || getVisibility() != View.VISIBLE || !isAttachedToWindow())
+                if (!shouldAnimateFrames())
                 {
                     return;
                 }
@@ -482,38 +541,144 @@ final class GlassesWebViewController
 
         void setStereo(boolean enabled)
         {
+            if (stereo == enabled)
+            {
+                return;
+            }
             stereo = enabled;
-            removeCallbacks(invalidator);
+            if (!enabled)
+            {
+                testPattern = false;
+                finishSettingsAnimation();
+            }
             requestLayout();
             invalidate();
-            if (stereo && getVisibility() == View.VISIBLE && isAttachedToWindow())
+            updateInvalidator();
+        }
+
+        void setScreenSettings(StereoScreenSettings next)
+        {
+            if (settings.sameAs(next))
+            {
+                return;
+            }
+            if (settingsAnimator != null)
+            {
+                settingsAnimator.cancel();
+            }
+            settings = next;
+            if (!shouldAnimateFrames() || !ValueAnimator.areAnimatorsEnabled())
+            {
+                finishSettingsAnimation();
+                return;
+            }
+            float startDisparity = normalizedDisparity;
+            float startSize = sizeFraction;
+            settingsAnimator = ValueAnimator.ofFloat(0f, 1f);
+            settingsAnimator.setDuration(180L);
+            settingsAnimator.addUpdateListener(animation ->
+            {
+                float fraction = (float) animation.getAnimatedValue();
+                normalizedDisparity = Math.max(0f, Math.min(StereoScreenGeometry.MAX_NORMALIZED_DISPARITY,
+                        startDisparity + (next.normalizedDisparity() - startDisparity) * fraction));
+                sizeFraction = Math.max(StereoScreenSettings.MIN_SIZE_PERCENT / 100f,
+                        Math.min(StereoScreenSettings.MAX_SIZE_PERCENT / 100f,
+                                startSize + (next.sizeFraction() - startSize) * fraction));
+                updateGeometry();
+            });
+            settingsAnimator.start();
+        }
+
+        void setTestPattern(boolean enabled)
+        {
+            testPattern = enabled && stereo;
+            invalidate();
+        }
+
+        private void finishSettingsAnimation()
+        {
+            if (settingsAnimator != null)
+            {
+                settingsAnimator.cancel();
+                settingsAnimator = null;
+            }
+            normalizedDisparity = settings.normalizedDisparity();
+            sizeFraction = settings.sizeFraction();
+            updateGeometry();
+        }
+
+        private void updateGeometry()
+        {
+            geometry = StereoScreenGeometry.create(getWidth(), getHeight(), normalizedDisparity, sizeFraction);
+            // Only the Canvas transform changes; the WebView viewport and video remain intact.
+            invalidate();
+        }
+
+        private boolean shouldAnimateFrames()
+        {
+            return stereo && isAttachedToWindow() && isShown() && getWindowVisibility() == View.VISIBLE;
+        }
+
+        private void updateInvalidator()
+        {
+            // View can deliver visibility callbacks while its superclass is being constructed.
+            if (invalidator == null)
+            {
+                return;
+            }
+            removeCallbacks(invalidator);
+            if (shouldAnimateFrames())
             {
                 postOnAnimation(invalidator);
             }
+        }
+
+        @Override
+        protected void onVisibilityChanged(View changedView, int visibility)
+        {
+            super.onVisibilityChanged(changedView, visibility);
+            updateInvalidator();
+        }
+
+        @Override
+        protected void onWindowVisibilityChanged(int visibility)
+        {
+            super.onWindowVisibilityChanged(visibility);
+            updateInvalidator();
         }
 
         @Override
         protected void onAttachedToWindow()
         {
             super.onAttachedToWindow();
-            if (stereo)
-            {
-                postOnAnimation(invalidator);
-            }
+            updateInvalidator();
         }
 
         @Override
         protected void onDetachedFromWindow()
         {
             removeCallbacks(invalidator);
+            finishSettingsAnimation();
             super.onDetachedFromWindow();
+        }
+
+        @Override
+        protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight)
+        {
+            super.onSizeChanged(width, height, oldWidth, oldHeight);
+            updateGeometry();
+        }
+
+        private int sourceWidth(int width, int height)
+        {
+            return stereo && StereoScreenGeometry.hasFullSbsAspect(width, height) ? width / 2 : width;
         }
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec)
         {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-            int childWidth = stereo ? Math.max(1, getMeasuredWidth() / 2) : getMeasuredWidth();
+            int childWidth = sourceWidth(getMeasuredWidth(), getMeasuredHeight());
             int childWidthSpec = MeasureSpec.makeMeasureSpec(childWidth, MeasureSpec.EXACTLY);
             int childHeightSpec = MeasureSpec.makeMeasureSpec(getMeasuredHeight(), MeasureSpec.EXACTLY);
             for (int index = 0; index < getChildCount(); index++)
@@ -525,7 +690,7 @@ final class GlassesWebViewController
         @Override
         protected void onLayout(boolean changed, int left, int top, int right, int bottom)
         {
-            int childWidth = stereo ? Math.max(1, (right - left) / 2) : right - left;
+            int childWidth = sourceWidth(right - left, bottom - top);
             int childHeight = bottom - top;
             for (int index = 0; index < getChildCount(); index++)
             {
@@ -536,27 +701,65 @@ final class GlassesWebViewController
         @Override
         protected void dispatchDraw(Canvas canvas)
         {
-            if (!stereo || getChildCount() == 0)
+            if (!stereo || geometry == null || getChildCount() == 0)
             {
                 super.dispatchDraw(canvas);
                 return;
             }
 
             View child = getChildAt(0);
-            int eyeWidth = Math.max(1, getWidth() / 2);
-            int height = getHeight();
             long drawingTime = getDrawingTime();
+            drawEye(canvas, child, drawingTime, true);
+            drawEye(canvas, child, drawingTime, false);
+        }
 
-            int leftSave = canvas.save();
-            canvas.clipRect(0, 0, eyeWidth, height);
+        private void drawEye(Canvas canvas, View child, long drawingTime, boolean left)
+        {
+            StereoScreenGeometry frame = geometry;
+            int eyeSave = canvas.save();
+            canvas.translate(left ? 0f : frame.eyeWidth, 0f);
+            canvas.clipRect(0, 0, frame.eyeWidth, frame.height);
+            int contentSave = canvas.save();
+            // d = uL - uR. Translate in final eye pixels BEFORE scale, so size does not change d.
+            canvas.translate(left ? frame.leftX : frame.rightX, frame.top);
+            canvas.scale(frame.scale, frame.scale);
             drawChild(canvas, child, drawingTime);
-            canvas.restoreToCount(leftSave);
+            if (testPattern)
+            {
+                drawTarget(canvas, frame);
+            }
+            canvas.restoreToCount(contentSave);
+            if (testPattern)
+            {
+                drawReference(canvas, frame, left);
+            }
+            canvas.restoreToCount(eyeSave);
+        }
 
-            int rightSave = canvas.save();
-            canvas.translate(eyeWidth, 0f);
-            canvas.clipRect(0, 0, eyeWidth, height);
-            drawChild(canvas, child, drawingTime);
-            canvas.restoreToCount(rightSave);
+        private void drawTarget(Canvas canvas, StereoScreenGeometry frame)
+        {
+            patternPaint.setColor(Color.rgb(80, 235, 225));
+            patternPaint.setStrokeWidth(Math.max(1.5f, frame.eyeWidth / 640f));
+            patternPaint.setStyle(Paint.Style.STROKE);
+            canvas.drawRect(frame.eyeWidth * .2f, frame.height * .2f,
+                    frame.eyeWidth * .8f, frame.height * .8f, patternPaint);
+            canvas.drawLine(frame.eyeWidth * .46f, frame.height * .5f,
+                    frame.eyeWidth * .54f, frame.height * .5f, patternPaint);
+            canvas.drawLine(frame.eyeWidth * .5f, frame.height * .44f,
+                    frame.eyeWidth * .5f, frame.height * .56f, patternPaint);
+        }
+
+        private void drawReference(Canvas canvas, StereoScreenGeometry frame, boolean left)
+        {
+            patternPaint.setColor(Color.WHITE);
+            patternPaint.setStrokeWidth(Math.max(1.5f, frame.eyeWidth / 640f));
+            patternPaint.setStyle(Paint.Style.STROKE);
+            // The white reference has zero added disparity; the cyan target shares the video's transform.
+            canvas.drawRect(frame.eyeWidth * .06f, frame.height * .06f,
+                    frame.eyeWidth * .94f, frame.height * .94f, patternPaint);
+            patternPaint.setStyle(Paint.Style.FILL);
+            patternPaint.setTextSize(frame.height * .05f);
+            canvas.drawText(left ? "L" : "R", frame.eyeWidth * .09f, frame.height * .14f, patternPaint);
         }
     }
 }

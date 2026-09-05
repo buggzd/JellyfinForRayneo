@@ -40,10 +40,10 @@ WebView support; otherwise use Jellyfin's H.264/AAC HLS fallback.
 
 Versioning: `docs/VERSIONING.md`; releases: `docs/RELEASE.md`.
 
-Use JDK 17+, Android platform 35/build tools 34.0.0, and the pinned RayNeo SDK.
+Use JDK 17+ and Android platform 35/build tools 34.0.0. Display control uses
+Android USB Host directly; do not add an XR Space application/service dependency.
 
 ```bash
-./scripts/install-rayneo-sdk.sh
 npm --prefix GlassesUI ci
 npm --prefix CompanionUI ci
 ./scripts/build-android.sh debug

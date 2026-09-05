@@ -6,10 +6,6 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
-    <uses-permission
-        android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS"
-        tools:node="remove" />
-
     <uses-feature
         android:name="android.hardware.usb.host"
         android:required="false" />
@@ -36,10 +32,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="com.tcl.xr.aries.action.LAUNCHER_MAIN" />
-                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
     </application>

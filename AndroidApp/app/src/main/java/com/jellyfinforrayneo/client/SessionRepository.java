@@ -12,6 +12,7 @@ final class SessionRepository
     static final String KEY_SERVER_URL = "server_url";
     static final String KEY_USER_NAME = "username";
     static final String KEY_DISPLAY_MODE = "display_mode";
+    static final String KEY_STEREO_SCREEN = "stereo_screen_settings";
 
     interface Store
     {
@@ -165,5 +166,19 @@ final class SessionRepository
     void setDisplayMode(String mode)
     {
         store.putString(KEY_DISPLAY_MODE, DisplayModeStateMachine.normalizeMode(mode));
+    }
+
+    StereoScreenSettings getStereoScreenSettings()
+    {
+        StereoScreenSettings settings = StereoScreenSettings.parse(store.getString(KEY_STEREO_SCREEN, ""));
+        return settings == null ? StereoScreenSettings.DEFAULT : settings;
+    }
+
+    void setStereoScreenSettings(StereoScreenSettings settings)
+    {
+        if (settings != null)
+        {
+            store.putString(KEY_STEREO_SCREEN, settings.toJson().toString());
+        }
     }
 }

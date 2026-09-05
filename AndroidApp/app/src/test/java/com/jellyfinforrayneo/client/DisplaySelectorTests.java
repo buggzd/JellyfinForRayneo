@@ -9,15 +9,26 @@ import static org.junit.Assert.assertEquals;
 public final class DisplaySelectorTests
 {
     @Test
-    public void selectBestIndex_IgnoresDefaultInvalidAndOffDisplays()
+    public void selectBestIndex_IgnoresDefaultInvalidAndSleepingPhoneDisplays()
     {
         List<DisplaySelector.Candidate> candidates = List.of(
                 new DisplaySelector.Candidate(0, true, true, false, "Phone"),
                 new DisplaySelector.Candidate(2, false, true, true, "RayNeo"),
-                new DisplaySelector.Candidate(3, true, false, true, "RayNeo"),
+                new DisplaySelector.Candidate(3, true, false, true, "Phone rear display"),
                 new DisplaySelector.Candidate(4, true, true, false, "External"));
 
         assertEquals(3, DisplaySelector.selectBestIndex(candidates, 0));
+    }
+
+    @Test
+    public void selectBestIndex_KeepsValidGlassesWhileModeChangeTurnsDisplayOff()
+    {
+        List<DisplaySelector.Candidate> candidates = List.of(
+                new DisplaySelector.Candidate(0, true, true, false, "Phone"),
+                new DisplaySelector.Candidate(1, true, false, true, "Phone rear display"),
+                new DisplaySelector.Candidate(2, true, false, true, "HDMI 屏幕"));
+
+        assertEquals(2, DisplaySelector.selectBestIndex(candidates, 0));
     }
 
     @Test

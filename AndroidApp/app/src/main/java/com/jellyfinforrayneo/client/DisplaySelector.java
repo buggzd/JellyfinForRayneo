@@ -36,18 +36,20 @@ final class DisplaySelector
             Candidate candidate = candidates.get(index);
             if (candidate == null
                     || !candidate.valid
-                    || !candidate.on
                     || candidate.id == defaultDisplayId)
             {
                 continue;
             }
 
             int score = candidate.presentation ? 100 : 0;
-            String name = candidate.name.toLowerCase(Locale.ROOT);
-            if (name.contains("smartglasses")
-                    || name.contains("rayneo")
-                    || name.contains("tcl")
-                    || name.contains("hdmi"))
+            boolean glasses = isGlassesName(candidate.name);
+            // A 2D/3D EDID change can temporarily turn a still-valid external display OFF.
+            // Keep its Presentation: destroying it also removes the window that wakes it.
+            if (!candidate.on && !glasses)
+            {
+                continue;
+            }
+            if (glasses)
             {
                 score += 200;
             }
@@ -58,5 +60,12 @@ final class DisplaySelector
             }
         }
         return bestIndex;
+    }
+
+    static boolean isGlassesName(String value)
+    {
+        String name = value == null ? "" : value.toLowerCase(Locale.ROOT);
+        return name.contains("smartglasses") || name.contains("rayneo")
+                || name.contains("tcl") || name.contains("hdmi");
     }
 }

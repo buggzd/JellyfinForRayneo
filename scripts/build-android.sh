@@ -22,7 +22,6 @@ if [[ -z "${ANDROID_HOME:-}" \
 fi
 
 cd "${PROJECT_DIR}"
-"${SCRIPT_DIR}/install-rayneo-sdk.sh"
 npm --prefix GlassesUI ci
 npm --prefix CompanionUI ci
 npm --prefix GlassesUI run check

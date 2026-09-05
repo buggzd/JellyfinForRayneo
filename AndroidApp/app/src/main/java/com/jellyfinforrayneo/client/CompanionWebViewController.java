@@ -65,6 +65,12 @@ final class CompanionWebViewController
         void selectDisplayMode(String mode);
 
         @android.webkit.JavascriptInterface
+        void setStereoScreen(String payload);
+
+        @android.webkit.JavascriptInterface
+        void setStereoTestPattern(String value);
+
+        @android.webkit.JavascriptInterface
         void copyQuickConnectCode();
 
         @android.webkit.JavascriptInterface

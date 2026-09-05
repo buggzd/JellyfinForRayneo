@@ -108,6 +108,15 @@ public final class MainActivity extends Activity
                     }
 
                     @Override
+                    public void onStereoOutputChanged(DisplayOutputGeometry output)
+                    {
+                        rayNeoDisplay.setSystemDisplayDisabled(glassesPresentation != null
+                                && glassesPresentation.isSystemDisplayDisabled());
+                        rayNeoDisplay.setOutputGeometry(output);
+                        pushCompanionState();
+                    }
+
+                    @Override
                     public void onWebReadyChanged(boolean ready)
                     {
                         diagnosticLog.record(ready
@@ -147,6 +156,7 @@ public final class MainActivity extends Activity
                         return buildGlassesBootstrap();
                     }
                 });
+        glassesPresentation.setStereoScreenSettings(sessions.getStereoScreenSettings());
         remoteCommands.setSink(glassesPresentation::dispatchCommand);
 
         authentication = new JellyfinAuthenticationService(
@@ -381,6 +391,7 @@ public final class MainActivity extends Activity
 
     private void clearSession(boolean unauthorized)
     {
+        glassesPresentation.setStereoTestPattern(false);
         authentication.cancel();
         diagnosticLog.record(unauthorized
                 ? DiagnosticLog.Event.SESSION_UNAUTHORIZED
@@ -453,6 +464,15 @@ public final class MainActivity extends Activity
 
     private void onDisplayModeStateChanged(DisplayModeStateMachine.State displayState)
     {
+        // Keep the remote usable while this Activity is visible; this flag does not survive leaving the app.
+        if (displayState.connected)
+        {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+        else
+        {
+            getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
         recordDisplayDiagnostic(displayState);
         if (glassesPresentation != null)
         {
@@ -606,6 +626,13 @@ public final class MainActivity extends Activity
             result.put("displayModeApplied", displayState.displayModeApplied);
             result.put("displayModeTransitioning", displayState.displayModeTransitioning);
             result.put("displayMessage", displayState.message);
+            result.put("glassesDisplayDisabled", glassesPresentation != null
+                    && glassesPresentation.isSystemDisplayDisabled());
+            result.put("stereoScreen", sessions.getStereoScreenSettings().toJson());
+            result.put("stereoOutput", glassesPresentation == null
+                    ? DisplayOutputGeometry.EMPTY.toJson() : glassesPresentation.getOutputGeometry().toJson());
+            result.put("stereoTestPattern", glassesPresentation != null
+                    && glassesPresentation.isStereoTestPatternEnabled());
             result.put("discoveryMessage", discoveryMessage);
             result.put("discoveryError", !discoveryScanning && discoveredServers.isEmpty());
             result.put("discoveryScanning", discoveryScanning);
@@ -728,7 +755,7 @@ public final class MainActivity extends Activity
     {
         StringBuilder result = new StringBuilder();
         result.append("Jellyfin for RayNeo diagnostics\n");
-        appendDiagnostic(result, "format", "1");
+        appendDiagnostic(result, "format", "2");
         appendDiagnostic(result, "appVersion", BuildConfig.VERSION_NAME);
         appendDiagnostic(result, "appVersionCode", String.valueOf(BuildConfig.VERSION_CODE));
         appendDiagnostic(result, "androidSdk", String.valueOf(Build.VERSION.SDK_INT));
@@ -763,6 +790,15 @@ public final class MainActivity extends Activity
                     "displayTransitioning",
                     booleanText(display.displayModeTransitioning));
         }
+        DisplayOutputGeometry output = glassesPresentation == null
+                ? DisplayOutputGeometry.EMPTY : glassesPresentation.getOutputGeometry();
+        appendDiagnostic(result, "stereoOutput", output.toJson().toString());
+        if (sessions != null)
+        {
+            appendDiagnostic(result, "stereoScreen", sessions.getStereoScreenSettings().toJson().toString());
+        }
+        appendDiagnostic(result, "stereoTestPattern", booleanText(glassesPresentation != null
+                && glassesPresentation.isStereoTestPatternEnabled()));
         result.append("privacy=server address, account, media titles and credentials omitted\n");
         result.append("events:\n");
         result.append(diagnosticLog.exportEvents());
@@ -1255,6 +1291,43 @@ public final class MainActivity extends Activity
         }
 
         @JavascriptInterface
+        public void setStereoScreen(String payload)
+        {
+            StereoScreenSettings settings = StereoScreenSettings.parse(payload);
+            if (settings == null)
+            {
+                return;
+            }
+            runOnUiThread(() ->
+            {
+                if (!destroyed)
+                {
+                    sessions.setStereoScreenSettings(settings);
+                    glassesPresentation.setStereoScreenSettings(settings);
+                    pushCompanionState();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void setStereoTestPattern(String value)
+        {
+            if (!"on".equals(value) && !"off".equals(value))
+            {
+                return;
+            }
+            runOnUiThread(() ->
+            {
+                if (!destroyed)
+                {
+                    glassesPresentation.setStereoTestPattern("on".equals(value)
+                            && "settings".equals(webScreen) && glassesWebReady);
+                    pushCompanionState();
+                }
+            });
+        }
+
+        @JavascriptInterface
         public void copyQuickConnectCode()
         {
             runOnUiThread(MainActivity.this::copyQuickConnectCode);
@@ -1316,7 +1389,16 @@ public final class MainActivity extends Activity
             }
             runOnUiThread(() ->
             {
+                if (destroyed)
+                {
+                    return;
+                }
                 webScreen = requested;
+                if (!"settings".equals(requested))
+                {
+                    glassesPresentation.setStereoTestPattern(false);
+                    pushCompanionState();
+                }
                 updatePhoneSurface();
             });
         }

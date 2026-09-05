@@ -16,7 +16,7 @@ MainActivity
 ├── JellyfinDiscoveryService
 ├── RemoteCommandRouter
 ├── RayNeoDisplayController
-│   └── RayNeo AirApi
+│   └── RayNeoUsbDisplayClient (Android USB Host)
 └── GlassesPresentationController
     └── Presentation on the selected external display
         └── GlassesWebViewController
@@ -54,7 +54,7 @@ Required values, field lengths, JSON size, URL scheme, and URL authority are
 validated before the session is accepted. Extra fields are discarded. The
 password is never persisted or included in a state payload; the authentication
 request removes it from the JSON object and wipes its byte and character
-buffers in `finally` blocks. Logs contain only generic SDK failure messages.
+buffers in `finally` blocks. Logs contain only generic failure categories.
 
 Server URLs support IPv4, host names resolved through A/AAAA records, bracketed
 IPv6 literals with an optional port, and Jellyfin subpaths. A bare IPv6 literal
@@ -92,6 +92,8 @@ length-limited, and whitelisted before use.
 | `retryGlasses` | Republish the session bootstrap after a catalog failure |
 | `shareDiagnostics` | Open Android's share sheet with a redacted diagnostic report |
 | `selectDisplayMode` | Save and request 2D/3D mode |
+| `setStereoScreen` | Save a bounded flat-screen disparity/size preference without switching hardware mode |
+| `setStereoTestPattern` | Enable/disable the temporary L/R reference overlay while stereo is applied |
 | `remoteCommand`, `searchText`, `previewHaptic` | Bounded touchpad input and the active Series-search query |
 | `copyQuickConnectCode`, `openQuickConnectAuthorization` | Phone helpers |
 | `screenChanged` | Phone surface and back-navigation state |
@@ -143,31 +145,92 @@ locally from the bounded Series index.
 
 ## RayNeo display state
 
-`RayNeoDisplayController` calls `AirApi.init(Activity)` directly and listens for
-command responses. It deliberately does not use the SDK's Unity adapter path.
-`GlassesPresentationController` selects an active non-default external display,
-preferring a RayNeo/TCL presentation display.
+`RayNeoDisplayController` controls the verified Air 3s HID interface directly
+through Android USB Host APIs. The APK has no RayNeo SDK, XR Space binding,
+package query or launcher integration. The historical SDK/official control
+implementation was used only to establish the two mode reports; no vendor
+binary is bundled. Protocol provenance is recorded in
+[SBS geometry analysis](SBS_GEOMETRY_ANALYSIS.md#16-移除-xr-空间依赖直接控制-usb2026-09-06).
+
+`RayNeoUsbDisplayClient` accepts only USB VID/PID `1bbb:af50`, interface 0,
+HID class 3/subclass 0/protocol 0, and the verified interrupt endpoints
+`01`/`81` with 64-byte packets. Only 64-byte reports `66 06 00…` (SBS) and
+`66 07 00…` (2D) are supported. A single worker with a one-item queue discards
+obsolete requests; `UsbRequest` has a 750 ms wait and always releases the
+claimed interface and connection. It never writes firmware, resets USB, or
+sends arbitrary WebView-provided bytes.
+
+Android grants USB access to this application through the standard system
+permission dialog. The private receiver checks the actual `UsbManager` grant,
+not broadcast extras. Waiting for consent reveals content and does not run a
+hardware timeout. Denial leaves the mode unconfirmed, without reopening the
+prompt on resume. An explicit selection can request consent again. Permission
+dialog lifecycle is kept separate from leaving the application.
 
 The state machine keeps these values separate:
 
 - `requestedMode`: saved phone preference
 - `activeMode`: layout currently safe to show
 - `displayModeApplied`: exact hardware mode was confirmed
-- `displayModeTransitioning`: a hardware command is in flight
+- `displayModeTransitioning`: a bounded hardware transition is in flight
 
 ```text
 request mode
-  -> show black transition view and hide WebView
-  -> issue RayNeo 2D/3D command
-     -> matching success callback: apply layout and reveal WebView
-     -> rejection/timeout/SDK error: use visible Mirror2D and stop retrying
+  -> observe initial Presentation geometry
+     -> physical/View output already matches: apply without a USB command
+     -> USB permission needed: reveal content and wait for system consent
+     -> permission available: send one mode report, then observe physical/View output
+        -> requested mode confirmed: apply and reveal WebView
+        -> unavailable/timeout: end transition, request safe 2D once, stop retrying
 ```
 
-Only an active transition hides the WebView. SDK rejection, an exception, or
-the 1.5-second confirmation timeout ends in a visible single-frame 2D layout
-even though the requested mode remains unconfirmed. A new attempt occurs only
-after an explicit phone selection, glasses reconnect, or lifecycle resume.
-Pause, destroy, and disconnect also request or settle on safe 2D.
+Only an active transition hides the WebView. The hardware/geometry deadline is
+8 seconds; USB permission waiting is outside it. A completed USB write alone
+cannot mark stereo applied. A fresh attempt occurs after an explicit selection,
+reconnect or lifecycle resume. Returning to an already-correct physical mode
+uses the measured output and avoids another EDID reconnect. The initial window
+must be measured before deciding to send a command.
+
+Stereo requires both physical `Display.Mode` and the measured Presentation
+root to have a Full-SBS 32:9 aspect, even width, and at most two pixels of width
+rounding. A physical 3840×1080 mode may have a uniformly downscaled 1920×540 View;
+1920×1080 half-SBS is unsupported. Mirror confirmation requires physical
+1920×1080 and a nonempty root. `DisplayOutputGeometry` tracks physical/View
+pixels, refresh rate and readiness, including same-ID changes. Losing valid
+stereo geometry falls back once; late events do not restart a failed transition.
+These conditions do not replace optical calibration or eye-order testing.
+
+`GlassesPresentationController` prefers a valid RayNeo/TCL presentation display.
+A named glasses display temporarily reporting OFF remains eligible; the phone's
+sleeping rear screen does not. While connected, the phone and glasses windows
+keep the screen awake.
+
+A physical switch can remove and recreate Android's logical display because its
+EDID changes. During the existing 8-second transition, the controller retains
+the one WebView and reparents it to the replacement Presentation without
+reloading the document/video. Old-window layout callbacks are ignored. If the
+transition ends without a usable display, the retained WebView is released.
+
+The retained WebView uses the phone Activity's stable rendering context. The
+Presentation still owns its external window, container and measured pixels.
+Creating the renderer with a disappearing external-display context can leave
+Chromium's cached display density inconsistent after an EDID reconnect. Merely
+replacing a `MutableContextWrapper` base does not repair that cached state.
+`GlassesUI` declares a 1440 CSS-pixel viewport without a forced initial scale;
+WebView overview fitting maps the complete page to the measured per-eye width.
+For a 1920×1080 source View this gives 1440×810 CSS pixels. Renderer
+`screen.*` and device pixel ratio may describe the phone; hardware confirmation
+continues to use `Display.Mode` and the external root, never those JS values.
+
+On the tested Xiaomi HyperOS device, connecting glasses or changing modes can
+require the user to enable the system's **screen mirroring** control before
+external content is allowed. `glassesDisplayDisabled` identifies that connected
+but disabled output through a read-only display category. The phone asks the
+user to enable screen mirroring; it does not open XR Space or treat another
+app's startup as a remedy. While the system output is disabled, no further USB
+mode reports are sent. App fallback removes its black layer but cannot enable
+an OS-disabled screen. The user's system permission action and the eye-mode
+command are separate requirements.
 
 ## Field diagnostics without ADB
 
@@ -175,7 +238,8 @@ The phone settings screen can open Android's `ACTION_SEND` chooser with a
 plain-text report suitable for QQ or another sharing app. The report is held
 only in memory and contains app/Android/WebView versions, device model, boolean
 session state, derived server shape, derived active-network capabilities,
-glasses/WebView/runtime/display state, and at most 160 fixed event enum values.
+glasses/WebView/runtime/display state, numeric output dimensions/refresh rate,
+stereo settings and test-pattern state, and at most 160 fixed event enum values.
 
 The server is represented only as `http`/`https`, host kind
 (`hostname`/`ipv4-literal`/`ipv6-literal`), and whether it has a subpath.
@@ -187,9 +251,43 @@ arbitrary exception text are never exported.
 
 `StereoVirtualScreen` does not create a second WebView. `StereoMirrorLayout`
 measures the one glasses WebView at per-eye width, draws its frame into the left
-half, and draws the same frame again into the right half. This preserves one
+half, and draws the same frame again into the right half with a different
+horizontal transform. This preserves one
 HTML `<video>`, one decoder, one audio stream, and one set of Jellyfin playback
 reports.
+
+`StereoScreenGeometry` uses total eye-local disparity `d = uL - uR`: left
+translation is `inset + d/2`, right is `inset - d/2`. Positive disparity adds
+convergence. Translation occurs before a uniform Canvas scale so disparity does
+not change with screen size. Each eye clips to its own viewport; centering and
+`s*N + |d| + 2*m <= N` preserve the entire image with at least 1% edge margin.
+The black container clears the unused area. No CPU frame readback is introduced.
+
+`StereoScreenSettings` stores only `depthLevel` (integer 0–3) and `sizePercent`
+(integer 80–95), in the native repository. The JSON bridge accepts exactly these
+two numeric fields within 128 characters. Levels correspond to total disparities
+0/8/16/24 at a reference width of 1920 per eye, scaled by actual View eye width.
+The initial preference is level 1 and 90%; these are initial engineering values,
+not measured comfort limits. Unknown optical zero distance and individual IPD
+mean the UI uses relative proximity rather than an uncalibrated distance in metres.
+Normal 2D content remains a flat screen and follows head motion.
+
+Settings animate disparity and size over 180 ms (respecting disabled system
+animations) using only Canvas transforms. They do not request a new WebView
+layout, bootstrap, hardware switch or player. Visibility/attachment callbacks
+restart the stereo redraw loop after transitions and stop it when hidden.
+
+`stereoScreen`, `stereoOutput`, `stereoTestPattern` and `glassesDisplayDisabled` are included in native phone
+state. The frontend keeps an in-memory editor, ignores older acknowledgements
+while the latest edit is pending, and does not persist another copy of these
+preferences in localStorage. Settings survive disconnect, Activity recreation
+and logout. The pattern is transient: exact bridge values `on`/`off` are accepted;
+enabling also requires the phone settings surface, a ready glasses WebView and
+applied stereo. White frames have zero added disparity, L/R identify eye channels,
+and cyan targets share the content transform. The overlay leaves video visible.
+Leaving settings, mode exit/failure, pause, disconnect, logout or renderer loss
+clears it. See [SBS geometry analysis](SBS_GEOMETRY_ANALYSIS.md) for derivation,
+official parameter sources and optical/device limitations.
 
 The native bridge enumerates hardware-accelerated `MediaCodec` decoders.
 `GlassesUI` intersects those codec families with WebView container support and
@@ -203,7 +301,7 @@ demuxing; Chromium still selects the actual Android decoder.
 
 Desktop verification covers TypeScript, both production bundles, JVM tests,
 Android lint, Debug/Release assembly, and APK inspection. Device acceptance
-must additionally cover display attach/detach, 2D/3D callbacks and timeout,
+must additionally cover display attach/detach, USB grants, physical mode observation and timeout,
 login/session restore/logout, browse and playback flows, remote focus,
 renderer recovery, one audio/report stream, and the selected `MediaCodec`
 component during representative playback.
@@ -220,7 +318,12 @@ minimum device regression set for any device-facing change.
 | Authentication | IPv4 discovery, manual hostname/IPv6 URL, Quick Connect, password login, remembered and non-persistent login | Exactly one validated session reaches the glasses; passwords never persist |
 | Session cleanup | Logout, account change, restored `401`/`403` | Repository, bootstrap, pending commands, playback state, and both UIs clear together |
 | Display connection | Glasses attached before launch, attached after launch, disconnected and reconnected | The intended external display is selected and phone UI stays on the default display |
-| Display modes | Confirmed Mirror 2D and stereo switch, SDK rejection, exception, missing callback/timeout | The WebView hides only during an active transition; every failure settles on visible Mirror 2D without an automatic retry |
+| Display modes | Confirmed Mirror 2D and stereo switch, USB permission denied, occupied interface, exception, physical output timeout | Consent waiting stays visible; only a hardware transition hides the WebView; failures end the transition without automatic retries, while OS-disabled output still requires system mirroring |
+| SBS geometry | Command response/write before/after actual 3840×1080 output; same-ID resize; EDID display recreation; unsupported half-SBS/rotated/inset viewport | Stereo requires command and physical/View evidence; document/video survive a bounded transition; all four page edges and full playback controls remain visible after both switch directions; invalid output falls back once |
+| System display availability | OS disables a recreated external display, enable inside/outside the transition deadline | The phone identifies disabled output, no false applied state or automatic retry loop; app fallback does not claim to enable an OS-disabled display |
+| Virtual screen controls | Fixed 90% size at all four depth levels, then fixed depth at 80–95%; rapid edits; pause/resume; cold restart | Left/right offsets are ±d/2, average center and vertical alignment stay fixed, size is independent, full image stays in each eye and saved settings restore |
+| Eye reference overlay | Close each eye alternately; compare baseline and increased disparity; leave settings, switch mode, disconnect, logout and kill renderer | Left eye sees L, right sees R; cyan plane moves closer relative to white reference, no persistent overlay after exit/recovery |
+| Stereo video composition | Moving frame-number video with DOM controls and text subtitles in both modes, while changing depth/size | Both eyes receive the same frame, video/subtitles/DOM receive identical transforms, no frozen video, duplicate sound/reporting, clipped edge or cross-eye leakage |
 | Browse and focus | Home, search, filters, folders, details, long lists, dialogs, remote back | Exactly one visible spatial focus target exists and overlays prevent background input |
 | Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, text and bitmap subtitle | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |
 | Single-instance invariants | Mirror and stereo during representative playback | One glasses WebView, one HTML `<video>`, one audio stream, and one Jellyfin reporting stream remain active |

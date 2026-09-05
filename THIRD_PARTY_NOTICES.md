@@ -1,18 +1,18 @@
 # Third-Party Notices
 
-## RayNeo Air Android SDK
+## RayNeo hardware protocol references
 
-The application integrates RayNeo's `ffalcon-sdk-client` version `1.0.3` to
-communicate with supported glasses and switch display modes.
+The application controls the verified Air 3s USB display interface directly
+through Android USB Host APIs. It does not load, bundle or bind to the RayNeo
+Air SDK or XR Space application.
 
 - Documentation: <https://rayneo.gitbook.io/rayneo-devdoc/>
-- Binary source: RayNeo's official SDK download endpoint used by
-  `scripts/install-rayneo-sdk.sh`
-- License: vendor terms supplied by RayNeo/FFALCON
+- Historical SDK reference: the pinned download in `scripts/install-rayneo-sdk.sh`
+- Protocol analysis and scope: `docs/SBS_GEOMETRY_ANALYSIS.md`
 
-The SDK binary is not redistributed in this repository. The installer pins the
-download archive and extracted AAR checksums. Confirm the vendor's current
-distribution terms before publishing an APK.
+Vendor binaries are not redistributed in this repository or included in the
+current APK. The historical SDK download helper remains for reproducible
+analysis and is not required by the build.
 
 ## Web application dependencies
 

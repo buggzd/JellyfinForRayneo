@@ -76,6 +76,13 @@ if [[ "${apk_only}" == false ]]; then
         fail "glasses host must construct exactly one WebView"
     fi
 
+    if rg -n 'com\.tcl\.xrmanager|com\.tcl\.xr\.|com\.ffalcon\.xr\.|openRayNeoManager|IFFalconXrTube' \
+            "${PROJECT_DIR}/AndroidApp/app/src/main/java" \
+            "${PROJECT_DIR}/AndroidApp/app/src/main/AndroidManifest.xml" \
+            "${PROJECT_DIR}/CompanionUI/src" >/dev/null; then
+        fail "display control must not depend on XR Space or its client SDK"
+    fi
+
     tracked_binaries="$(git -C "${PROJECT_DIR}" ls-files \
         '*.apk' '*.aab' '*.aar' '*.jks' '*.keystore')"
     if [[ -n "${tracked_binaries}" ]]; then
@@ -117,6 +124,11 @@ else
     if printf '%s\n' "${dex_strings}" | rg \
             '(^Lcom/unity3d/|^Lcom/tcl/unity/unityadapter/|UnityPlayer|UnitySendMessage|^Lorg/videolan/|libvlc)' >/dev/null; then
         fail "APK DEX contains a Unity adapter, Unity Player, or LibVLC class"
+    fi
+
+    if printf '%s\n' "${dex_strings}" | rg \
+            '(^Lcom/tcl/(xr|ar)/|^Lcom/ffalcon/xr/|com\.tcl\.xrmanager|IFFalconXrTube)' >/dev/null; then
+        fail "APK contains an XR Space service or SDK dependency"
     fi
 
     web_strings="$(unzip -p "${apk_path}" \

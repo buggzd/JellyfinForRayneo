@@ -12,10 +12,10 @@
 | Android 兼容范围 | min SDK 26，target SDK 29 |
 | Application ID | `com.jellyfinforrayneo.client` |
 | ABI | `arm64-v8a` |
-| RayNeo SDK | Air Android SDK 1.0.3 |
+| 眼镜控制 | Android USB Host，Air 3s 显示模式报告 |
 | 嵌入式前端 | React 19、Vite、TypeScript（眼镜端）与 `hls.js` |
 
-`targetSdk 29` 是 RayNeo Air SDK 1.0.3 的兼容选择，适合配套设备侧载，但不满足当前 Google Play 的 target SDK 要求。
+`targetSdk 29` 保留已有侧载兼容基线，不满足当前 Google Play 的 target SDK 要求；本次显示控制改造未调整目标版本。
 
 ## 仓库结构
 
@@ -28,7 +28,7 @@ AndroidApp/                         # 原生 Android Gradle application
 GlassesUI/                          # 眼镜 React/TypeScript 客户端与播放器
 CompanionUI/                        # 手机 React 登录、设置与触控板
 docs/                               # 使用、架构、路线图和复现规格
-scripts/install-rayneo-sdk.sh       # 下载、校验并安装 RayNeo AAR
+scripts/install-rayneo-sdk.sh       # 历史 SDK 分析辅助，不参与构建
 scripts/build-android.sh            # 可复现构建入口
 scripts/verify-no-unity.sh          # 源码与 APK 边界检查
 ```
@@ -61,12 +61,11 @@ sdk.dir=/path/to/Android/sdk
 如果想先单独安装依赖，可以运行：
 
 ```bash
-./scripts/install-rayneo-sdk.sh
 npm --prefix GlassesUI ci
 npm --prefix CompanionUI ci
 ```
 
-RayNeo 二进制不会进入仓库。安装脚本从官方地址下载 SDK 归档，校验归档 MD5：
+当前构建不下载、不打包雷鸟 SDK，也不依赖 XR 空间。仅在复核历史协议分析时，可使用保留的 SDK 下载脚本；该分析辅助脚本校验归档 MD5：
 
 ```text
 0ae0fb9de5dffae6cb0344535e20c454
@@ -101,13 +100,12 @@ RayNeo 二进制不会进入仓库。安装脚本从官方地址下载 SDK 归�
 
 构建脚本会依次：
 
-1. 安装经过校验的 RayNeo AAR；
-2. 对两个前端运行 `npm ci`；
-3. 检查眼镜端 TypeScript 并运行搜索回归测试；
-4. 生成两套 production bundle；
-5. 运行 JVM 测试和对应的 Android lint；
-6. 组装所选 APK；
-7. 检查 APK 不包含 Unity、LibVLC、开发配置或错误 ABI。
+1. 对两个前端运行 `npm ci`；
+2. 检查眼镜端 TypeScript 并运行搜索回归测试；
+3. 生成两套 production bundle；
+4. 运行 JVM 测试和对应的 Android lint；
+5. 组装所选 APK；
+6. 检查 APK 不包含 Unity、LibVLC、XR 空间依赖、开发配置或错误 ABI。
 
 输出位置：
 
@@ -190,7 +188,7 @@ npm --prefix CompanionUI run build
 RAYNEO_DUAL_UI_NO_OPEN=1 ./scripts/dev-dual-ui.sh
 ```
 
-这套页面用于快速联调 WebView 消息和响应式 UI，不能模拟 RayNeo SDK、外接 Display、MediaCodec 或 Android WebView 的设备差异；上述部分仍需执行真机回归矩阵。
+这套页面用于快速联调 WebView 消息和响应式 UI，不能模拟眼镜 USB、外接 Display、MediaCodec 或 Android WebView 的设备差异；上述部分仍需执行真机回归矩阵。
 
 ## Release 签名与旧版本升级
 
@@ -267,7 +265,7 @@ scrcpy --display-id=0 --window-title="Phone"
 scrcpy --display-id=<external-display-id> --window-title="RayNeo Air"
 ```
 
-Debug 包开启 WebView 调试。日志只应筛选通用 Activity、WebView、RayNeo SDK 和 MediaCodec 状态；禁止打印会话 JSON、Token、密码、完整服务器地址或响应正文。
+Debug 包开启 WebView 调试。日志只应筛选通用 Activity、WebView、眼镜 USB 和 MediaCodec 状态；禁止打印会话 JSON、Token、密码、完整服务器地址或响应正文。
 
 验证播放能力时，Activity/WebView 的硬件加速只说明合成路径可用，不代表 Chromium 一定选择硬件视频解码器。代表性媒体必须在真机上确认实际使用的 `MediaCodec` 组件。
 

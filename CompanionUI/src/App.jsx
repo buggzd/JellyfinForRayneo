@@ -56,6 +56,18 @@ const DEMO_SERVERS = [
 ]
 
 const springEase = 'cubic-bezier(.2, .9, .25, 1.25)'
+const DEFAULT_STEREO_SCREEN = { depthLevel: 1, sizePercent: 90 }
+const DEPTH_LABELS = ['基准', '轻微', '适中', '较近']
+
+function validStereoScreen(value) {
+  return value && Number.isInteger(value.depthLevel) && value.depthLevel >= 0 && value.depthLevel <= 3
+    && Number.isInteger(value.sizePercent) && value.sizePercent >= 80 && value.sizePercent <= 95
+}
+
+function sameStereoScreen(first, second) {
+  return first?.depthLevel === second?.depthLevel && first?.sizePercent === second?.sizePercent
+}
+
 const assetUrl = (name) => `${import.meta.env.BASE_URL}art/${name}`
 
 function hasNativeBridge() {
@@ -153,6 +165,10 @@ function App() {
   const [manualOpen, setManualOpen] = useState(false)
   const [toast, setToast] = useState('')
   const [nativeState, setNativeState] = useState(null)
+  const [stereoScreen, setStereoScreen] = useState(DEFAULT_STEREO_SCREEN)
+  const [demoStereoTestPattern, setDemoStereoTestPattern] = useState(false)
+  const stereoScreenRef = useRef(DEFAULT_STEREO_SCREEN)
+  const pendingStereoRef = useRef(null)
   const toastTimer = useRef(null)
   const screenRef = useRef(screen)
   const touchpadReadyRef = useRef(false)
@@ -173,6 +189,7 @@ function App() {
   const go = (next) => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
     if (next === 'touchpad') setToast('')
+    if (next !== 'settings') setDemoStereoTestPattern(false)
     screenRef.current = next
     setScreen(next)
   }
@@ -211,6 +228,13 @@ function App() {
 
       setNativeState(next)
       setDisplayMode(next.displayMode === 'stereo_screen' ? 'stereo' : 'mirror')
+      // Ignore an older acknowledgement while the latest slider/button edit is still in flight.
+      if (validStereoScreen(next.stereoScreen)
+        && (!pendingStereoRef.current || sameStereoScreen(next.stereoScreen, pendingStereoRef.current))) {
+        pendingStereoRef.current = null
+        stereoScreenRef.current = next.stereoScreen
+        setStereoScreen(next.stereoScreen)
+      }
       setServers(Array.isArray(next.servers) ? next.servers : [])
 
       const stateServer = serverFromNative(next)
@@ -335,9 +359,26 @@ function App() {
 
   const changeDisplayMode = (mode) => {
     setDisplayMode(mode)
+    if (mode !== 'stereo') setDemoStereoTestPattern(false)
     if (isNative) {
       callNative('selectDisplayMode', mode === 'stereo' ? 'stereo_screen' : 'mirror_2d')
     }
+  }
+
+  const changeStereoScreen = (patch) => {
+    const next = { ...stereoScreenRef.current, ...patch }
+    if (!validStereoScreen(next) || sameStereoScreen(next, stereoScreenRef.current)) return
+    stereoScreenRef.current = next
+    setStereoScreen(next)
+    if (isNative) {
+      pendingStereoRef.current = next
+      callNative('setStereoScreen', JSON.stringify(next))
+    }
+  }
+
+  const changeStereoTestPattern = (enabled) => {
+    if (isNative) callNative('setStereoTestPattern', enabled ? 'on' : 'off')
+    else setDemoStereoTestPattern(enabled)
   }
 
   const openTouchpad = () => {
@@ -353,6 +394,8 @@ function App() {
   }
 
   const resetPreferences = () => {
+    changeStereoTestPattern(false)
+    changeStereoScreen(DEFAULT_STEREO_SCREEN)
     changeDisplayMode('mirror')
     setHaptics(true)
     notify('偏好已恢复默认')
@@ -479,6 +522,11 @@ function App() {
               server={selectedServer}
               displayMode={displayMode}
               setDisplayMode={changeDisplayMode}
+              stereoScreen={stereoScreen}
+              onStereoScreenChange={changeStereoScreen}
+              stereoTestPattern={isNative ? Boolean(nativeState?.stereoTestPattern) : demoStereoTestPattern}
+              onStereoTestPatternChange={changeStereoTestPattern}
+              isNative={isNative}
               haptics={haptics}
               setHaptics={setHaptics}
               onChangeAccount={changeAccount}
@@ -1054,10 +1102,11 @@ function HomeScreen({
           <SlidersHorizontal size={19} />
         </div>
         <ModeSelector value={displayMode} onChange={setDisplayMode} />
+        {deviceState && <DisplayModeStatus value={displayMode} state={deviceState} onRetry={() => setDisplayMode(displayMode)} />}
         <p>
           {displayMode === 'mirror'
-            ? '镜像手机画面，以标准 2D 比例显示。'
-            : '为左右眼分别输出画面，获得立体空间感。'}
+            ? '双眼显示相同的完整画面。'
+            : '将 2D 内容放在虚拟银幕上，可在设置中调整远近感与大小。'}
         </p>
       </section>
 
@@ -1090,14 +1139,34 @@ function ModeSelector({ value, onChange }) {
     <div className="mode-selector">
       <button className={value === 'mirror' ? 'is-active' : ''} onClick={() => onChange('mirror')}>
         <span><Monitor size={19} /></span>
-        <div><strong>镜像 2D</strong><small>同步手机画面</small></div>
+        <div><strong>镜像 2D</strong><small>双眼相同画面</small></div>
         <i className="radio-check">{value === 'mirror' && <Check size={11} />}</i>
       </button>
       <button className={value === 'stereo' ? 'is-active' : ''} onClick={() => onChange('stereo')}>
         <span><Box size={19} /></span>
-        <div><strong>立体屏幕</strong><small>SBS 空间画面</small></div>
+        <div><strong>虚拟银幕</strong><small>可调远近与大小</small></div>
         <i className="radio-check">{value === 'stereo' && <Check size={11} />}</i>
       </button>
+    </div>
+  )
+}
+
+function DisplayModeStatus({ value, state, onRetry }) {
+  const transitioning = Boolean(state?.displayModeTransitioning)
+  const displayDisabled = Boolean(state?.glassesDisplayDisabled)
+  const active = Boolean(state?.displayModeApplied && !transitioning)
+  const stereoActive = active && state?.activeDisplayMode === 'stereo_screen'
+  const waiting = value === 'stereo' && !stereoActive
+  return (
+    <div className={`display-mode-status ${waiting ? 'is-pending' : ''}`} role="status">
+      <strong>{displayDisabled ? '系统尚未启用眼镜输出' : transitioning ? '正在切换眼镜输出…' : stereoActive ? '当前：虚拟银幕已启用' : state?.glassesConnected ? '当前：镜像 2D' : '等待眼镜输出'}</strong>
+      <p>{displayDisabled ? '眼镜已连接。请在手机系统中开启“屏幕镜像”，允许眼镜显示画面。HyperOS 在连接或切换模式后可能需要再次手动开启。' : state?.displayMessage || '等待眼镜连接。'}</p>
+      {waiting && !transitioning && <p>虚拟银幕尚未启用，远近与大小设置目前只会保存。</p>}
+      {waiting && !transitioning && state?.glassesConnected && (
+        <div className="display-mode-actions">
+          <button type="button" onClick={onRetry}>重新启用</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1107,6 +1176,11 @@ function SettingsScreen({
   server,
   displayMode,
   setDisplayMode,
+  stereoScreen,
+  onStereoScreenChange,
+  stereoTestPattern,
+  onStereoTestPatternChange,
+  isNative,
   haptics,
   setHaptics,
   onChangeAccount,
@@ -1156,6 +1230,44 @@ function SettingsScreen({
       <SettingsGroup title="显示">
         <div className="settings-mode-wrap">
           <ModeSelector value={displayMode} onChange={setDisplayMode} />
+          {isNative
+            ? <DisplayModeStatus value={displayMode} state={nativeState} onRetry={() => setDisplayMode(displayMode)} />
+            : <p className="stereo-status">演示预览：连接眼镜后可体验虚拟银幕。</p>}
+          {displayMode === 'stereo' && (
+            <div className="stereo-settings">
+              <div className="stereo-setting-label" id="stereo-depth-label">
+                <strong>靠近程度</strong><span>{DEPTH_LABELS[stereoScreen.depthLevel]}</span>
+              </div>
+              <div className="stereo-depth-options" role="group" aria-labelledby="stereo-depth-label">
+                {DEPTH_LABELS.map((label, depthLevel) => (
+                  <button key={label} type="button" aria-pressed={stereoScreen.depthLevel === depthLevel}
+                    onClick={() => onStereoScreenChange({ depthLevel })}>{label}</button>
+                ))}
+              </div>
+              <p className="stereo-help">从「轻微」开始，让整块银幕更靠近。片中物体仍保持原有的 2D 画面。</p>
+              <label className="stereo-setting-label" htmlFor="stereo-size">
+                <strong>银幕大小</strong><output htmlFor="stereo-size">{stereoScreen.sizePercent}%</output>
+              </label>
+              <input id="stereo-size" className="stereo-size-range" type="range" min="80" max="95" step="1"
+                value={stereoScreen.sizePercent} aria-valuetext={`${stereoScreen.sizePercent}%`}
+                onChange={(event) => onStereoScreenChange({ sizePercent: Number(event.target.value) })} />
+              <div className="stereo-range-labels"><span>80% · 较小</span><span>95% · 较大</span></div>
+              <p className="stereo-help">大小与远近感独立调整。若有重影或不适，先选「基准」或切回镜像 2D。</p>
+              <button type="button" className="stereo-test-button" aria-pressed={stereoTestPattern}
+                disabled={isNative && !(nativeState?.displayModeApplied && !nativeState?.displayModeTransitioning
+                  && nativeState?.activeDisplayMode === 'stereo_screen' && nativeState?.stereoOutput?.stereoReady
+                  && nativeState?.glassesPresentationReady)}
+                onClick={() => onStereoTestPatternChange(!stereoTestPattern)}>
+                <Eye size={16} /> {stereoTestPattern ? '结束左右眼检查' : '检查左右眼'}
+              </button>
+              {stereoTestPattern && (
+                <p className="stereo-help" role="status">
+                  {isNative ? '交替闭眼：左眼应看到 L，右眼应看到 R。白框是基准，青色框随银幕移动；逐档靠近时应更靠前。离开设置会结束检查。'
+                    : '此处仅预览设置。眼镜上的检查图会显示 L / R、白色基准框与随银幕移动的青色框。'}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </SettingsGroup>
 

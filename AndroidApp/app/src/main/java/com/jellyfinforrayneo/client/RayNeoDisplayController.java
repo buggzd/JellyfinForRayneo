@@ -4,14 +4,9 @@ import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.util.Log;
-
-import com.tcl.xr.api.AirApi;
-import com.tcl.xr.api.USBDeviceEventListener;
 
 final class RayNeoDisplayController
 {
-    private static final String TAG = "RayNeoDisplay";
     private static final long STATE_TICK_MS = 100L;
 
     interface Listener
@@ -19,88 +14,150 @@ final class RayNeoDisplayController
         void onDisplayModeStateChanged(DisplayModeStateMachine.State state);
     }
 
-    private final Activity activity;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final DisplayModeStateMachine stateMachine;
     private final Listener listener;
+    private final RayNeoUsbDisplayClient usbClient;
     private final Runnable stateTick = new Runnable()
     {
         @Override
         public void run()
         {
-            if (destroyed)
+            if (!destroyed)
             {
-                return;
+                execute(stateMachine.tick(SystemClock.uptimeMillis()));
+                scheduleTick();
             }
-            execute(stateMachine.tick(SystemClock.uptimeMillis()));
-            scheduleTick();
         }
     };
-    private final USBDeviceEventListener usbListener = new USBDeviceEventListener()
-    {
-        @Override
-        public void onSensorChanged(
-                float[] gyroscope,
-                float[] accelerometer,
-                float[] magnetometer,
-                float[] quaternion,
-                long timestamp)
-        {
-            // This application intentionally has no head-tracked scene.
-        }
 
-        @Override
-        public void onCommandResp(byte command, boolean success, String ignoredMessage)
+    private DisplayModeStateMachine.State lastPublishedState;
+    private boolean paused;
+    private boolean destroyed;
+    private boolean commandWritten;
+    private boolean permissionDeclined;
+    private boolean systemDisplayDisabled;
+    private DisplayModeStateMachine.Action pendingGeometryAction = DisplayModeStateMachine.Action.NONE;
+    private DisplayOutputGeometry output = DisplayOutputGeometry.EMPTY;
+
+    RayNeoDisplayController(Activity activity, String initialMode, Listener listener)
+    {
+        stateMachine = new DisplayModeStateMachine(initialMode);
+        this.listener = listener;
+        usbClient = new RayNeoUsbDisplayClient(activity, new RayNeoUsbDisplayClient.Listener()
         {
-            handler.post(() ->
+            @Override
+            public void onCommandWritten()
+            {
+                commandWritten = true;
+                confirmMeasuredMode();
+            }
+
+            @Override
+            public void onPermissionRequired()
+            {
+                stateMachine.waitForUsbPermission();
+                publish();
+            }
+
+            @Override
+            public void onPermissionResult(boolean granted)
             {
                 if (destroyed)
                 {
                     return;
                 }
-                execute(stateMachine.onCommandResponse(
-                        command & 0xff,
-                        success,
-                        SystemClock.uptimeMillis()));
-            });
-        }
-    };
+                if (!granted)
+                {
+                    permissionDeclined = true;
+                    stateMachine.usbPermissionDenied();
+                    publish();
+                }
+                else if (!paused)
+                {
+                    requestMode(stateMachine.snapshot().requestedMode);
+                }
+            }
 
-    private AirApi airApi;
-    private DisplayModeStateMachine.State lastPublishedState;
-    private boolean sdkInitialized;
-    private boolean paused;
-    private boolean destroyed;
-
-    RayNeoDisplayController(Activity activity, String initialMode, Listener listener)
-    {
-        this.activity = activity;
-        stateMachine = new DisplayModeStateMachine(initialMode);
-        this.listener = listener;
+            @Override
+            public void onUnavailable()
+            {
+                if (!destroyed && stateMachine.snapshot().displayModeTransitioning)
+                {
+                    execute(stateMachine.onUsbFailure());
+                }
+            }
+        });
     }
 
     void start()
     {
-        ensureSdkInitialized();
         publish();
         scheduleTick();
     }
 
     void setConnected(boolean connected)
     {
-        long nowMs = SystemClock.uptimeMillis();
+        if (!connected)
+        {
+            permissionDeclined = false;
+            pendingGeometryAction = DisplayModeStateMachine.Action.NONE;
+        }
         if (paused && connected)
         {
-            stateMachine.setConnected(true, nowMs);
-            execute(stateMachine.pause());
+            stateMachine.setConnected(true, SystemClock.uptimeMillis());
+            stateMachine.pause();
+            publish();
             return;
         }
-        execute(stateMachine.setConnected(connected, nowMs));
+        execute(stateMachine.setConnected(connected, SystemClock.uptimeMillis()));
     }
 
     void requestMode(String mode)
     {
+        permissionDeclined = false;
         execute(stateMachine.requestMode(mode, SystemClock.uptimeMillis()));
+    }
+
+    void setSystemDisplayDisabled(boolean disabled)
+    {
+        systemDisplayDisabled = disabled;
+    }
+
+    void setOutputGeometry(DisplayOutputGeometry next)
+    {
+        if (!destroyed)
+        {
+            output = next;
+            execute(stateMachine.onStereoLayoutChanged(next.stereoReady, SystemClock.uptimeMillis()));
+            if (pendingGeometryAction != DisplayModeStateMachine.Action.NONE
+                    && next.viewWidth > 0 && next.viewHeight > 0
+                    && stateMachine.snapshot().displayModeTransitioning)
+            {
+                execute(pendingGeometryAction);
+            }
+            confirmMeasuredMode();
+        }
+    }
+
+    private boolean measuredModeMatches(boolean stereo)
+    {
+        return stereo ? output.stereoReady
+                : output.modeWidth == 1920 && output.modeHeight == 1080
+                        && output.viewWidth > 0 && output.viewHeight > 0;
+    }
+
+    private void confirmMeasuredMode()
+    {
+        if (!commandWritten || destroyed)
+        {
+            return;
+        }
+        boolean stereo = DisplayModeStateMachine.STEREO_SCREEN.equals(stateMachine.snapshot().requestedMode);
+        if (measuredModeMatches(stereo))
+        {
+            execute(stateMachine.onPhysicalModeObserved(stereo, SystemClock.uptimeMillis()));
+        }
     }
 
     void onResume()
@@ -110,20 +167,7 @@ final class RayNeoDisplayController
             return;
         }
         paused = false;
-        ensureSdkInitialized();
-        if (sdkInitialized)
-        {
-            try
-            {
-                airApi.OnResume();
-            }
-            catch (RuntimeException exception)
-            {
-                Log.w(TAG, "RayNeo SDK resume failed.");
-            }
-        }
-        DisplayModeStateMachine.State state = stateMachine.snapshot();
-        if (state.connected)
+        if (!permissionDeclined && !usbClient.isPermissionPending() && stateMachine.snapshot().connected)
         {
             execute(stateMachine.setConnected(true, SystemClock.uptimeMillis()));
         }
@@ -136,7 +180,12 @@ final class RayNeoDisplayController
         {
             paused = true;
             handler.removeCallbacks(stateTick);
-            execute(stateMachine.pause());
+            // USB consent and HyperOS screen mirroring are system UI, not a failed mode command.
+            if (!usbClient.isPermissionPending() && !systemDisplayDisabled)
+            {
+                pendingGeometryAction = DisplayModeStateMachine.Action.NONE;
+                execute(stateMachine.pause());
+            }
         }
     }
 
@@ -146,23 +195,9 @@ final class RayNeoDisplayController
         {
             return;
         }
-        execute(stateMachine.pause());
         destroyed = true;
         handler.removeCallbacks(stateTick);
-        if (airApi != null && sdkInitialized)
-        {
-            try
-            {
-                airApi.unRegisterUSBDeviceListener();
-                airApi.Destroy();
-            }
-            catch (RuntimeException exception)
-            {
-                Log.w(TAG, "RayNeo SDK shutdown was incomplete.");
-            }
-        }
-        airApi = null;
-        sdkInitialized = false;
+        usbClient.destroy(output.stereoReady && !systemDisplayDisabled);
     }
 
     DisplayModeStateMachine.State getState()
@@ -170,80 +205,37 @@ final class RayNeoDisplayController
         return stateMachine.snapshot();
     }
 
-    private void ensureSdkInitialized()
-    {
-        if (destroyed || sdkInitialized)
-        {
-            return;
-        }
-        try
-        {
-            airApi = AirApi.ins();
-            airApi.init(activity);
-            airApi.registerUSBDeviceListener(usbListener);
-            sdkInitialized = true;
-        }
-        catch (RuntimeException | LinkageError exception)
-        {
-            airApi = null;
-            sdkInitialized = false;
-            Log.w(TAG, "RayNeo SDK initialization failed.");
-        }
-    }
-
     private void execute(DisplayModeStateMachine.Action action)
     {
-        DisplayModeStateMachine.State before = stateMachine.snapshot();
         if (action != DisplayModeStateMachine.Action.NONE)
         {
-            ensureSdkInitialized();
-            if (!sdkInitialized || airApi == null)
+            DisplayModeStateMachine.State before = stateMachine.snapshot();
+            boolean stereo = action == DisplayModeStateMachine.Action.SWITCH_TO_3D;
+            commandWritten = false;
+            pendingGeometryAction = DisplayModeStateMachine.Action.NONE;
+            if (measuredModeMatches(stereo))
             {
-                if (before.displayModeTransitioning)
-                {
-                    stateMachine.onSdkFailure(SystemClock.uptimeMillis());
-                }
+                // Reuse a correct physical mode instead of causing another EDID reconnect
+                // after the user has just enabled HyperOS screen mirroring.
+                stateMachine.onStereoLayoutChanged(output.stereoReady, SystemClock.uptimeMillis());
+                stateMachine.onPhysicalModeObserved(stereo, SystemClock.uptimeMillis());
             }
-            else
+            else if (before.displayModeTransitioning && permissionDeclined)
             {
-                try
-                {
-                    if (action == DisplayModeStateMachine.Action.SWITCH_TO_3D)
-                    {
-                        airApi.switchTo3DMode();
-                    }
-                    else
-                    {
-                        airApi.switchTo2DMode();
-                    }
-                }
-                catch (RuntimeException | LinkageError exception)
-                {
-                    if (before.displayModeTransitioning)
-                    {
-                        stateMachine.onSdkFailure(SystemClock.uptimeMillis());
-                    }
-                    bestEffort2D();
-                    Log.w(TAG, "RayNeo display mode command failed.");
-                }
+                stateMachine.usbPermissionDenied();
+            }
+            else if (before.displayModeTransitioning && output.viewWidth == 0 && !systemDisplayDisabled)
+            {
+                // Presentation.show() returns before its first measured layout. Observe it
+                // before sending anything so an already-correct mode does not reconnect again.
+                pendingGeometryAction = action;
+            }
+            else if (!systemDisplayDisabled)
+            {
+                usbClient.request(stereo, before.displayModeTransitioning);
             }
         }
         publish();
-    }
-
-    private void bestEffort2D()
-    {
-        if (airApi == null || !sdkInitialized)
-        {
-            return;
-        }
-        try
-        {
-            airApi.switchTo2DMode();
-        }
-        catch (RuntimeException | LinkageError ignored)
-        {
-        }
     }
 
     private void publish()
@@ -260,12 +252,9 @@ final class RayNeoDisplayController
         }
     }
 
-    private static boolean sameState(
-            DisplayModeStateMachine.State first,
-            DisplayModeStateMachine.State second)
+    private static boolean sameState(DisplayModeStateMachine.State first, DisplayModeStateMachine.State second)
     {
-        return first != null
-                && second != null
+        return first != null && second != null
                 && first.requestedMode.equals(second.requestedMode)
                 && first.activeMode.equals(second.activeMode)
                 && first.displayModeApplied == second.displayModeApplied

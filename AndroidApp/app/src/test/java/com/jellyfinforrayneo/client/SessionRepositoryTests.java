@@ -94,6 +94,33 @@ public final class SessionRepositoryTests
         assertEquals("display_mode", SessionRepository.KEY_DISPLAY_MODE);
     }
 
+    @Test
+    public void stereoPreference_SurvivesRecreationAndSessionLogout()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        StereoScreenSettings settings = StereoScreenSettings.parse("{\"depthLevel\":3,\"sizePercent\":85}");
+        repository.setStereoScreenSettings(settings);
+        repository.save(validSession(), true);
+        repository.clear();
+
+        SessionRepository restored = new SessionRepository(store);
+        assertTrue(settings.sameAs(restored.getStereoScreenSettings()));
+        assertNull(restored.getSession());
+    }
+
+    @Test
+    public void missingOrCorruptStereoPreference_UsesConservativeDefault()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        assertTrue(StereoScreenSettings.DEFAULT.sameAs(repository.getStereoScreenSettings()));
+        store.putString(SessionRepository.KEY_STEREO_SCREEN, "{\"depthLevel\":999,\"sizePercent\":100}");
+        assertTrue(StereoScreenSettings.DEFAULT.sameAs(repository.getStereoScreenSettings()));
+        repository.setStereoScreenSettings(null);
+        assertTrue(StereoScreenSettings.DEFAULT.sameAs(repository.getStereoScreenSettings()));
+    }
+
     private static SessionPayload validSession()
     {
         SessionPayload session = SessionPayload.create(

@@ -3,7 +3,6 @@ plugins {
 }
 
 def repositoryRoot = rootProject.projectDir.parentFile
-def rayNeoSdk = file("libs/ffalcon-sdk-client-1.0.3.aar")
 def versionPropertiesFile = new File(repositoryRoot, "version.properties")
 if (!versionPropertiesFile.isFile()) {
     throw new GradleException("Missing version.properties at the repository root.")
@@ -151,10 +150,6 @@ tasks.register("buildCompanionUi", Exec) {
 tasks.register("verifyProductionAssets") {
     dependsOn "buildGlassesUi", "buildCompanionUi"
     doLast {
-        if (!rayNeoSdk.isFile()) {
-            throw new GradleException(
-                    "RayNeo SDK is missing. Run ../scripts/install-rayneo-sdk.sh first.")
-        }
         def forbidden = fileTree("src/main/assets") {
             include "**/.jellyfin-dev.json", "**/*jellyfin-dev*"
         }.files
@@ -174,8 +169,6 @@ tasks.named("preBuild").configure {
 }
 
 dependencies {
-    implementation files("libs/ffalcon-sdk-client-1.0.3.aar")
-
     testImplementation "junit:junit:4.13.2"
     testImplementation "org.json:json:20240303"
 }

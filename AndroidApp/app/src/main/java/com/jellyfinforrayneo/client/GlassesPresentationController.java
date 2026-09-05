@@ -5,7 +5,9 @@ import android.app.Presentation;
 import android.content.Context;
 import android.hardware.display.DisplayManager;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Display;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
@@ -23,6 +25,8 @@ final class GlassesPresentationController
         void onDisplayConnectionChanged(boolean connected);
 
         void onWebReadyChanged(boolean ready);
+
+        void onStereoOutputChanged(DisplayOutputGeometry output);
 
         void onGlassesMessage(GlassesMessage message);
     }
@@ -53,9 +57,14 @@ final class GlassesPresentationController
             };
 
     private GlassesPresentation presentation;
+    private GlassesWebViewController webController;
     private DisplayModeStateMachine.State displayState;
+    private StereoScreenSettings stereoSettings = StereoScreenSettings.DEFAULT;
+    private volatile DisplayOutputGeometry output = DisplayOutputGeometry.EMPTY;
+    private volatile boolean stereoTestPattern;
     private int activeDisplayId = Display.INVALID_DISPLAY;
     private boolean started;
+    private volatile boolean systemDisplayDisabled;
 
     GlassesPresentationController(
             Activity activity,
@@ -104,10 +113,60 @@ final class GlassesPresentationController
 
     void setDisplayState(DisplayModeStateMachine.State state)
     {
+        boolean transitionEnded = displayState != null && displayState.displayModeTransitioning
+                && !state.displayModeTransitioning;
         displayState = state;
+        if (!state.displayModeApplied || state.displayModeTransitioning
+                || !DisplayModeStateMachine.STEREO_SCREEN.equals(state.activeMode))
+        {
+            setStereoTestPattern(false);
+        }
         if (presentation != null)
         {
             presentation.setDisplayState(state);
+        }
+        if (transitionEnded && started)
+        {
+            activity.getWindow().getDecorView().post(this::refreshDisplay);
+        }
+    }
+
+    void setStereoScreenSettings(StereoScreenSettings settings)
+    {
+        stereoSettings = settings;
+        if (webController != null)
+        {
+            webController.setStereoScreenSettings(settings);
+        }
+    }
+
+    void setStereoTestPattern(boolean enabled)
+    {
+        stereoTestPattern = enabled && output.stereoReady && displayState.displayModeApplied
+                && !displayState.displayModeTransitioning
+                && DisplayModeStateMachine.STEREO_SCREEN.equals(displayState.activeMode);
+        if (webController != null)
+        {
+            webController.setStereoTestPattern(stereoTestPattern);
+        }
+    }
+
+    boolean isStereoTestPatternEnabled()
+    {
+        return stereoTestPattern;
+    }
+
+    DisplayOutputGeometry getOutputGeometry()
+    {
+        return output;
+    }
+
+    private void publishOutput(DisplayOutputGeometry next)
+    {
+        if (!output.sameAs(next))
+        {
+            output = next;
+            callback.onStereoOutputChanged(next);
         }
     }
 
@@ -129,6 +188,11 @@ final class GlassesPresentationController
         return activeDisplayId != Display.INVALID_DISPLAY;
     }
 
+    boolean isSystemDisplayDisabled()
+    {
+        return systemDisplayDisabled;
+    }
+
     private void refreshDisplay()
     {
         if (!started || activity.isFinishing())
@@ -137,12 +201,21 @@ final class GlassesPresentationController
         }
         Display selected = findBestDisplay();
         int selectedId = selected == null ? Display.INVALID_DISPLAY : selected.getDisplayId();
-        if (selectedId == activeDisplayId && presentation != null)
+        if (selected == null && displayState.displayModeTransitioning && webController != null)
         {
+            // Full-SBS changes EDID. Android removes and recreates the logical display.
+            // Retain the one WebView/video within the existing, bounded hardware transition.
+            publishOutput(DisplayOutputGeometry.EMPTY);
+            return;
+        }
+        if (selectedId == activeDisplayId && presentation != null && presentation.isShowing())
+        {
+            presentation.refreshOutput();
             return;
         }
 
-        dismissPresentation();
+        boolean retainWebView = displayState.displayModeTransitioning && webController != null;
+        dismissPresentation(retainWebView);
         activeDisplayId = selectedId;
         if (selected == null)
         {
@@ -158,6 +231,8 @@ final class GlassesPresentationController
         }
         catch (RuntimeException exception)
         {
+            Log.w("GlassesPresentation", "External window creation failed: "
+                    + exception.getClass().getSimpleName());
             dismissPresentation();
             callback.onDisplayConnectionChanged(false);
         }
@@ -179,9 +254,40 @@ final class GlassesPresentationController
         }
 
         Display[] displays = displayManager.getDisplays();
+        Set<Integer> visibleIds = new HashSet<>();
+        for (Display display : displays)
+        {
+            visibleIds.add(display.getDisplayId());
+        }
+        boolean previouslyDisabled = systemDisplayDisabled;
+        systemDisplayDisabled = false;
+        // Read-only Android connected-display category. Older releases return an empty array.
+        for (Display display : displayManager.getDisplays("android.hardware.display.category.ALL_INCLUDING_DISABLED"))
+        {
+            if (display != null && display.getDisplayId() != Display.DEFAULT_DISPLAY
+                    && !visibleIds.contains(display.getDisplayId())
+                    && DisplaySelector.isGlassesName(display.getName()))
+            {
+                systemDisplayDisabled = true;
+            }
+        }
+        if (previouslyDisabled != systemDisplayDisabled)
+        {
+            callback.onStereoOutputChanged(output);
+        }
+        if (BuildConfig.DEBUG)
+        {
+            Log.d("GlassesPresentation", "Visible display count: " + displays.length);
+        }
         List<DisplaySelector.Candidate> candidates = new ArrayList<>();
         for (Display display : displays)
         {
+            if (BuildConfig.DEBUG)
+            {
+                Log.d("GlassesPresentation", "Display " + display.getDisplayId()
+                        + " valid=" + display.isValid() + " state=" + display.getState()
+                        + " presentation=" + presentationIds.contains(display.getDisplayId()));
+            }
             candidates.add(new DisplaySelector.Candidate(
                     display.getDisplayId(),
                     display.isValid(),
@@ -195,19 +301,34 @@ final class GlassesPresentationController
 
     private void dismissPresentation()
     {
+        dismissPresentation(false);
+    }
+
+    private void dismissPresentation(boolean retainWebView)
+    {
         GlassesPresentation current = presentation;
         presentation = null;
         activeDisplayId = Display.INVALID_DISPLAY;
+        stereoTestPattern = false;
         if (current != null)
         {
             current.release();
         }
-        callback.onWebReadyChanged(false);
+        if (!retainWebView && webController != null)
+        {
+            webController.destroy();
+            webController = null;
+        }
+        publishOutput(DisplayOutputGeometry.EMPTY);
+        if (!retainWebView)
+        {
+            callback.onWebReadyChanged(false);
+        }
     }
 
     private final class GlassesPresentation extends Presentation
     {
-        private GlassesWebViewController webController;
+        private FrameLayout root;
 
         GlassesPresentation(Display display)
         {
@@ -222,15 +343,36 @@ final class GlassesPresentationController
             Window window = getWindow();
             if (window != null)
             {
-                window.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
-                window.setLayout(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT);
+                window.requestFeature(Window.FEATURE_NO_TITLE);
+                window.setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK));
+                window.addFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+                        | WindowManager.LayoutParams.FLAG_FULLSCREEN
+                        | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                window.getDecorView().setSystemUiVisibility(
+                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
             }
-            FrameLayout root = new FrameLayout(getContext());
+            root = new FrameLayout(getContext());
             root.setBackgroundColor(android.graphics.Color.BLACK);
             setContentView(root);
+            if (window != null)
+            {
+                window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            }
+            root.addOnLayoutChangeListener((view, left, top, right, bottom,
+                    oldLeft, oldTop, oldRight, oldBottom) -> refreshOutput());
+            if (webController != null)
+            {
+                webController.attachTo(root);
+                webController.setDisplayState(displayState);
+                return;
+            }
             webController = new GlassesWebViewController(
+                    activity,
                     root,
                     callback,
                     new GlassesWebViewController.Callback()
@@ -238,6 +380,10 @@ final class GlassesPresentationController
                         @Override
                         public void onReadyChanged(boolean ready)
                         {
+                            if (!ready)
+                            {
+                                setStereoTestPattern(false);
+                            }
                             callback.onWebReadyChanged(ready);
                         }
 
@@ -247,7 +393,31 @@ final class GlassesPresentationController
                             callback.onGlassesMessage(message);
                         }
                     });
+            webController.setStereoScreenSettings(stereoSettings);
             webController.start(displayState);
+        }
+
+        void refreshOutput()
+        {
+            if (presentation != this)
+            {
+                return;
+            }
+            if (root == null || !isShowing() || !getDisplay().isValid())
+            {
+                publishOutput(DisplayOutputGeometry.EMPTY);
+                return;
+            }
+            try
+            {
+                Display.Mode mode = getDisplay().getMode();
+                publishOutput(new DisplayOutputGeometry(mode.getPhysicalWidth(), mode.getPhysicalHeight(),
+                        root.getWidth(), root.getHeight(), mode.getRefreshRate()));
+            }
+            catch (RuntimeException ignored)
+            {
+                publishOutput(DisplayOutputGeometry.EMPTY);
+            }
         }
 
         void setDisplayState(DisplayModeStateMachine.State state)
@@ -273,11 +443,7 @@ final class GlassesPresentationController
 
         void release()
         {
-            if (webController != null)
-            {
-                webController.destroy();
-                webController = null;
-            }
+            root = null;
             try
             {
                 if (isShowing())
