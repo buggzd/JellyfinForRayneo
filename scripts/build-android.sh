@@ -26,6 +26,7 @@ cd "${PROJECT_DIR}"
 npm --prefix GlassesUI ci
 npm --prefix CompanionUI ci
 npm --prefix GlassesUI run check
+npm --prefix GlassesUI test
 npm --prefix GlassesUI run build
 npm --prefix CompanionUI run build
 cd AndroidApp

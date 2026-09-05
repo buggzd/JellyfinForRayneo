@@ -34,10 +34,11 @@ import {
   Volume2,
   X,
 } from 'lucide-react'
-import Hls from 'hls.js'
+import type Hls from 'hls.js'
 import {
   type CSSProperties,
   type ReactNode,
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -81,11 +82,13 @@ const focusableSelector = '[data-focusable="true"]:not([disabled])'
 const spatialFocusSelector = '[data-spatial-focus="true"]'
 let sideNavigationReturnTarget: HTMLElement | null = null
 
-function visibleFocusables() {
+function visibleFocusables(rects?: Map<HTMLElement, DOMRect>) {
   return Array.from(document.querySelectorAll<HTMLElement>(focusableSelector)).filter((element) => {
     const rect = element.getBoundingClientRect()
+    rects?.set(element, rect)
+    if (rect.width <= 2 || rect.height <= 2) return false
     const style = window.getComputedStyle(element)
-    return rect.width > 2 && rect.height > 2 && style.visibility !== 'hidden' && style.display !== 'none'
+    return style.visibility !== 'hidden' && style.display !== 'none'
   })
 }
 
@@ -114,7 +117,10 @@ function focusSpatialElement(element?: HTMLElement | null, options: FocusOptions
 }
 
 function moveFocus(direction: Direction) {
-  const nodes = visibleFocusables()
+  // Geometry is valid only for this key event; scrolling and animated transforms
+  // must be measured again on the next event.
+  const rects = new Map<HTMLElement, DOMRect>()
+  const nodes = visibleFocusables(rects)
   if (!nodes.length) return
 
   const current = currentSpatialFocus()
@@ -124,7 +130,7 @@ function moveFocus(direction: Direction) {
     return
   }
 
-  const source = current.getBoundingClientRect()
+  const source = rects.get(current)!
   const sx = source.left + source.width / 2
   const sy = source.top + source.height / 2
   const currentInNavigation = Boolean(current.closest('.side-navigation'))
@@ -220,7 +226,7 @@ function moveFocus(direction: Direction) {
 
   for (const node of candidates) {
     if (node === current) continue
-    const rect = node.getBoundingClientRect()
+    const rect = rects.get(node)!
     const tx = rect.left + rect.width / 2
     const ty = rect.top + rect.height / 2
     const dx = tx - sx
@@ -551,7 +557,7 @@ function MetaRow({ item }: { item: MediaItem }) {
   )
 }
 
-function MediaCard({
+const MediaCard = memo(function MediaCard({
   item,
   wide = false,
   library = false,
@@ -594,7 +600,7 @@ function MediaCard({
       <span className="media-card__enter"><ChevronRight size={18} /></span>
     </button>
   )
-}
+})
 
 type HeroTitleDensity = 'regular' | 'medium' | 'compact' | 'dense'
 
@@ -1005,23 +1011,21 @@ function SearchPage({
   const preview = results.find((result) => result.item.id === effectiveResultId) ?? results[0]
 
   useEffect(() => {
-    let active = true
+    const controller = new AbortController()
     if (!series.length) {
       setEntries([])
       setBuildingLocalIndex(false)
       return
     }
     setBuildingLocalIndex(true)
-    void buildSeriesIndex(series).then((next) => {
-      if (active) setEntries(next)
+    void buildSeriesIndex(series, controller.signal).then((next) => {
+      if (!controller.signal.aborted) setEntries(next)
     }).catch(() => {
-      if (active) setEntries([])
+      if (!controller.signal.aborted) setEntries([])
     }).finally(() => {
-      if (active) setBuildingLocalIndex(false)
+      if (!controller.signal.aborted) setBuildingLocalIndex(false)
     })
-    return () => {
-      active = false
-    }
+    return () => controller.abort()
   }, [series])
 
   useEffect(() => {
@@ -1757,36 +1761,51 @@ function PlayerPage({
     seekAppliedKey.current = ''
     const hlsMedia = plan.transcoding || /\.m3u8(?:$|\?)/i.test(plan.url)
 
-    if (hlsMedia && Hls.isSupported()) {
-      let mediaRecoveryAttempted = false
-      const hls = new Hls({
-        enableWorker: true,
-        backBufferLength: 90,
-        maxBufferLength: 45,
-        maxMaxBufferLength: 90,
-      })
-      hlsRef.current = hls
-      hls.attachMedia(video)
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => hls.loadSource(plan.url))
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (!data.fatal) return
-        if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !mediaRecoveryAttempted) {
-          mediaRecoveryAttempted = true
-          try {
-            hls.recoverMediaError()
-            return
-          } catch {
-            // Fall through to the user-visible playback failure.
-          }
+    let disposed = false
+    const generation = prepareGeneration.current
+    const isCurrentSource = () => !disposed && generation === prepareGeneration.current
+    const loadSource = async () => {
+      if (hlsMedia) {
+        const { default: Hls } = await import('hls.js')
+        if (!isCurrentSource()) return
+        if (Hls.isSupported()) {
+          let mediaRecoveryAttempted = false
+          const hls = new Hls({
+            enableWorker: true,
+            backBufferLength: 90,
+            maxBufferLength: 45,
+            maxMaxBufferLength: 90,
+          })
+          hlsRef.current = hls
+          hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+            if (isCurrentSource()) hls.loadSource(plan.url)
+          })
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            if (!isCurrentSource() || !data.fatal) return
+            if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !mediaRecoveryAttempted) {
+              mediaRecoveryAttempted = true
+              try {
+                hls.recoverMediaError()
+                return
+              } catch {
+                // Fall through to the user-visible playback failure.
+              }
+            }
+            failPlayback('Jellyfin HLS 媒体流已中断。')
+          })
+          hls.attachMedia(video)
+          return
         }
-        failPlayback('Jellyfin HLS 媒体流已中断。')
-      })
-    } else {
+      }
       video.src = plan.url
       video.load()
     }
+    void loadSource().catch(() => {
+      if (isCurrentSource()) failPlayback('Jellyfin 媒体流无法加载。')
+    })
 
     return () => {
+      disposed = true
       hlsRef.current?.destroy()
       hlsRef.current = null
     }
@@ -2423,6 +2442,11 @@ export default function App() {
     return Array.from(new Set([...searchRecentSeriesIds, ...shelfIds].filter(Boolean)))
   }, [jellyfin.snapshot, searchRecentSeriesIds])
 
+  const fallbackSeries = useMemo(
+    () => jellyfin.snapshot?.allItems.filter((item) => item.sourceType === 'Series') ?? [],
+    [jellyfin.snapshot?.allItems],
+  )
+
   useEffect(() => {
     postNativeMessage({
       type: 'runtime_state',
@@ -2765,7 +2789,6 @@ export default function App() {
       return <BrowsePage key={`${page}:${page === 'browse' ? browseEntry?.id ?? 'root' : 'root'}`} mode={page === 'browse' ? 'library' : 'favorites'} items={snapshot.libraries} favorites={snapshot.favorites} initialFolder={page === 'browse' ? browseEntry : null} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} onResetLibrary={() => setBrowseEntry(null)} />
     }
     if (page === 'search') {
-      const fallbackSeries = snapshot.allItems.filter((item) => item.sourceType === 'Series')
       const searchableSeries = jellyfin.seriesIndexStatus === 'ready'
         ? jellyfin.seriesIndex
         : jellyfin.seriesIndex.length ? jellyfin.seriesIndex : fallbackSeries

@@ -103,7 +103,7 @@ RayNeo 二进制不会进入仓库。安装脚本从官方地址下载 SDK 归�
 
 1. 安装经过校验的 RayNeo AAR；
 2. 对两个前端运行 `npm ci`；
-3. 检查眼镜端 TypeScript；
+3. 检查眼镜端 TypeScript 并运行搜索回归测试；
 4. 生成两套 production bundle；
 5. 运行 JVM 测试和对应的 Android lint；
 6. 组装所选 APK；
@@ -140,6 +140,7 @@ npm --prefix GlassesUI run dev
 
 ```bash
 npm --prefix GlassesUI run check
+npm --prefix GlassesUI test
 npm --prefix GlassesUI run build
 ```
 
@@ -219,6 +220,8 @@ keyPassword=<local-only>
 ```
 
 这条命令覆盖前端检查、两套 production bundle、JVM 测试、Debug lint、APK 组装和 APK 边界检查。
+
+搜索性能基准与保持视觉效果的优化记录见 [性能审阅](PERFORMANCE_REVIEW.md)。
 
 前端相关变更还应明确运行：
 

@@ -77,6 +77,7 @@
 | 版本号、Git 标签与自动发布 | [版本与发布规则](docs/VERSIONING.md) |
 | 正式发布、签名备份、验签与失败恢复 | [Release 发布手册](docs/RELEASE.md) |
 | 会话边界、WebView 桥、显示状态机与播放架构 | [Android 架构说明](docs/ANDROID_ARCHITECTURE.md) |
+| 保持视觉效果的性能优化、基准与验证边界 | [性能审阅](docs/PERFORMANCE_REVIEW.md) |
 | 已有能力与后续功能优先级 | [功能路线图](docs/JELLYFIN_FEATURE_ROADMAP.md) |
 | Jellyfin Web 的信息架构与交互采样 | [Jellyfin Web 复现规格](docs/Jellyfin-Web-Reproduction-Spec.md) |
 

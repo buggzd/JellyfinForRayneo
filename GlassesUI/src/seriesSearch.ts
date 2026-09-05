@@ -23,6 +23,9 @@ export type ParsedSeriesQuery = {
 }
 
 const letterOrNumber = /[\p{Letter}\p{Number}]/u
+const titleCollator = new Intl.Collator('zh-CN')
+const cachedEntries = new WeakMap<MediaItem, SeriesIndexEntry>()
+const indexWorkBudgetMs = 8
 
 function normalizeWords(value: string) {
   return value
@@ -68,16 +71,35 @@ function indexEntry(item: MediaItem, convert: PinyinConverter): SeriesIndexEntry
   }
 }
 
-export async function buildSeriesIndex(items: MediaItem[]) {
+export async function buildSeriesIndex(items: MediaItem[], signal?: AbortSignal) {
+  const checkAborted = () => {
+    if (signal?.aborted) throw new DOMException('Series index build aborted', 'AbortError')
+  }
+  checkAborted()
   const { pinyin } = await import('pinyin-pro')
+  checkAborted()
   const seen = new Set<string>()
-  return items
-    .filter((item) => {
-      if (item.sourceType !== 'Series' || !item.id || seen.has(item.id)) return false
-      seen.add(item.id)
-      return true
-    })
-    .map((item) => indexEntry(item, pinyin))
+  const entries: SeriesIndexEntry[] = []
+  let sliceStarted = performance.now()
+  for (const item of items) {
+    if (item.sourceType !== 'Series' || !item.id || seen.has(item.id)) continue
+    seen.add(item.id)
+    let entry = cachedEntries.get(item)
+    if (!entry) {
+      entry = indexEntry(item, pinyin)
+      cachedEntries.set(item, entry)
+    }
+    entries.push(entry)
+
+    // Keep animation and remote input responsive while romanizing a large library.
+    // Weak keys let session replacement release the old titles and image URLs.
+    if (performance.now() - sliceStarted >= indexWorkBudgetMs) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      checkAborted()
+      sliceStarted = performance.now()
+    }
+  }
+  return entries
 }
 
 export function parseSeriesQuery(value: string): ParsedSeriesQuery {
@@ -148,11 +170,10 @@ function bestScore(values: string[], query: string, scores: {
 
 function scoreEntry(
   entry: SeriesIndexEntry,
-  rawQuery: string,
+  words: string,
+  query: string,
   priorityBoost: number,
 ): Omit<SeriesSearchMatch, 'item'> | null {
-  const words = normalizeWords(rawQuery)
-  const query = compact(rawQuery)
   if (!query) return { reason: '推荐', score: preferenceScore(entry.item) + priorityBoost }
 
   const titleScore = Math.max(
@@ -202,6 +223,8 @@ export function searchSeries(
   prioritySeriesIds: readonly string[] = [],
 ): SeriesSearchMatch[] {
   const parsed = parseSeriesQuery(query)
+  const words = normalizeWords(parsed.term)
+  const compactQuery = words.replace(/\s+/g, '')
   const boundedLimit = Math.max(1, Math.min(50, Math.round(limit)))
   const priority = new Map(prioritySeriesIds.map((id, index) => [
     id,
@@ -210,7 +233,7 @@ export function searchSeries(
 
   return entries
     .map((entry) => {
-      const match = scoreEntry(entry, parsed.term, priority.get(entry.item.id) ?? 0)
+      const match = scoreEntry(entry, words, compactQuery, priority.get(entry.item.id) ?? 0)
       return match ? { item: entry.item, ...match } : null
     })
     .filter((match): match is SeriesSearchMatch => match !== null)
@@ -218,7 +241,7 @@ export function searchSeries(
       right.score - left.score
       || Number(right.item.favorite) - Number(left.item.favorite)
       || (Date.parse(right.item.dateCreated ?? '') || 0) - (Date.parse(left.item.dateCreated ?? '') || 0)
-      || left.item.title.localeCompare(right.item.title, 'zh-CN')
+      || titleCollator.compare(left.item.title, right.item.title)
     ))
     .slice(0, boundedLimit)
 }
