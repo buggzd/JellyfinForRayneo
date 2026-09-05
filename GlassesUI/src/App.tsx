@@ -259,7 +259,7 @@ function movePlayerFocus(direction: Direction) {
   if (!current) return false
 
   const progress = document.querySelector<HTMLElement>('.player-progress__bar')
-  const controlButtons = Array.from(document.querySelectorAll<HTMLElement>('.player-control-row [data-focusable="true"]'))
+  const controlButtons = Array.from(document.querySelectorAll<HTMLElement>(`.player-control-row ${focusableSelector}`))
   const controlIndex = controlButtons.indexOf(current)
 
   if (direction === 'down' && current === progress) {
