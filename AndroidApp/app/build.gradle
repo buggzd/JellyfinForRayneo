@@ -145,6 +145,8 @@ tasks.register("buildCompanionUi", Exec) {
             fileTree("${repositoryRoot}/CompanionUI/public"),
             file("${repositoryRoot}/CompanionUI/index.html"),
             file("${repositoryRoot}/CompanionUI/package.json"),
+            file("${repositoryRoot}/CompanionUI/vite.config.mjs"),
+            versionPropertiesFile,
             file("${repositoryRoot}/CompanionUI/package-lock.json"))
     outputs.dir("src/main/assets/CompanionUI")
 }
@@ -171,6 +173,8 @@ tasks.named("preBuild").configure {
 }
 
 dependencies {
+    implementation "androidx.exifinterface:exifinterface:1.4.2"
+    compileOnly "androidx.annotation:annotation:1.8.1"
     testImplementation "junit:junit:4.13.2"
     testImplementation "org.json:json:20240303"
 }

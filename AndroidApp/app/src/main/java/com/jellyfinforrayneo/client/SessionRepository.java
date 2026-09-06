@@ -22,6 +22,7 @@ final class SessionRepository
     static final String KEY_DISPLAY_MODE = "display_mode";
     static final String KEY_STEREO_SCREEN = "stereo_screen_settings";
     static final String KEY_UI_THEME = "ui_theme";
+    static final String KEY_TOUCHPAD_BACKGROUND = "touchpad_background";
 
     interface Store
     {
@@ -352,6 +353,20 @@ final class SessionRepository
         if (UiTheme.isValid(theme))
         {
             store.putString(KEY_UI_THEME, theme);
+        }
+    }
+
+    String getTouchpadBackground()
+    {
+        return CompanionSettingsPolicy.touchpadBackground(
+                store.getString(KEY_TOUCHPAD_BACKGROUND, ""), getUiTheme());
+    }
+
+    void setTouchpadBackground(String background)
+    {
+        if (CompanionSettingsPolicy.isTouchpadBackground(background))
+        {
+            store.putString(KEY_TOUCHPAD_BACKGROUND, background);
         }
     }
 

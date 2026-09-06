@@ -25,7 +25,7 @@ MainActivity
 ```
 
 The phone owns discovery, credentials, Quick Connect, settings, and the
-OLED-black touchpad. The glasses own catalog browsing, details, HTML video/HLS
+touchpad with a selectable textured or OLED-black background. The glasses own catalog browsing, details, HTML video/HLS
 playback, subtitles, and Jellyfin playback reports. A visible glasses frame
 already implies a phone connection, so `GlassesUI` has no waiting-for-phone
 screen.
@@ -106,6 +106,9 @@ length-limited, and whitelisted before use.
 | `shareDiagnostics` | Open Android's share sheet with a redacted diagnostic report |
 | `selectDisplayMode` | Save and request 2D/3D mode |
 | `selectUiTheme` | Persist exactly `liquid-glass` or `simpleUI` and publish it to both surfaces |
+| `selectTouchpadBackground` | Persist exactly `texture` or `black` for the phone remote only |
+| `chooseCompanionBackground`, `clearCompanionBackground` | Pick/reset one private phone wallpaper from settings; picking is limited to the Liquid theme |
+| `openProjectPage` | Open only the fixed public project, issue list or guide page in the system browser |
 | `setStereoScreen` | Save a bounded flat-screen disparity/size preference without switching hardware mode |
 | `setStereoTestPattern` | Enable/disable the temporary L/R reference overlay while stereo is applied |
 | `remoteCommand`, `searchText`, `previewHaptic` | Bounded touchpad input and the active Series-search query |
@@ -193,6 +196,44 @@ dual-UI harness may save only the appearance choice under a preview-specific key
 `SharedUI` supplies the exact enum normalization and simpleUI rendering rules;
 both Gradle frontend tasks include that directory in their build inputs.
 See [UI themes](UI_THEMES.md) for the visual design and verification boundary.
+
+Phone wallpaper is a separate private JPEG owned by `CompanionBackground`, not
+a session or glasses preference. A system single-image picker grants temporary
+access to a `content` URI without storage permissions. One bounded worker reads
+at most 20 MiB, validates JPEG/PNG/WebP dimensions (64 MP and 16000 per edge),
+downsamples before decoding, corrects EXIF orientation with AndroidX, and saves
+an opaque JPEG with a maximum 1600-pixel edge using `AtomicFile`. Original metadata
+is discarded. Cancelled/failed imports retain the previous image; lifecycle
+teardown cancels unfinished work. The bridge publishes only a busy flag and a
+fixed virtual HTTPS asset URL with an opaque revision. The companion WebView
+intercepts that exact route and streams the private file with `no-store`; there
+is no wallpaper network request, arbitrary file path or image-byte bridge call.
+The URI, image and revision do not enter glasses bootstrap or diagnostics.
+Browser previews own a separate compressed image in IndexedDB. SimpleUI and
+the touchpad do not render the wallpaper; logout and theme changes preserve it.
+
+The phone About section reads `BuildConfig.VERSION_NAME` and `VERSION_CODE` from
+state; browser builds read the root `version.properties`. External settings links
+accept only exact `project`, `issues` and `guide` identifiers, then launch their
+fixed public HTTPS pages. They never navigate either application WebView away
+from its asset root. Collapsing the display settings ends the eye test overlay.
+
+The phone-only `touchpadBackground` state comes from `SessionRepository`'s
+`touchpad_background` preference. Until a valid choice is saved, Liquid uses
+texture and simpleUI uses black. Explicit choices survive theme switches,
+account changes and process recreation; reset preferences selects Liquid and
+texture. No glasses bootstrap or hardware transition is published for a remote
+background edit. Browser preview/harness storage is separate from Android.
+
+Black mode renders opaque `#000` from the document root through the touchpad and
+its search/playback panels. Ambient art, grain, finger glow and decorative rings
+are unmounted or suppressed; filters, shadows and entry fades cannot raise the
+black background. Foreground text, controls and brief gesture glyphs remain
+visible. Native window, WebView and system bars use `Color.BLACK` on the remote;
+navigation dividers are black and Android 10+ contrast scrims are disabled there.
+The WebView also disables overscroll effects. The IME and external system overlays
+remain controlled by Android. Zero-valued screenshot pixels verify software
+output, not physical OLED emission or device-specific display processing.
 
 ## RayNeo display state
 
@@ -389,6 +430,8 @@ minimum device regression set for any device-facing change.
 | Stereo video composition | Moving frame-number video with DOM controls and text subtitles in both modes, while changing depth/size | Both eyes receive the same frame, video/subtitles/DOM receive identical transforms, no frozen video, duplicate sound/reporting, clipped edge or cross-eye leakage |
 | Browse and focus | Home, search, filters, folders, details, long lists, dialogs, remote back | Exactly one visible spatial focus target exists and overlays prevent background input |
 | UI themes | Default install, saved simpleUI cold launch, rapid switches during browse/direct play/HLS/tutorial in both 2D and SBS, disconnect/reconnect, renderer recovery, logout, reset preferences | Both surfaces and phone system bars agree; focus, document, video, audio and reporting remain single-instance; theme survives logout/recovery and reset restores liquid-glass; simpleUI has no decorative loops or blur |
+| Phone settings | Import/replace/cancel/reset wallpaper, malformed/oversized files, rotated photos, cold launch, renderer recovery, theme changes, About links and installed version | Failed imports retain the image; only Liquid phone pages render it; original metadata stays private; links open fixed public pages outside the WebView; version matches the APK |
+| Remote background | Both themes, texture/black selection, cold launch, gestures, search/IME, playback panels and returning to settings | Choice persists without changing session/video; blank black regions and system-bar backgrounds measure RGB 0,0,0 in a lossless screenshot; no glow/texture/overscroll scrim; controls remain visible |
 | Remote tutorial | First ready catalog, skip/relaunch, six phone gestures, wrong/rapid input, pause/resume/exit, sidebar replay, logout, 2D/SBS switch and renderer recovery | Each real gesture advances once; exactly one focus stays inside practice/dialog; completion or skipping is remembered; no media playback or background navigation; SVG motion and text remain readable in both eyes |
 | Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, text and bitmap subtitle | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |
 | Single-instance invariants | Mirror and stereo during representative playback | One glasses WebView, one HTML `<video>`, one audio stream, and one Jellyfin reporting stream remain active |

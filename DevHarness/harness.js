@@ -35,6 +35,8 @@ const emptyPlayback = () => ({
   durationTicks: 0,
 })
 
+let touchpadBackgroundChoice = readTouchpadBackground()
+
 const companionState = {
   state: 'login_required',
   message: '请选择 Jellyfin 服务器并登录。',
@@ -59,6 +61,7 @@ const companionState = {
   searchQuery: '',
   displayMode: 'mirror_2d',
   uiTheme: readUiTheme(),
+  touchpadBackground: touchpadBackgroundChoice || (readUiTheme() === 'simpleUI' ? 'black' : 'texture'),
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
   displayModeTransitioning: false,
@@ -119,6 +122,13 @@ function readUiTheme() {
   } catch {
     return 'liquid-glass'
   }
+}
+
+function readTouchpadBackground() {
+  try {
+    const value = window.localStorage.getItem('jellyfin-rayneo-preview-touchpad-background')
+    return value === 'texture' || value === 'black' ? value : null
+  } catch { return null }
 }
 
 function boundedText(value, maximumLength) {
@@ -655,11 +665,21 @@ function handleCompanionCall(payload) {
     case 'selectUiTheme':
       if (args[0] !== 'liquid-glass' && args[0] !== 'simpleUI') break
       companionState.uiTheme = args[0]
+      companionState.touchpadBackground = touchpadBackgroundChoice || (args[0] === 'simpleUI' ? 'black' : 'texture')
       try {
         window.localStorage.setItem('jellyfin-rayneo-preview-theme', args[0])
       } catch { /* Keep the in-memory preference when browser storage is unavailable. */ }
       publishCompanionState()
       publishGlassesBootstrap()
+      break
+    case 'selectTouchpadBackground':
+      if (args[0] !== 'texture' && args[0] !== 'black') break
+      touchpadBackgroundChoice = args[0]
+      companionState.touchpadBackground = args[0]
+      try {
+        window.localStorage.setItem('jellyfin-rayneo-preview-touchpad-background', args[0])
+      } catch { /* Retain the selection in memory if storage is unavailable. */ }
+      publishCompanionState()
       break
     case 'openQuickConnectAuthorization': {
       if (!quickConnectAuthorizationUrl) break

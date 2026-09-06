@@ -1,5 +1,5 @@
 /* A warm, quiet gallery. Solid surfaces keep foreground text independent of
-   everything behind it; the touchpad retains its OLED-black canvas. */
+   everything behind it; the touchpad defaults to an OLED-black canvas. */
 :root[data-ui-theme="simpleUI"] {
   color-scheme: light;
   color: #2e322d;
@@ -22,7 +22,7 @@
 }
 :root[data-ui-theme="simpleUI"] :is(.glass-panel, .glass-soft, .manual-card, .mode-selector > button, .primary-button, .touchpad-launch)::after,
 :root[data-ui-theme="simpleUI"] :is(.primary-button, .touchpad-launch)::before,
-:root[data-ui-theme="simpleUI"] :is(.ambient, .glass-optics, .art-hero > img, .auth-art > img, .art-hero__glint, .device-hero > img:not(.device-hero__product), .device-hero__mist, .touchpad-launch__glow, .touchpad-grain, .touchpad-screen > img),
+:root[data-ui-theme="simpleUI"] :is(.ambient, .glass-optics, .art-hero > img, .auth-art > img, .art-hero__glint, .device-hero > img:not(.device-hero__product), .device-hero__mist, .touchpad-launch__glow, .touchpad-grain),
 :root[data-ui-theme="simpleUI"] :is(.touchpad-playback, .touchpad-intro__mark, .touchpad-launch__orb)::after { display: none; }
 
 :root[data-ui-theme="simpleUI"] :is(.brand, .status-bar, h1, h2, .welcome-line h1, .setting-row__copy strong, .device-hero__info strong, .connection-card strong, .account-card__copy strong) { color: #2e322d; }
@@ -63,7 +63,8 @@
 :root[data-ui-theme="simpleUI"] :is(button, input):focus-visible { outline: 2px solid #61745f; outline-offset: 3px; }
 
 :root[data-ui-theme="simpleUI"] :is(.settings-group, .account-card, .connection-card, .server-card) { border-radius: 18px; }
-:root[data-ui-theme="simpleUI"] .settings-group > h2 { color: #737567; border-color: #dcded3; background: #f0f1e9; letter-spacing: .08em; }
+:root[data-ui-theme="simpleUI"] .settings-group > h2 { color: #737567; background: transparent; letter-spacing: .08em; }
+:root[data-ui-theme="simpleUI"] .settings-group__body { border-radius: 18px; }
 :root[data-ui-theme="simpleUI"] :is(.mode-selector, .auth-tabs) { border: 1px solid #dcded3; background: #efeee7; }
 :root[data-ui-theme="simpleUI"] :is(.mode-selector > button, .stereo-depth-options button, .stereo-test-button) { border: 1px solid transparent; color: #6d746a; background: #f7f6f0; }
 :root[data-ui-theme="simpleUI"] :is(.mode-selector > button.is-active, .stereo-depth-options button[aria-pressed="true"], .stereo-test-button[aria-pressed="true"], .auth-tabs > button.is-active) { border-color: #a5b09a; background: #e2e7d9; color: #3e553f; }

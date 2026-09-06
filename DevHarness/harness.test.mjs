@@ -7,7 +7,11 @@ import test from 'node:test'
 const source = await readFile(new URL('./harness.js', import.meta.url), 'utf8')
 const settle = () => new Promise(resolve => setImmediate(resolve))
 
-async function harness(storedTheme = null) {
+async function harness(storedTheme = null, storedBackground = null) {
+  const storage = new Map([
+    ['jellyfin-rayneo-preview-theme', storedTheme],
+    ['jellyfin-rayneo-preview-touchpad-background', storedBackground],
+  ])
   const messages = []
   const elements = new Map()
   const element = selector => {
@@ -23,7 +27,7 @@ async function harness(storedTheme = null) {
     document: { querySelector: element },
     window: {
       location: { hostname: '127.0.0.1', origin: 'http://127.0.0.1:4177' },
-      localStorage: { getItem() { return storedTheme }, setItem(key, value) { storedTheme = value } },
+      localStorage: { getItem(key) { return storage.get(key) ?? null }, setItem(key, value) { storage.set(key, value) } },
       addEventListener() {}, setTimeout() {}, clearTimeout() {},
     },
     ResizeObserver: class { observe() {} },
@@ -41,7 +45,9 @@ async function harness(storedTheme = null) {
     state: () => messages.filter(message => message.target === 'companion' && message.type === 'state').at(-1).payload,
     generation: () => messages.filter(message => message.type === 'bootstrap').at(-1).payload.catalogGeneration,
     bootstrap: () => messages.filter(message => message.type === 'bootstrap').at(-1).payload,
-    savedTheme: () => storedTheme,
+    savedTheme: () => storage.get('jellyfin-rayneo-preview-theme'),
+    savedBackground: () => storage.get('jellyfin-rayneo-preview-touchpad-background'),
+    bootstrapCount: () => messages.filter(message => message.type === 'bootstrap').length,
   }
 }
 
@@ -88,6 +94,46 @@ test('theme restores after reload and remains selected after logout', async () =
   const corrupt = await harness('future-theme')
   corrupt.call('publishGlassesBootstrap')
   assert.equal(corrupt.bootstrap().uiTheme, 'liquid-glass')
+})
+
+test('remote background persists across themes, reload and logout without republishing the glasses', async () => {
+  const app = await harness()
+  app.call('applySession', account())
+  app.call('handlePlaybackState', { state: 'playing', itemId: 'demo-film', positionTicks: 100000000, durationTicks: 600000000 })
+  const activeId = app.state().activeSessionId
+  const playback = app.state().playback
+  const bootstrapCount = app.bootstrapCount()
+  assert.equal(app.state().touchpadBackground, 'texture')
+  app.command('selectTouchpadBackground', 'black')
+  assert.equal(app.state().touchpadBackground, 'black')
+  assert.equal(app.savedBackground(), 'black')
+  assert.equal(app.bootstrapCount(), bootstrapCount)
+  assert.equal(app.state().activeSessionId, activeId)
+  assert.deepEqual(app.state().playback, playback)
+  assert.equal('touchpadBackground' in app.bootstrap(), false)
+  for (const invalid of [null, '', 'BLACK', ' black', {}, 'x'.repeat(65536)]) {
+    app.command('selectTouchpadBackground', invalid)
+    assert.equal(app.state().touchpadBackground, 'black')
+  }
+  app.command('selectUiTheme', 'simpleUI')
+  app.command('selectTouchpadBackground', 'texture')
+  app.command('selectUiTheme', 'liquid-glass')
+  assert.equal(app.state().touchpadBackground, 'texture')
+  app.command('clearSession')
+  assert.equal(app.state().touchpadBackground, 'texture')
+  const restored = await harness('simpleUI', app.savedBackground())
+  assert.equal(restored.state().touchpadBackground, 'texture')
+})
+
+test('missing or corrupt remote preference preserves each theme default until explicitly chosen', async () => {
+  const app = await harness('simpleUI', 'invalid')
+  assert.equal(app.state().touchpadBackground, 'black')
+  app.command('selectUiTheme', 'liquid-glass')
+  assert.equal(app.state().touchpadBackground, 'texture')
+  app.command('selectTouchpadBackground', 'black')
+  app.command('selectUiTheme', 'simpleUI')
+  app.command('selectUiTheme', 'liquid-glass')
+  assert.equal(app.state().touchpadBackground, 'black')
 })
 
 test('switches between two servers and multiple users with only metadata on the phone', async () => {

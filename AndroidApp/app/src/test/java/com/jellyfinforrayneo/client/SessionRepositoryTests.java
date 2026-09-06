@@ -155,6 +155,53 @@ public final class SessionRepositoryTests
     }
 
     @Test
+    public void touchpadBackground_SurvivesRecreationThemeChangeAndLogout()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        repository.save(validSession(), true);
+        String activeId = repository.getActiveId();
+        repository.setTouchpadBackground("black");
+        assertEquals(activeId, repository.getActiveId());
+        assertNotNull(repository.getSession());
+
+        SessionRepository restored = new SessionRepository(store);
+        assertEquals("black", restored.getTouchpadBackground());
+        restored.setUiTheme(UiTheme.SIMPLE);
+        restored.setTouchpadBackground("texture");
+        restored.setUiTheme(UiTheme.DEFAULT);
+        restored.clear();
+        assertEquals("texture", new SessionRepository(store).getTouchpadBackground());
+        assertNull(restored.getSession());
+    }
+
+    @Test
+    public void invalidTouchpadBackground_CannotOverwritePreference()
+    {
+        SessionRepository repository = new SessionRepository(new FakeStore());
+        repository.setTouchpadBackground("black");
+        for (String value : new String[]{null, "", "BLACK", " black", "{}", new String(new char[65536])})
+        {
+            repository.setTouchpadBackground(value);
+            assertEquals("black", repository.getTouchpadBackground());
+        }
+    }
+
+    @Test
+    public void absentOrCorruptTouchpadBackground_PreservesThemeDefault()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        assertEquals("texture", repository.getTouchpadBackground());
+        repository.setUiTheme(UiTheme.SIMPLE);
+        assertEquals("black", repository.getTouchpadBackground());
+        store.putString(SessionRepository.KEY_TOUCHPAD_BACKGROUND, "unknown");
+        assertEquals("black", repository.getTouchpadBackground());
+        repository.setUiTheme(UiTheme.DEFAULT);
+        assertEquals("texture", repository.getTouchpadBackground());
+    }
+
+    @Test
     public void missingOrCorruptStereoPreference_UsesConservativeDefault()
     {
         FakeStore store = new FakeStore();

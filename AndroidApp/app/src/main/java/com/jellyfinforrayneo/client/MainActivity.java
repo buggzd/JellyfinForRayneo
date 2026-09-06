@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.LinkAddress;
@@ -51,6 +52,7 @@ public final class MainActivity extends Activity
     private RayNeoDisplayController rayNeoDisplay;
     private GlassesPresentationController glassesPresentation;
     private CompanionWebViewController companionWebView;
+    private CompanionBackground companionBackground;
 
     private String state = "login_required";
     private String message = "请选择 Jellyfin 服务器并登录。";
@@ -227,10 +229,12 @@ public final class MainActivity extends Activity
                             }
                         }));
 
+        companionBackground = new CompanionBackground(this, this::pushCompanionState);
         companionWebView = new CompanionWebViewController(
                 this,
                 new CompanionBridge(),
-                this::buildCompanionStateJson);
+                this::buildCompanionStateJson,
+                companionBackground);
         setContentView(companionWebView.getView());
         updatePhoneSurface();
         companionWebView.start();
@@ -270,10 +274,24 @@ public final class MainActivity extends Activity
     }
 
     @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data)
+    {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (companionBackground != null)
+        {
+            companionBackground.onActivityResult(requestCode, resultCode, data);
+        }
+    }
+
+    @Override
     protected void onDestroy()
     {
         diagnosticLog.record(DiagnosticLog.Event.APP_DESTROYED);
         destroyed = true;
+        if (companionBackground != null)
+        {
+            companionBackground.close();
+        }
         if (authentication != null)
         {
             authentication.close();
@@ -638,6 +656,10 @@ public final class MainActivity extends Activity
             DisplayModeStateMachine.State displayState = rayNeoDisplay.getState();
             boolean mediaReady = "ready".equals(glassesRuntimeState) && session != null;
             result.put("state", state);
+            result.put("appVersionName", BuildConfig.VERSION_NAME);
+            result.put("appVersionCode", BuildConfig.VERSION_CODE);
+            result.put("companionBackground", companionBackground == null ? "" : companionBackground.getUrl());
+            result.put("companionBackgroundBusy", companionBackground != null && companionBackground.isBusy());
             result.put("message", message);
             result.put("isError", error);
             result.put("serverUrl", session == null ? selectedServerUrl : session.getServerUrl());
@@ -673,6 +695,7 @@ public final class MainActivity extends Activity
                     && glassesPresentation.isSystemDisplayDisabled());
             result.put("stereoScreen", sessions.getStereoScreenSettings().toJson());
             result.put("uiTheme", sessions.getUiTheme());
+            result.put("touchpadBackground", sessions.getTouchpadBackground());
             result.put("stereoOutput", glassesPresentation == null
                     ? DisplayOutputGeometry.EMPTY.toJson() : glassesPresentation.getOutputGeometry().toJson());
             result.put("stereoTestPattern", glassesPresentation != null
@@ -718,6 +741,17 @@ public final class MainActivity extends Activity
         int surfaceColor = oled ? Color.BLACK : simple ? Color.rgb(243, 240, 233) : Color.rgb(234, 247, 250);
         getWindow().setStatusBarColor(surfaceColor);
         getWindow().setNavigationBarColor(oled ? Color.BLACK : simple ? surfaceColor : Color.rgb(229, 245, 249));
+        getWindow().setBackgroundDrawable(new ColorDrawable(surfaceColor));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+        {
+            getWindow().setNavigationBarDividerColor(surfaceColor);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+        {
+            // Avoid an OS contrast scrim raising the remote's black system-bar pixels.
+            getWindow().setStatusBarContrastEnforced(!oled);
+            getWindow().setNavigationBarContrastEnforced(!oled);
+        }
         if (companionWebView != null)
         {
             companionWebView.setSurfaceColor(surfaceColor);
@@ -1191,6 +1225,55 @@ public final class MainActivity extends Activity
     private final class CompanionBridge implements CompanionWebViewController.JavascriptBridge
     {
         @JavascriptInterface
+        public void chooseCompanionBackground()
+        {
+            runOnUiThread(() ->
+            {
+                if (!destroyed && "settings".equals(webScreen)
+                        && UiTheme.DEFAULT.equals(sessions.getUiTheme()))
+                {
+                    companionBackground.choose();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void clearCompanionBackground()
+        {
+            runOnUiThread(() ->
+            {
+                if (!destroyed && "settings".equals(webScreen))
+                {
+                    companionBackground.clear();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void openProjectPage(String page)
+        {
+            String url = CompanionSettingsPolicy.projectPage(page);
+            if (url == null)
+            {
+                return;
+            }
+            runOnUiThread(() ->
+            {
+                if (!destroyed && "settings".equals(webScreen))
+                {
+                    try
+                    {
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                    }
+                    catch (RuntimeException ignored)
+                    {
+                        Toast.makeText(MainActivity.this, "未找到可打开链接的浏览器", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
         public String getState()
         {
             return buildCompanionStateJson();
@@ -1417,6 +1500,23 @@ public final class MainActivity extends Activity
                     sessions.setUiTheme(theme);
                     updatePhoneSurface();
                     glassesPresentation.refreshBootstrap();
+                    pushCompanionState();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void selectTouchpadBackground(String background)
+        {
+            if (!CompanionSettingsPolicy.isTouchpadBackground(background))
+            {
+                return;
+            }
+            runOnUiThread(() ->
+            {
+                if (!destroyed)
+                {
+                    sessions.setTouchpadBackground(background);
                     pushCompanionState();
                 }
             });

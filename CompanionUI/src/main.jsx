@@ -3,8 +3,10 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './styles.css'
 import './themeSelector.css'
+import './settings.css'
 import '../../SharedUI/simpleUI.css'
 import './simpleUI.css'
+import './touchpadBackground.css'
 import { applyUiTheme, normalizeUiTheme, readPreviewTheme } from '../../SharedUI/theme.mjs'
 
 async function start() {
@@ -20,7 +22,7 @@ async function start() {
   }
   applyUiTheme(theme)
   if (theme === 'liquid-glass') {
-    for (const name of ['luma-global-ice-glass.png', 'luma-device-card-light.png', 'liquid-blue.png', 'luma-touchpad-void.png']) {
+    for (const name of ['luma-global-ice-glass.png', 'liquid-blue.png']) {
       const preload = document.createElement('link')
       preload.rel = 'preload'
       preload.as = 'image'

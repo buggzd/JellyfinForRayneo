@@ -37,6 +37,7 @@ const initialState = {
   searchQuery: '',
   displayMode: 'mirror_2d',
   uiTheme: 'liquid-glass',
+  touchpadBackground: 'texture',
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
   displayModeTransitioning: false,
@@ -149,6 +150,9 @@ export function installDevelopmentBridge() {
     selectDisplayMode: (mode) => call('selectDisplayMode', [boundedText(mode, 32)]),
     selectUiTheme: (theme) => {
       if (theme === 'liquid-glass' || theme === 'simpleUI') call('selectUiTheme', [theme])
+    },
+    selectTouchpadBackground: (background) => {
+      if (background === 'texture' || background === 'black') call('selectTouchpadBackground', [background])
     },
     copyQuickConnectCode: () => {
       const code = boundedText(state.quickConnectCode, 32)
