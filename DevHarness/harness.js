@@ -58,6 +58,7 @@ const companionState = {
   searchInputActive: false,
   searchQuery: '',
   displayMode: 'mirror_2d',
+  uiTheme: readUiTheme(),
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
   displayModeTransitioning: false,
@@ -109,6 +110,14 @@ class ApiError extends Error {
   constructor(message, details = {}) {
     super(message)
     this.details = details
+  }
+}
+
+function readUiTheme() {
+  try {
+    return window.localStorage.getItem('jellyfin-rayneo-preview-theme') === 'simpleUI' ? 'simpleUI' : 'liquid-glass'
+  } catch {
+    return 'liquid-glass'
   }
 }
 
@@ -218,6 +227,7 @@ function publishGlassesBootstrap() {
   postToFrame('glasses', 'bootstrap', {
     source: 'android',
     displayMode: companionState.displayMode,
+    uiTheme: companionState.uiTheme,
     glassesConnected: true,
     catalogGeneration,
     session,
@@ -641,6 +651,15 @@ function handleCompanionCall(payload) {
       break
     case 'selectDisplayMode':
       selectDisplayMode(args[0])
+      break
+    case 'selectUiTheme':
+      if (args[0] !== 'liquid-glass' && args[0] !== 'simpleUI') break
+      companionState.uiTheme = args[0]
+      try {
+        window.localStorage.setItem('jellyfin-rayneo-preview-theme', args[0])
+      } catch { /* Keep the in-memory preference when browser storage is unavailable. */ }
+      publishCompanionState()
+      publishGlassesBootstrap()
       break
     case 'openQuickConnectAuthorization': {
       if (!quickConnectAuthorizationUrl) break

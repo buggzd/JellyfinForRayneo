@@ -21,6 +21,7 @@ final class SessionRepository
     static final String KEY_USER_NAME = "username";
     static final String KEY_DISPLAY_MODE = "display_mode";
     static final String KEY_STEREO_SCREEN = "stereo_screen_settings";
+    static final String KEY_UI_THEME = "ui_theme";
 
     interface Store
     {
@@ -339,6 +340,19 @@ final class SessionRepository
     void setDisplayMode(String mode)
     {
         store.putString(KEY_DISPLAY_MODE, DisplayModeStateMachine.normalizeMode(mode));
+    }
+
+    String getUiTheme()
+    {
+        return UiTheme.normalize(store.getString(KEY_UI_THEME, UiTheme.DEFAULT));
+    }
+
+    void setUiTheme(String theme)
+    {
+        if (UiTheme.isValid(theme))
+        {
+            store.putString(KEY_UI_THEME, theme);
+        }
     }
 
     StereoScreenSettings getStereoScreenSettings()

@@ -7,7 +7,7 @@ import test from 'node:test'
 const source = await readFile(new URL('./harness.js', import.meta.url), 'utf8')
 const settle = () => new Promise(resolve => setImmediate(resolve))
 
-async function harness() {
+async function harness(storedTheme = null) {
   const messages = []
   const elements = new Map()
   const element = selector => {
@@ -23,7 +23,7 @@ async function harness() {
     document: { querySelector: element },
     window: {
       location: { hostname: '127.0.0.1', origin: 'http://127.0.0.1:4177' },
-      localStorage: { getItem() { return null }, setItem() {} },
+      localStorage: { getItem() { return storedTheme }, setItem(key, value) { storedTheme = value } },
       addEventListener() {}, setTimeout() {}, clearTimeout() {},
     },
     ResizeObserver: class { observe() {} },
@@ -40,12 +40,54 @@ async function harness() {
     command: (method, ...args) => call('handleCompanionCall', { method, args }),
     state: () => messages.filter(message => message.target === 'companion' && message.type === 'state').at(-1).payload,
     generation: () => messages.filter(message => message.type === 'bootstrap').at(-1).payload.catalogGeneration,
+    bootstrap: () => messages.filter(message => message.type === 'bootstrap').at(-1).payload,
+    savedTheme: () => storedTheme,
   }
 }
 
 const account = (serverUrl = 'https://home.example.test', userId = 'first-user') => ({
   serverUrl, serverName: 'Demo library', serverVersion: '10.10', serverId: serverUrl,
   accessToken: 'test-token-do-not-publish-to-phone', userId, userName: userId, deviceId: 'demo-device',
+})
+
+test('theme selection reaches both surfaces without interrupting playback or changing the catalog generation', async () => {
+  const app = await harness()
+  app.call('applySession', account())
+  app.call('handlePlaybackState', { state: 'playing', itemId: 'demo-film', positionTicks: 100000000, durationTicks: 600000000, playMethod: 'DirectPlay' })
+  const playback = app.state().playback
+  const generation = app.generation()
+  const activeId = app.state().activeSessionId
+  const session = app.bootstrap().session
+  assert.equal(app.state().uiTheme, 'liquid-glass')
+  app.command('selectUiTheme', 'simpleUI')
+  assert.equal(app.state().uiTheme, 'simpleUI')
+  assert.equal(app.bootstrap().uiTheme, 'simpleUI')
+  assert.equal(app.savedTheme(), 'simpleUI')
+  assert.equal(app.state().activeSessionId, activeId)
+  assert.deepEqual(app.state().playback, playback)
+  assert.equal(app.generation(), generation)
+  assert.deepEqual(app.bootstrap().session, session)
+  for (const invalid of [null, '', 'simpleui', ' simpleUI', {}, 'x'.repeat(65536)]) {
+    app.command('selectUiTheme', invalid)
+    assert.equal(app.bootstrap().uiTheme, 'simpleUI')
+  }
+  app.command('selectUiTheme', 'liquid-glass')
+  assert.equal(app.state().uiTheme, 'liquid-glass')
+  assert.equal(app.bootstrap().uiTheme, 'liquid-glass')
+  assert.equal(app.generation(), generation)
+})
+
+test('theme restores after reload and remains selected after logout', async () => {
+  const app = await harness('simpleUI')
+  app.call('applySession', account())
+  assert.equal(app.state().uiTheme, 'simpleUI')
+  app.command('clearSession')
+  assert.equal(app.state().sessionAvailable, false)
+  assert.equal(app.bootstrap().session, null)
+  assert.equal(app.bootstrap().uiTheme, 'simpleUI')
+  const corrupt = await harness('future-theme')
+  corrupt.call('publishGlassesBootstrap')
+  assert.equal(corrupt.bootstrap().uiTheme, 'liquid-glass')
 })
 
 test('switches between two servers and multiple users with only metadata on the phone', async () => {

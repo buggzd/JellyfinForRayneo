@@ -124,6 +124,7 @@ tasks.register("buildGlassesUi", Exec) {
     commandLine "npm", "--prefix", "GlassesUI", "run", "build"
     inputs.files(
             fileTree("${repositoryRoot}/GlassesUI/src"),
+            fileTree("${repositoryRoot}/SharedUI"),
             fileTree("${repositoryRoot}/GlassesUI/public"),
             file("${repositoryRoot}/GlassesUI/index.html"),
             file("${repositoryRoot}/GlassesUI/package.json"),
@@ -140,6 +141,7 @@ tasks.register("buildCompanionUi", Exec) {
     commandLine "npm", "--prefix", "CompanionUI", "run", "build"
     inputs.files(
             fileTree("${repositoryRoot}/CompanionUI/src"),
+            fileTree("${repositoryRoot}/SharedUI"),
             fileTree("${repositoryRoot}/CompanionUI/public"),
             file("${repositoryRoot}/CompanionUI/index.html"),
             file("${repositoryRoot}/CompanionUI/package.json"),

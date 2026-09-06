@@ -32,6 +32,7 @@ type BridgeMessage = {
 const initialBootstrap = {
   source: 'android',
   displayMode: 'mirror_2d',
+  uiTheme: 'liquid-glass',
   glassesConnected: true,
   catalogGeneration: 0,
   session: null,

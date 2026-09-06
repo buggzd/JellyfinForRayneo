@@ -1,3 +1,5 @@
+import { normalizeUiTheme, readPreviewTheme, type UiTheme } from '../../SharedUI/theme.mjs'
+
 export type JellyfinSession = {
   serverUrl: string
   serverName: string
@@ -12,6 +14,7 @@ export type JellyfinSession = {
 export type RuntimeBootstrap = {
   source: 'android' | 'development' | 'browser'
   displayMode: string
+  uiTheme: UiTheme
   glassesConnected: boolean
   catalogGeneration: number
   session: JellyfinSession | null
@@ -95,6 +98,7 @@ function parseBootstrap(value: string | RuntimeBootstrap | unknown): RuntimeBoot
     return {
       source: source.source === 'android' ? 'android' : 'browser',
       displayMode: text(source.displayMode) || 'Mirror2D',
+      uiTheme: normalizeUiTheme(source.uiTheme),
       glassesConnected: source.glassesConnected !== false,
       catalogGeneration: boundedGeneration(source.catalogGeneration),
       session: normalizeSession(source.session),
@@ -177,6 +181,7 @@ async function developmentBootstrap(): Promise<RuntimeBootstrap> {
     return {
       source: 'development',
       displayMode: 'Mirror2D',
+      uiTheme: readPreviewTheme(),
       glassesConnected: true,
       catalogGeneration: 0,
       session: {
@@ -194,6 +199,7 @@ async function developmentBootstrap(): Promise<RuntimeBootstrap> {
     return {
       source: 'development',
       displayMode: 'Mirror2D',
+      uiTheme: readPreviewTheme(),
       glassesConnected: true,
       catalogGeneration: 0,
       session: null,
@@ -226,6 +232,7 @@ export async function discoverRuntime(): Promise<RuntimeBootstrap> {
     return latestNativeBootstrap ?? {
       source: 'android',
       displayMode: 'Mirror2D',
+      uiTheme: 'liquid-glass',
       glassesConnected: true,
       catalogGeneration: 0,
       session: null,
@@ -237,6 +244,7 @@ export async function discoverRuntime(): Promise<RuntimeBootstrap> {
   return {
     source: 'browser',
     displayMode: 'Mirror2D',
+    uiTheme: readPreviewTheme(),
     glassesConnected: true,
     catalogGeneration: 0,
     session: null,

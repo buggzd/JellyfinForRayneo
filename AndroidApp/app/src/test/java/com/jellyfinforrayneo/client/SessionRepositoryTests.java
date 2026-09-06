@@ -112,6 +112,49 @@ public final class SessionRepositoryTests
     }
 
     @Test
+    public void uiTheme_SurvivesRecreationAndLogoutWithoutAffectingSession()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        repository.save(validSession(), true);
+        String accountId = repository.getActiveId();
+        repository.setUiTheme(UiTheme.SIMPLE);
+        assertEquals(accountId, repository.getActiveId());
+        assertNotNull(repository.getSession());
+
+        SessionRepository restored = new SessionRepository(store);
+        assertEquals(UiTheme.SIMPLE, restored.getUiTheme());
+        restored.clear();
+        assertEquals(UiTheme.SIMPLE, new SessionRepository(store).getUiTheme());
+        restored.setUiTheme(UiTheme.DEFAULT);
+        assertEquals(UiTheme.DEFAULT, new SessionRepository(store).getUiTheme());
+    }
+
+    @Test
+    public void invalidUiThemeInput_CannotOverwritePreference()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        repository.setUiTheme(UiTheme.SIMPLE);
+        for (String value : new String[]{null, "", "simpleui", " simpleUI", "{}", new String(new char[65536])})
+        {
+            assertFalse(UiTheme.isValid(value));
+            repository.setUiTheme(value);
+            assertEquals(UiTheme.SIMPLE, repository.getUiTheme());
+        }
+    }
+
+    @Test
+    public void absentOrCorruptUiTheme_RestoresLiquidGlass()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        assertEquals(UiTheme.DEFAULT, repository.getUiTheme());
+        store.putString(SessionRepository.KEY_UI_THEME, "unknown-theme");
+        assertEquals(UiTheme.DEFAULT, repository.getUiTheme());
+    }
+
+    @Test
     public void missingOrCorruptStereoPreference_UsesConservativeDefault()
     {
         FakeStore store = new FakeStore();

@@ -1,0 +1,108 @@
+/* A warm, quiet gallery. Solid surfaces keep foreground text independent of
+   everything behind it; the touchpad retains its OLED-black canvas. */
+:root[data-ui-theme="simpleUI"] {
+  color-scheme: light;
+  color: #2e322d;
+  background: #f3f0e9;
+  --ink: #2e322d;
+  --muted: #6d746a;
+  --line: #dcded3;
+  --glass: #faf9f5;
+  --glass-strong: #fffefb;
+  --blue: #61745f;
+  --blue-deep: #475d49;
+  --cyan: #a6b39b;
+  --mint: #a2b7a2;
+  --shadow: none;
+}
+:root[data-ui-theme="simpleUI"] :is(body, .prototype-shell, .phone-stage) { background: #f3f0e9; }
+:root[data-ui-theme="simpleUI"] :is(.glass-panel, .glass-soft, .manual-card, .account-dialog, .bottom-sheet) {
+  border: 1px solid #dcded3;
+  background: #faf9f5;
+}
+:root[data-ui-theme="simpleUI"] :is(.glass-panel, .glass-soft, .manual-card, .mode-selector > button, .primary-button, .touchpad-launch)::after,
+:root[data-ui-theme="simpleUI"] :is(.primary-button, .touchpad-launch)::before,
+:root[data-ui-theme="simpleUI"] :is(.ambient, .glass-optics, .art-hero > img, .auth-art > img, .art-hero__glint, .device-hero > img:not(.device-hero__product), .device-hero__mist, .touchpad-launch__glow, .touchpad-grain, .touchpad-screen > img),
+:root[data-ui-theme="simpleUI"] :is(.touchpad-playback, .touchpad-intro__mark, .touchpad-launch__orb)::after { display: none; }
+
+:root[data-ui-theme="simpleUI"] :is(.brand, .status-bar, h1, h2, .welcome-line h1, .setting-row__copy strong, .device-hero__info strong, .connection-card strong, .account-card__copy strong) { color: #2e322d; }
+:root[data-ui-theme="simpleUI"] :is(.eyebrow, .brand small, .setting-row__copy small, .setting-value, .version-copy, .stereo-help, .stereo-range-labels, .stereo-status, .theme-selector__note, .connection-card em, .device-hero__info span) { color: #6d746a; }
+:root[data-ui-theme="simpleUI"] :is(.setting-action, .setting-row__icon, .connection-card__action, .stereo-setting-label span, .stereo-setting-label output) { color: #475d49; }
+:root[data-ui-theme="simpleUI"] :is(.brand-mark, .account-avatar, .server-orb, .setting-row__icon) { border: 1px solid #cdd4c5; background: #e4e8dc; color: #475d49; }
+:root[data-ui-theme="simpleUI"] .brand-mark { border-radius: 9px; transform: none; }
+:root[data-ui-theme="simpleUI"] .brand-mark__ring { border-color: #61745f; }
+:root[data-ui-theme="simpleUI"] .brand-mark__drop { background: #61745f; }
+
+:root[data-ui-theme="simpleUI"] :is(.art-hero, .auth-art, .device-hero) { overflow: hidden; border-radius: 22px; background: #e8e5da; }
+:root[data-ui-theme="simpleUI"] :is(.art-hero, .auth-art, .device-hero)::before {
+  position: absolute;
+  inset: 20px 18% -1px;
+  border: 20px solid #d2c9b6;
+  border-bottom: 0;
+  border-radius: 150px 150px 0 0;
+  background: #eeece2;
+  content: '';
+}
+:root[data-ui-theme="simpleUI"] .device-hero::before { inset: 26px 17% 35px; border-width: 18px; }
+:root[data-ui-theme="simpleUI"] .device-hero__product { transform: rotate(-3deg); }
+:root[data-ui-theme="simpleUI"] :is(.art-hero__refraction, .quick-code__halo) { display: none; }
+:root[data-ui-theme="simpleUI"] :is(.art-hero__copy .eyebrow, .art-hero__copy p) { color: #6d746a; }
+:root[data-ui-theme="simpleUI"] :is(.device-hero__head, .device-hero__info) { z-index: 3; }
+:root[data-ui-theme="simpleUI"] .connected-pill { color: #405a44; background: #f9faf4; border: 1px solid #d0d9c9; }
+:root[data-ui-theme="simpleUI"] .connected-pill i { background: #617a5e; }
+:root[data-ui-theme="simpleUI"] .connected-pill.is-offline { color: #737569; }
+:root[data-ui-theme="simpleUI"] .connected-pill.is-offline i { background: #999b90; }
+
+:root[data-ui-theme="simpleUI"] :is(.primary-button, .touchpad-launch) { color: #faf9f2; border: 1px solid #435645; background: #4d6250; border-radius: 17px; }
+:root[data-ui-theme="simpleUI"] :is(.touchpad-launch__copy strong, .touchpad-launch__arrow) { color: #faf9f2; }
+:root[data-ui-theme="simpleUI"] :is(.touchpad-launch__copy small, .touchpad-launch__copy em) { color: #dde3d5; }
+:root[data-ui-theme="simpleUI"] .touchpad-launch__orb { border: 1px solid #a6b39b; background: #657a61; }
+:root[data-ui-theme="simpleUI"] .touchpad-launch__orb > span { border: 1px solid #c1ccb4; background: #819473; }
+:root[data-ui-theme="simpleUI"] :is(.pressable:hover, .primary-button:hover) { transform: translateY(-1px); }
+:root[data-ui-theme="simpleUI"] :is(.pressable:active, .primary-button:active, .icon-button:active) { transform: scale(.98); }
+:root[data-ui-theme="simpleUI"] :is(button, input):focus-visible { outline: 2px solid #61745f; outline-offset: 3px; }
+
+:root[data-ui-theme="simpleUI"] :is(.settings-group, .account-card, .connection-card, .server-card) { border-radius: 18px; }
+:root[data-ui-theme="simpleUI"] .settings-group > h2 { color: #737567; border-color: #dcded3; background: #f0f1e9; letter-spacing: .08em; }
+:root[data-ui-theme="simpleUI"] :is(.mode-selector, .auth-tabs) { border: 1px solid #dcded3; background: #efeee7; }
+:root[data-ui-theme="simpleUI"] :is(.mode-selector > button, .stereo-depth-options button, .stereo-test-button) { border: 1px solid transparent; color: #6d746a; background: #f7f6f0; }
+:root[data-ui-theme="simpleUI"] :is(.mode-selector > button.is-active, .stereo-depth-options button[aria-pressed="true"], .stereo-test-button[aria-pressed="true"], .auth-tabs > button.is-active) { border-color: #a5b09a; background: #e2e7d9; color: #3e553f; }
+:root[data-ui-theme="simpleUI"] :is(.mode-selector strong, .mode-selector > button > span) { color: inherit; }
+:root[data-ui-theme="simpleUI"] .mode-selector small { color: #6d746a; }
+:root[data-ui-theme="simpleUI"] :is(.radio-check, .check-box) { border-color: #a5b09a; }
+:root[data-ui-theme="simpleUI"] :is(.is-active .radio-check, .check-box.is-checked, .toggle.is-on) { background: #61745f; color: #fffef9; }
+:root[data-ui-theme="simpleUI"] .stereo-size-range { accent-color: #61745f; }
+:root[data-ui-theme="simpleUI"] .display-mode-status.is-ready { color: #49654a; background: #e4eadd; }
+:root[data-ui-theme="simpleUI"] .display-mode-status.is-pending { color: #79633d; background: #f0e9d9; }
+:root[data-ui-theme="simpleUI"] .bottom-nav { border: 1px solid #d7dacf; border-radius: 20px; background: #faf9f5; }
+:root[data-ui-theme="simpleUI"] .bottom-nav button { color: #72796f; }
+:root[data-ui-theme="simpleUI"] .bottom-nav button.is-active { color: #415b43; }
+:root[data-ui-theme="simpleUI"] .bottom-nav button.is-active > span { background: #e3e8da; }
+:root[data-ui-theme="simpleUI"] .bottom-nav .nav-primary > span { border: 1px solid #b9c5ad; border-radius: 14px; background: #d8e0cd; }
+:root[data-ui-theme="simpleUI"] .bottom-nav .nav-primary > span i { background: #526749; }
+:root[data-ui-theme="simpleUI"] :is(.welcome-line p, .connection-card small, .account-card__copy small) { color: #6d746a; }
+:root[data-ui-theme="simpleUI"] :is(.account-card > button, .profile-button) { color: #475d49; }
+:root[data-ui-theme="simpleUI"] :is(.account-avatar i, .profile-button i) { border-color: #faf9f5; background: #7e9b73; }
+:root[data-ui-theme="simpleUI"] .field { border: 1px solid #ccd1c4; background: #fffefb; }
+:root[data-ui-theme="simpleUI"] .sheet-scrim { background: #22271f66; }
+:root[data-ui-theme="simpleUI"] .account-dialog::backdrop { background: #22271f66; backdrop-filter: none; }
+:root[data-ui-theme="simpleUI"] .toast { color: #faf9f2; border-color: #4c5d4c; background: #303d31; }
+
+:root[data-ui-theme="simpleUI"] :is(.is-touchpad, .is-touchpad .phone-stage, .touchpad-screen) { background: #000; }
+:root[data-ui-theme="simpleUI"] .touchpad-screen::before { display: none; }
+:root[data-ui-theme="simpleUI"] :is(.touchpad-playback, .touchpad-search) { border-color: #29312a; background: #111611; }
+:root[data-ui-theme="simpleUI"] .finger-glow { width: 32px; height: 32px; border: 1px solid #a9b79a; background: #536149; opacity: 0; }
+:root[data-ui-theme="simpleUI"] .touchpad-screen.is-pressed .finger-glow { width: 32px; height: 32px; opacity: .75; }
+:root[data-ui-theme="simpleUI"] .finger-glow i { background: #e3e9d6; }
+:root[data-ui-theme="simpleUI"] .touch-feedback.is-visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+:root[data-ui-theme="simpleUI"] .touch-feedback span { color: #e4eadb; }
+:root[data-ui-theme="simpleUI"] .touch-feedback::before { border-color: #627453; }
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-ui-theme="simpleUI"] .scan-button.is-scanning svg { animation: simple-spin 1s linear infinite !important; }
+  :root[data-ui-theme="simpleUI"] .touch-feedback.is-visible { animation: simple-gesture 520ms ease-out both !important; }
+}
+@keyframes simple-gesture {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.96); }
+  25%, 65% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.03); }
+}
