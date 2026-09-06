@@ -70,7 +70,7 @@ Android `SessionRepository` 的 `ui_theme` 是设备偏好的唯一持久化来�
 - 在播放中连续切换四次主题，视频 DOM 对象与 `currentSrc` 保持相同，播放时间
   继续前进；没有新增播放计划请求或播放开始上报。覆盖减少动态效果与完整六步教学。
 - 14 个眼镜前端测试、11 个开发联调测试、80 个 JVM 测试、TypeScript、两套生产构建、
-  Debug lint、Debug APK 组装与 `verify-no-unity.sh` 通过。
+  Debug lint、Debug APK 组装与 `verify-android.sh` 通过。
 
 这些检查证明高开销装饰已从 simpleUI 的渲染路径移除，不能换算为真机节电百分比。
 当前没有连接 Android/RayNeo 设备，真机帧时间、GPU/内存/功耗、系统栏观感、2D/SBS、

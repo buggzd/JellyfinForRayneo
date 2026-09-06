@@ -39,7 +39,7 @@
 - 7 个前端回归测试覆盖中文、英文、拼音、首字母、别名、模糊匹配、季集提示、推荐排序、数量边界、对象替换和异步取消。
 - 使用本地合成 H.264/AAC 视频验证直放和 HLS。两条路径都只有一个 `<video>`，开始和停止各上报一次，暂停可用；直放不请求 HLS chunk，HLS 只加载一次。
 - 覆盖完整索引延迟返回时的备用搜索，以及 HLS chunk 尚未返回时退出播放器的取消行为；另验证切换字幕并延迟新播放计划返回时，旧源保持脱离，新计划就绪后可恢复播放并显示字幕。
-- TypeScript、两套 production build、7 个前端测试、39 个 JVM 测试、Debug/Release lint 与 APK 组装通过；两个 APK 均通过 `verify-no-unity.sh`。Debug 约 7.0 MiB，未签名 Release 约 6.7 MiB。
+- TypeScript、两套 production build、7 个前端测试、39 个 JVM 测试、Debug/Release lint 与 APK 组装通过；两个 APK 均通过 `verify-android.sh`。Debug 约 7.0 MiB，未签名 Release 约 6.7 MiB。
 
 ## 其余性能评估
 

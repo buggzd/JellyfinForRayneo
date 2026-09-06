@@ -30,7 +30,7 @@ CompanionUI/                        # 手机 React 登录、设置与触控板
 docs/                               # 使用、架构、路线图和复现规格
 scripts/install-rayneo-sdk.sh       # 历史 SDK 分析辅助，不参与构建
 scripts/build-android.sh            # 可复现构建入口
-scripts/verify-no-unity.sh          # 源码与 APK 边界检查
+scripts/verify-android.sh           # 源码与 APK 边界检查
 ```
 
 运行时是一个原生 Android 应用和两个本地 React/Vite 前端。生产 bundle 会生成到：
@@ -105,7 +105,7 @@ npm --prefix CompanionUI ci
 3. 生成两套 production bundle；
 4. 运行 JVM 测试和对应的 Android lint；
 5. 组装所选 APK；
-6. 检查 APK 不包含 Unity、LibVLC、XR 空间依赖、开发配置或错误 ABI。
+6. 校验 APK 的运行时依赖、前端入口、ARM64 ABI 和敏感信息隔离。
 
 输出位置：
 
@@ -211,7 +211,7 @@ keyPassword=<local-only>
 
 `storeFile` 相对 `AndroidApp/` 解析，也可以使用绝对路径。keystore 和属性文件都不得提交。正式发布应使用长期保存的自有签名，并在每次发布时提升 `versionCode`。
 
-原 Unity 开发包使用 application ID `com.jellyfinforrayneo.client`、versionCode 1；当前原生版本使用相同的正式 application ID、versionCode 2。只有使用与已安装版本相同的证书签名，Android 才允许原位升级并保留 `jellyfin_companion` 私有会话。证书不一致时，应先导出必要的非敏感配置，再卸载旧包。
+原位升级需保持正式 application ID `com.jellyfinforrayneo.client` 和已安装版本的签名证书，才能保留 `jellyfin_companion` 私有会话。证书不一致时，应先导出必要的非敏感配置，再卸载旧包。
 
 不要为了分发方便而使用 Debug 证书签署正式包。
 
@@ -247,11 +247,11 @@ npm --prefix CompanionUI run build
 检查指定 APK：
 
 ```bash
-./scripts/verify-no-unity.sh \
+./scripts/verify-android.sh \
   AndroidApp/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-这个检查会确认源码和 APK 不包含 Unity/LibVLC、开发配置、私网 IPv4、签名材料、非 ARM64 原生库或缺失的前端入口。
+这个检查会校验源码和 APK 的运行时依赖边界、单个眼镜 WebView 与两个前端入口，并排除开发配置、私网 IPv4、签名材料及非 ARM64 原生库。
 
 JVM 测试覆盖会话白名单与清理、IPv6 URL 规范化、消息边界、URL 导航、遥控队列、Display 选择、显示模式转换和固定容量诊断事件。设备侧变更还必须执行 [Android 架构说明中的真机回归矩阵](ANDROID_ARCHITECTURE.md#device-regression-matrix)。
 

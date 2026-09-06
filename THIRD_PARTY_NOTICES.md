@@ -34,9 +34,6 @@ Jellyfin names and trademarks belong to their respective owners. This
 third-party client communicates with Jellyfin through its public API and does
 not redistribute Jellyfin server software.
 
-The application does not embed or link LibVLC, Google Cardboard, or a Unity
-runtime.
-
 ## RayNeo product image
 
 `CompanionUI/public/art/rayneo-air-3s.webp` is cropped and resized from the

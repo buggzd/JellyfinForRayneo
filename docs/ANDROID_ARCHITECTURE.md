@@ -2,8 +2,7 @@
 
 Jellyfin for RayNeo is a native Android application with two local React/Vite
 frontends. Android owns lifecycle, session persistence, RayNeo display control,
-the external `Presentation`, and the bounded JavaScript bridges. There is no
-Unity Player or native fallback player in the runtime.
+the external `Presentation`, and the bounded JavaScript bridges.
 
 ## Runtime topology
 
