@@ -11,6 +11,7 @@
   --glass: #222820;
   --glass-strong: #30382b;
   --focus-ring: #e5e8d5;
+  --hero-cover-height: 115vh;
   --simple-hero-veil:
     linear-gradient(90deg, #141714 0%, #141714 2%, #141714ed 13%, #1417149c 32%, #14171426 60%, #14171400 82%),
     linear-gradient(0deg, #141714 0%, #141714b3 12%, #14171400 40%);
@@ -20,7 +21,7 @@
 :root[data-ui-theme="simpleUI"] .loading-cards__grid::after { display: none; }
 :root[data-ui-theme="simpleUI"] :is(.focus-button, .detail-poster-wrap, .empty-state__orb)::before { display: none; }
 :root[data-ui-theme="simpleUI"] .focus-button__lens { display: none; }
-:root[data-ui-theme="simpleUI"] .ambient--home-cover .ambient__image { height: 115%; opacity: .7; transition: none; }
+:root[data-ui-theme="simpleUI"] .ambient--home-cover .ambient__image { opacity: .7; transition: none; }
 /* The fade starts at the artwork's actual edge, at every viewport ratio.
    Opaque gradient endpoints meet the page color without a mask or blur. */
 :root[data-ui-theme="simpleUI"] .ambient--home-cover .ambient__image::after {
