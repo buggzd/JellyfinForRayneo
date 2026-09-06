@@ -2,6 +2,7 @@ import {
   ArrowDownUp,
   ArrowLeft,
   AudioLines,
+  BookOpen,
   Captions,
   Check,
   ChevronRight,
@@ -56,6 +57,8 @@ import type {
   PlaybackSelection,
 } from './jellyfin'
 import { postNativeMessage } from './runtime'
+import RemoteTutorial from './RemoteTutorial'
+import { hasSeenRemoteTutorial, rememberRemoteTutorial, type TutorialOutcome } from './tutorialState'
 import {
   buildSeriesIndex,
   parseSeriesQuery,
@@ -68,7 +71,7 @@ import {
   type SeriesIndexStatus,
 } from './useJellyfin'
 
-type Page = 'home' | 'browse' | 'favorites' | 'search' | 'detail' | 'player'
+type Page = 'home' | 'browse' | 'favorites' | 'search' | 'detail' | 'player' | 'tutorial'
 type Direction = 'up' | 'down' | 'left' | 'right'
 type HomeFocusRegion = 'hero' | 'shelves'
 type PlaybackRequest = {
@@ -538,6 +541,7 @@ function PageHeader({ active, onNavigate, onRefresh, onExit, serverName, userNam
           <span><small>JELLYFIN SERVER</small><strong>{serverName || 'Jellyfin'}</strong></span>
         </div>
         <nav className="side-navigation__utilities" aria-label="服务器操作">
+          <FocusButton className="side-navigation__item tutorial-launch" variant="ghost" icon={<BookOpen size={21} />} onClick={() => onNavigate('tutorial')}>遥控教学</FocusButton>
           <FocusButton className="side-navigation__item" variant="ghost" disabled={refreshing} icon={<RefreshCw className={cx(refreshing && 'is-spinning')} size={21} />} onClick={onRefresh}>{refreshing ? '正在刷新' : '刷新媒体库'}</FocusButton>
           <FocusButton className="side-navigation__item" variant="ghost" icon={<LogOut size={21} />} onClick={onExit}>管理登录</FocusButton>
         </nav>
@@ -2392,6 +2396,10 @@ function RuntimeGate({
 export default function App() {
   const jellyfin = useJellyfin()
   const [page, setPage] = useState<Page>('home')
+  const [tutorialSeen, setTutorialSeen] = useState(hasSeenRemoteTutorial)
+  const restoreTutorialFocus = useRef(false)
+  const tutorialActive = jellyfin.status === 'ready' && Boolean(jellyfin.snapshot)
+    && (page === 'tutorial' || (page === 'home' && !tutorialSeen))
   const [history, setHistory] = useState<Page[]>([])
   const [selected, setSelected] = useState<MediaItem>(demoFeatured)
   const [backdropItem, setBackdropItem] = useState<MediaItem>(demoFeatured)
@@ -2460,6 +2468,7 @@ export default function App() {
   }, [page])
 
   const searchInputActive = page === 'search'
+    && !tutorialActive
     && jellyfin.status === 'ready'
     && Boolean(jellyfin.snapshot)
 
@@ -2585,6 +2594,29 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
+  const closeTutorial = useCallback((outcome: TutorialOutcome) => {
+    rememberRemoteTutorial(outcome)
+    setTutorialSeen(true)
+    if (page === 'tutorial') {
+      restoreTutorialFocus.current = true
+      goBack()
+    }
+  }, [goBack, page])
+
+  const completeTutorial = useCallback(() => {
+    rememberRemoteTutorial('completed')
+  }, [])
+
+  useEffect(() => {
+    if (jellyfin.status === 'ready') return
+    setTutorialSeen((seen) => seen || hasSeenRemoteTutorial())
+    if (page !== 'tutorial') return
+    // A disconnected/invalidated session drops the in-progress practice too.
+    setPage('home')
+    setHistory([])
+    restoreTutorialFocus.current = false
+  }, [jellyfin.status, page])
+
   const showToast = useCallback((message: string) => {
     setToast(message)
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
@@ -2663,11 +2695,13 @@ export default function App() {
 
   useEffect(() => {
     const onFocusIn = (event: FocusEvent) => {
+      if (tutorialActive) return
       const target = event.target instanceof HTMLElement ? event.target : null
       if (!target?.matches(spatialFocusSelector)) clearSpatialFocus()
     }
-    const onPointerDown = () => clearSpatialFocus()
+    const onPointerDown = () => { if (!tutorialActive) clearSpatialFocus() }
     const onRemoteCommand = () => {
+      if (tutorialActive) return
       const active = currentSpatialFocus()
       if (!active) return
       clearSpatialFocus(active)
@@ -2681,21 +2715,26 @@ export default function App() {
       document.removeEventListener('focusin', onFocusIn)
       document.removeEventListener('pointerdown', onPointerDown, true)
       window.removeEventListener('rayneo-remote-command', onRemoteCommand)
-      clearSpatialFocus()
+      // Page nodes own their markers; the tutorial may already have focused its
+      // new node before this passive cleanup runs during a scope change.
     }
-  }, [])
+  }, [tutorialActive])
 
   useEffect(() => {
-    if (page === 'player') return
+    if (page === 'player' || tutorialActive) return
     const timer = window.setTimeout(() => {
-      const target = document.querySelector<HTMLElement>('[data-autofocus="true"]') ?? visibleFocusables()[0]
+      const tutorialReturnTarget = restoreTutorialFocus.current
+        ? document.querySelector<HTMLElement>('.tutorial-launch') : null
+      restoreTutorialFocus.current = false
+      const target = tutorialReturnTarget ?? document.querySelector<HTMLElement>('[data-autofocus="true"]') ?? visibleFocusables()[0]
       focusSpatialElement(target)
     }, 180)
     return () => window.clearTimeout(timer)
-  }, [jellyfin.status, page])
+  }, [jellyfin.status, page, tutorialActive])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (tutorialActive) return
       const key = event.key.toLowerCase()
       const target = event.target
       if (target instanceof Element && target.matches('input, textarea') && key !== 'escape') return
@@ -2763,7 +2802,7 @@ export default function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [goBack, navigateDirect, page, searchQuery])
+  }, [goBack, navigateDirect, page, searchQuery, tutorialActive])
 
   useEffect(() => () => {
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
@@ -2780,6 +2819,7 @@ export default function App() {
   }
 
   const snapshot = jellyfin.snapshot
+  if (tutorialActive) return <RemoteTutorial onExit={closeTutorial} onComplete={completeTutorial} />
   const homeShelfPreview = page === 'home' && homeFocusRegion === 'shelves'
   const homeBackgroundItem = homeShelfPreview ? backdropItem : snapshot.featured
 

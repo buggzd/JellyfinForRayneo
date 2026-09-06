@@ -1,0 +1,84 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="575" height="576" viewBox="160 0 575 576" role="img" aria-labelledby="title description">
+<title id="title">图一 · 默认握持姿态</title>
+<desc id="description">根据两张蓝色人物插画重绘。蓝色人物戴黑色眼镜，右手握持以线缆连接的手机。静态参考姿态，所有可见图形均为矢量路径。</desc>
+<defs>
+    <linearGradient id="skin-blue" x1="345" y1="114" x2="493" y2="287" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2475f4" /><stop offset="1" stop-color="#2b7cf5" />
+    </linearGradient>
+    <linearGradient id="hair-blue" x1="339" y1="28" x2="495" y2="221" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1b6ef2" /><stop offset=".72" stop-color="#1b6ef2" /><stop offset="1" stop-color="#1d70f3" />
+    </linearGradient>
+    <linearGradient id="hand-blue" x1="27" y1="72" x2="89" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2d7ef6" /><stop offset=".65" stop-color="#2b79f3" /><stop offset="1" stop-color="#2675f1" />
+    </linearGradient>
+    <linearGradient id="lens-black" x1="508" y1="147" x2="519" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#080808" /><stop offset="1" stop-color="#161616" />
+    </linearGradient>
+    <linearGradient id="frame-gray" x1="3" y1="0" x2="74" y2="147" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2e2e2e" /><stop offset=".55" stop-color="#444444" /><stop offset="1" stop-color="#282828" />
+    </linearGradient>
+    <clipPath id="screen-clip"><rect x="3" y="3" width="70" height="142" rx="10" /></clipPath></defs>
+<g id="illustration">
+  <g id="body" fill="#1b6ef2">
+    <path id="torso" d="M191 576 C188 559 193 521 195 493 C199 439 206 393 215 358 C220 337 225 328 239 319 C257 307 291 293 320 285 L352 272 C393 266 432 285 470 307 C500 317 529 327 550 340 C573 353 587 383 603 410 L548 460 L546 503 L542 576 Z" />
+    <path d="M227 426 C232 450 241 512 249 576 H235 C235 519 230 458 227 426Z" fill="#125cd4" opacity=".66" />
+    <path d="M510 459 C523 479 534 492 547 504 L542 566 C524 533 512 497 510 459Z" fill="#155fd7" />
+  </g>
+  <g id="neck">
+    <path d="M350 215 C354 229 348 244 345 254 L334 267 C354 283 405 297 449 288 L444 273 L449 241Z" fill="url(#skin-blue)" />
+    <path d="M350 226 C381 232 420 225 449 241 L446 257 C414 259 380 253 347 249Z" fill="#2f7df5" opacity=".32" />
+  </g>
+  <g id="head">
+    <path id="face" d="M341 67 C364 46 412 45 446 55 C478 64 496 86 505 114 C510 131 506 149 503 165 C505 183 502 196 495 213 C490 227 484 240 478 249 C474 255 469 259 460 257 L448 257 C439 255 431 247 426 240 C409 233 381 235 352 224 C347 208 332 187 322 162 C314 143 309 120 313 104 C317 84 326 74 341 67Z" fill="url(#skin-blue)" />
+    <path id="hair" d="M316 144 C312 133 308 113 313 96 C310 98 309 102 307 104 C305 94 315 74 327 66 C324 65 320 67 317 68 C321 61 329 56 338 56 C339 48 343 41 350 36 L347 45 C355 35 365 28 377 24 L373 31 C388 21 401 18 416 21 C437 24 448 30 467 26 L457 33 C479 33 498 40 508 55 L500 55 C513 64 520 77 522 90 L515 83 C520 95 516 106 512 113 C511 108 510 104 507 102 C509 115 503 127 496 139 C490 150 488 158 487 166 C486 171 483 172 480 169 C477 165 480 149 473 146 C465 141 458 148 453 159 C448 171 447 190 437 202 C423 224 390 235 352 225 C348 211 337 192 329 177 C322 164 318 153 316 136Z" fill="url(#hair-blue)" />
+    <path id="ear" d="M452 157 C457 149 463 145 469 146 C477 147 478 158 476 169 C473 181 475 192 468 200 C464 205 460 203 457 199 C450 188 448 169 452 157Z" fill="#2b7cf5" />
+    <path d="M470 159 C466 164 466 168 467 172 C471 167 473 164 471 160 M467 173 C464 178 467 183 468 189" fill="none" stroke="#176be9" stroke-width="1.7" stroke-linecap="round" opacity=".65" />
+    <path d="M453 164 C448 176 454 197 459 201 C461 203 464 203 466 202" fill="none" stroke="#1466e3" stroke-width="1.8" stroke-linecap="round" opacity=".45" />
+  </g>
+  <g id="collar">
+    <path d="M318 285 L328 263 C331 255 334 253 345 252 C375 250 410 257 444 272 C453 276 458 282 461 289 L470 307 C424 295 367 288 318 285Z" fill="#1b6ef2" />
+    <path d="M319 286 C361 289 417 297 469 307" fill="none" stroke="#1460d9" stroke-width="1.65" opacity=".72" />
+  </g>
+  <g id="raised-arm">
+    <path id="sleeve" d="M547 341 C570 352 584 380 603 410 L618 431 C621 410 621 385 624 362 C625 355 635 351 649 348 C661 345 676 348 685 353 C690 356 690 369 692 380 C699 419 704 462 703 503 C703 528 700 545 690 555 C680 566 666 572 647 571 C625 571 610 563 594 552 C574 538 556 519 538 501 L514 476 C501 462 496 447 502 425 C507 387 516 356 547 341Z" fill="#1b6ef2" />
+    <path d="M548 345 C525 362 511 390 507 424 C509 388 523 359 542 346Z" fill="#165fd6" opacity=".6" />
+    <path d="M616 423 C625 439 640 450 650 459 C657 465 662 471 665 477 C660 462 648 449 638 442 C627 433 622 426 618 419Z" fill="#1260d9" opacity=".63" />
+    <path d="M634 453 C648 466 656 482 662 497 C657 478 652 465 641 457Z" fill="#1260d9" opacity=".6" />
+  </g>
+  <g id="glasses">
+    <path d="M507 137 C515 136 524 140 528 144 L526 149 L505 147Z" fill="#070707" />
+    <path d="M504 147 L527 150 C524 169 521 181 511 181 C508 182 505 181 503 180 C501 169 502 157 504 147Z" fill="url(#lens-black)" stroke="#060606" stroke-width="2.3" />
+    <path d="M450 154 C457 149 461 143 471 145 L530 144 L529 151 L471 149 C463 148 459 152 452 158Z" fill="#111111" />
+    <path d="M471 146.5 L528 147.2" stroke="#373737" stroke-width="3.4" />
+    <path d="M429 172 L443 155 C446 151 448 152 451 155 C454 157 455 160 453 163 L440 175 C437 179 433 177 429 175Z" fill="#292b2c" />
+    <path d="M429 173 L425 178 L429 181 L435 176Z" fill="#242728" />
+  </g>
+  <g id="cable" fill="none" stroke-linecap="round">
+    <path d="M429 177 C409 198 400 232 398 261 C394 306 400 345 417 382 C437 426 473 451 508 456 C535 461 559 455 575 443 C599 425 608 399 613 371 L618 345" stroke="#272a2a" stroke-width="4.6" />
+    <path d="M429 177 C410 198 401 232 399 261 C395 306 401 345 418 381 C438 424 473 449 508 454" stroke="#434545" stroke-width=".75" opacity=".36" />
+  </g>
+<g id="phone-and-hand" transform="matrix(.994 .105 -.173 .99 612 169)"><g id="palm-behind-phone" fill="url(#hand-blue)"><path id="rear-palm" d="M69 81 C73 76 77 80 80 87 C84 97 89 114 94 127 C98 143 90 162 93 180 L61 182 C52 172 45 166 45 154 C49 137 59 116 69 81Z" /></g>
+    <g id="gripping-fingers" fill="#2979f2">
+      <path d="M4 64 C-4 60-10 61-11 67 C-12 72-6 76 4 79Z" />
+      <path d="M3 82 C-5 80-11 82-11 88 C-11 94-5 96 3 96Z" />
+      <path d="M3 95 C-5 92-10 95-10 101 C-10 106-4 109 4 109Z" />
+      <path d="M4 107 C-3 104-10 108-10 113 C-10 118-4 121 4 122Z" />
+      <path d="M-7 92 C-4 94-1 94 1 94 M-7 105 C-4 107-1 108 2 107" stroke="#1669df" stroke-width="1" fill="none" opacity=".28" />
+    </g>
+    <g id="phone">
+      <g id="connector">
+        <path d="M29 147 H43 V167 Q43 169 40 169 H32 Q29 169 29 166Z" fill="#303131" />
+        <path d="M33 167 H39 V176 H33Z" fill="#272a2a" />
+        <path d="M36 174 V188" stroke="#272a2a" stroke-width="4.4" stroke-linecap="round" />
+      </g>
+      <rect width="76" height="148" rx="12" fill="url(#frame-gray)" />
+      <rect x="2.8" y="2.8" width="70.4" height="142.4" rx="10" fill="#020202" />
+      <path d="M11 1.4 H64 C70 1.4 74.6 6 74.6 12 V135" fill="none" stroke="#555555" stroke-width=".65" opacity=".5" />
+    </g><g id="thumb-and-palm"><path id="hand-silhouette" d="M61 184  C54 174 44 173 47 159  C47 145 68.47 118.33 67.92 112.35  C67.19 104.39 69.36 98.98 68.29 93.08  C67.22 87.17 66.77 81.92 65.19 76.13  C64.01 71.82 66.55 67.36 70.87 66.19  C75.18 65.01 79.64 67.55 80.81 71.87  C82.39 77.66 86.12 83.75 87.19 89.65  C88.25 95.56 90.49 102.24 91.22 110.21  C91.87 117.18 96 119 95 133  C94 146 90 157 91 167  C91 174 93 179 94 184  C82 178 70 178 61 184Z" fill="url(#hand-blue)" />
+      <g id="hand-details" opacity="0" fill="none" stroke="#1666dc" stroke-linecap="round">
+      <path id="thenar-crease" d="M74.96 115.72 C84.57 118.28 87.57 129.28 82.57 137.28" stroke-width=".85" /><path id="thumb-joint" d="M72.31 93.36 C76.13 93.69 80.06 92.98 83.53 91.33" stroke-width=".65" /></g></g></g>
+  <g id="cuff" fill="#1b6ef2">
+    <path d="M624 362 C624 356 634 351 649 348 C663 345 676 347 684 353 C687 355 688 361 689 368 L692 389 C672 389 645 385 623 376Z" />
+  </g></g>
+</svg>

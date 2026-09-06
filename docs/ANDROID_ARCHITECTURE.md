@@ -135,6 +135,18 @@ back to `document.body`, and bubble from an element target. `GlassesUI` owns the
 single `data-spatial-focus="true"` marker. While video is active, the player
 scope prevents underlying pages from receiving input.
 
+The remote tutorial is a separate glasses React surface, shown once after the
+catalog becomes ready and reachable again through the side navigation. It
+consumes the existing bubbling keyboard event only, not the paired
+`rayneo-remote-command` notification, and owns one spatial focus marker. Catalog
+pages and the player are unmounted during practice; search input is inactive.
+Wrong gestures cannot pass a lesson, and the success beat consumes repeated
+input before advancing. An exit dialog makes the practice surface inert.
+Session loss unmounts the tutorial and drops in-progress practice. Only a
+versioned `completed`/`skipped` flag is saved in glasses localStorage; no session,
+media, or account data is stored there. The tutorial creates no video, native
+bridge method, playback report, WebView, or display-mode transition.
+
 The glasses search surface uses one Apple TV-style A-Z/0-9 character strip as
 a remote-only fallback and shows Series posters without episode rows. Pressing
 down enters the poster grid; up from its first row or left from its first column
@@ -325,6 +337,7 @@ minimum device regression set for any device-facing change.
 | Eye reference overlay | Close each eye alternately; compare baseline and increased disparity; leave settings, switch mode, disconnect, logout and kill renderer | Left eye sees L, right sees R; cyan plane moves closer relative to white reference, no persistent overlay after exit/recovery |
 | Stereo video composition | Moving frame-number video with DOM controls and text subtitles in both modes, while changing depth/size | Both eyes receive the same frame, video/subtitles/DOM receive identical transforms, no frozen video, duplicate sound/reporting, clipped edge or cross-eye leakage |
 | Browse and focus | Home, search, filters, folders, details, long lists, dialogs, remote back | Exactly one visible spatial focus target exists and overlays prevent background input |
+| Remote tutorial | First ready catalog, skip/relaunch, six phone gestures, wrong/rapid input, pause/resume/exit, sidebar replay, logout, 2D/SBS switch and renderer recovery | Each real gesture advances once; exactly one focus stays inside practice/dialog; completion or skipping is remembered; no media playback or background navigation; SVG motion and text remain readable in both eyes |
 | Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, text and bitmap subtitle | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |
 | Single-instance invariants | Mirror and stereo during representative playback | One glasses WebView, one HTML `<video>`, one audio stream, and one Jellyfin reporting stream remain active |
 | Renderer recovery | Kill or crash the glasses WebView renderer during browse and playback | The WebView is rebuilt, session bootstrap is republished, and the phone receives a safe state |
