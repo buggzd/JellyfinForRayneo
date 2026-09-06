@@ -46,6 +46,7 @@
 - **兼顾直放与兼容性**：优先使用 HTML 视频直放，不兼容时回退到 Jellyfin 的 H.264/AAC HLS；支持音轨、文字字幕和服务端烧录字幕。
 - **两种眼镜显示方式**：可在 Mirror 2D 与 SBS 虚拟银幕之间切换；银幕支持四档靠近程度和独立大小调节，并保持单路视频、声音和播放上报。
 - **无需 ADB 也能排查问题**：手机端显示连接阶段和安全诊断，可分享经过脱敏的诊断报告。
+- **两种界面风格**：默认液态玻璃（liquid-glass），也可在手机设置中选择轻量的 simpleUI，自动保存并同步到眼镜。
 
 ## 工作方式
 
@@ -82,6 +83,7 @@
 | SBS 视差、RayNeo Air 3s 参数依据与校准边界 | [虚拟银幕数学分析](docs/SBS_GEOMETRY_ANALYSIS.md) |
 | 保持视觉效果的性能优化、基准与验证边界 | [性能审阅](docs/PERFORMANCE_REVIEW.md) |
 | 界面层次、状态一致性、细节动效与验证记录 | [UI / UX 审阅](docs/UI_UX_REVIEW.md) |
+| liquid-glass / simpleUI 切换、视觉设计与性能边界 | [界面主题](docs/UI_THEMES.md) |
 | 已有能力与后续功能优先级 | [功能路线图](docs/JELLYFIN_FEATURE_ROADMAP.md) |
 | Jellyfin Web 的信息架构与交互采样 | [Jellyfin Web 复现规格](docs/Jellyfin-Web-Reproduction-Spec.md) |
 

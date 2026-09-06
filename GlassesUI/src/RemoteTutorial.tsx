@@ -13,17 +13,17 @@ import './remoteTutorial.css'
 const gestureUrl = (name: string) => new URL(`./assets/tutorial/${name}.svg`, document.baseURI).href
 const commandIcons = { right: ArrowRight, down: ArrowDown, left: ArrowLeft, up: ArrowUp, enter: Check, back: RotateCcw }
 
-function GestureArt({ gesture, label, full = false }: { gesture: string; label: string; full?: boolean }) {
+function GestureArt({ gesture, label, full = false, still = false }: { gesture: string; label: string; full?: boolean; still?: boolean }) {
   const asset = full ? `${gesture}-full` : gesture
   return (
     <picture className={full ? 'tutorial-person' : 'tutorial-hand'}>
       <source media="(prefers-reduced-motion: reduce)" srcSet={gestureUrl(`${asset}-still`)} />
-      <img key={asset} src={gestureUrl(asset)} alt={label} draggable={false} />
+      <img key={asset} src={gestureUrl(still ? `${asset}-still` : asset)} alt={label} draggable={false} />
     </picture>
   )
 }
 
-export default function RemoteTutorial({ onExit, onComplete }: { onExit: (outcome: TutorialOutcome) => void; onComplete?: () => void }) {
+export default function RemoteTutorial({ onExit, onComplete, simpleUi = false }: { onExit: (outcome: TutorialOutcome) => void; onComplete?: () => void; simpleUi?: boolean }) {
   const [state, dispatch] = useReducer(tutorialReducer, undefined, initialTutorialState)
   const root = useRef<HTMLDivElement>(null)
   const deliveredOutcome = useRef(false)
@@ -116,7 +116,7 @@ export default function RemoteTutorial({ onExit, onComplete }: { onExit: (outcom
             </div>
             <div className="tutorial-welcome__art">
               <div className="tutorial-orbit" aria-hidden="true" />
-              <GestureArt gesture="single-tap" label="戴着眼镜，单手握住手机，用拇指单击触控板，开始教学" full />
+              <GestureArt gesture="single-tap" label="戴着眼镜，单手握住手机，用拇指单击触控板，开始教学" full still={simpleUi} />
               <div className="tutorial-art-caption"><span /> 看着眼镜里的画面，试着单击手机</div>
             </div>
           </main>
@@ -141,7 +141,7 @@ export default function RemoteTutorial({ onExit, onComplete }: { onExit: (outcom
               <h1 id="tutorial-title">{lesson.title}</h1>
               <p>{lesson.description}</p>
               <div className="tutorial-demonstration">
-                <GestureArt gesture={lesson.gesture} label={`拇指${tutorialInputLabels[lesson.command]}手机触控板的动画示范`} />
+                <GestureArt gesture={lesson.gesture} label={`拇指${tutorialInputLabels[lesson.command]}手机触控板的示范`} still={simpleUi} />
                 <div className="tutorial-gesture-label"><span><CommandIcon size={30} /></span><strong>{tutorialInputLabels[lesson.command]}</strong><small>在手机触控板上操作</small></div>
               </div>
               <div className={`tutorial-feedback ${state.feedback}`} role="status" aria-live="polite">

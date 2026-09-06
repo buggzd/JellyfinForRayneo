@@ -1,0 +1,114 @@
+/* A dark screening gallery: artwork, warm typography and a precise focus frame.
+   Keep the existing spatial geometry and HTML video; only the skin changes. */
+:root[data-ui-theme="simpleUI"] {
+  color-scheme: dark;
+  color: #f0eee6;
+  background: #141714;
+  --cyan: #d5dcc5;
+  --cyan-strong: #b6c8a6;
+  --muted: #b2b7ab;
+  --faint: #888f82;
+  --glass: #222820;
+  --glass-strong: #30382b;
+  --focus-ring: #e5e8d5;
+}
+:root[data-ui-theme="simpleUI"] :is(body, .app, .ambient, .remote-tutorial) { background: #141714; color: #f0eee6; }
+:root[data-ui-theme="simpleUI"] :is(.ambient__spectrum, .ambient__grain, .svg-filters, .media-card__glow, .art-frame__orb, .art-frame__flare, .tutorial-floor, .tutorial-orbit),
+:root[data-ui-theme="simpleUI"] .loading-cards__grid::after { display: none; }
+:root[data-ui-theme="simpleUI"] :is(.focus-button, .detail-poster-wrap, .empty-state__orb)::before { display: none; }
+:root[data-ui-theme="simpleUI"] .focus-button__lens { display: none; }
+:root[data-ui-theme="simpleUI"] .ambient--home-cover .ambient__image { height: 115%; opacity: .7; transition: none; }
+:root[data-ui-theme="simpleUI"] .ambient--home-cover .ambient__veil {
+  background: linear-gradient(90deg, #141714 0%, #141714 47%, #141714e8 59%, #14171466 77%, #14171418),
+    linear-gradient(0deg, #141714, #14171400 50%);
+}
+:root[data-ui-theme="simpleUI"] .home-page--shelves-active::before { background: #141714c9; }
+
+:root[data-ui-theme="simpleUI"] :is(.glass-panel, .track-panel, .toast, .player-state, .player-volume, .player-subtitle-error, .browse-toolbar, .empty-state__orb) {
+  color: #f0eee6;
+  border: 1px solid #434c3d;
+  background: #232920;
+}
+:root[data-ui-theme="simpleUI"] :is(.focus-button--glass, .focus-button--chip, .focus-button--ghost.is-active) { color: #e7e9dc; background: #2b3328; border-radius: 12px; }
+:root[data-ui-theme="simpleUI"] .focus-button--round { color: #dfe5d5; background: #2b3328; }
+:root[data-ui-theme="simpleUI"] .focus-button--primary { color: #20291d; background: #d5ddc6; border-radius: 12px; }
+:root[data-ui-theme="simpleUI"] .focus-button--danger { color: #f4cbbf; background: #49322d; }
+:root[data-ui-theme="simpleUI"] [data-spatial-focus="true"] { outline: 2px solid #e5e8d5; outline-offset: 3px; }
+:root[data-ui-theme="simpleUI"] :is(.focus-button, .compact-search-key, .compact-search-action):is(:focus-visible, [data-spatial-focus="true"]) {
+  outline: 2px solid #e5e8d5;
+  outline-offset: 3px;
+  color: #f4f3e9;
+  background: #3d4c36;
+  transform: translateY(-1px);
+}
+:root[data-ui-theme="simpleUI"] .focus-button--primary:is(:focus-visible, [data-spatial-focus="true"]) { color: #20291d; background: #e2e8d4; }
+:root[data-ui-theme="simpleUI"] :is(.focus-button, .compact-search-key, .compact-search-action):active { transform: scale(.98); }
+
+:root[data-ui-theme="simpleUI"] .art-frame { border: 1px solid #44493e; border-radius: 8px; background: #30372d; transform: none; }
+:root[data-ui-theme="simpleUI"] .art-frame__image { inset: 0; background: #30372d !important; transform: none !important; }
+:root[data-ui-theme="simpleUI"] .art-frame__poster-image { transform: none; }
+:root[data-ui-theme="simpleUI"] :is(.art-frame__title, .art-frame__index) { color: #e5e8d8; }
+:root[data-ui-theme="simpleUI"] :is(.media-card, .episode-card, .series-search-result):is(:focus-visible, [data-spatial-focus="true"]) { outline: none; transform: translateY(-4px) scale(1.02); }
+:root[data-ui-theme="simpleUI"] :is(.media-card, .episode-card, .series-search-result):is(:focus-visible, [data-spatial-focus="true"]) .art-frame {
+  outline: 2px solid #e5e8d5;
+  outline-offset: 4px;
+  border-color: #e5e8d5;
+}
+:root[data-ui-theme="simpleUI"] .media-card__copy strong { color: #efeee5; }
+:root[data-ui-theme="simpleUI"] .media-card__copy small { color: #b2b7ab; }
+:root[data-ui-theme="simpleUI"] :is(.media-card__enter, .media-card__badges .count-badge, .toast__icon) { color: #222b1e; background: #d5ddc6; }
+:root[data-ui-theme="simpleUI"] :is(.media-card__badges > span, .media-status-badge, .section-count, .detail-tab.is-active) { color: #d9dfcd; border-color: #4d5846; background: #283123; }
+:root[data-ui-theme="simpleUI"] .media-progress i { background: #b6c8a6; }
+:root[data-ui-theme="simpleUI"] :is(.detail-kicker, .eyebrow, .section-heading > span, .detail-sync) { color: #bec7af; }
+:root[data-ui-theme="simpleUI"] .remote-hint { color: #bfc5b7; }
+:root[data-ui-theme="simpleUI"] :is(.hero-eyebrow, .meta-row .rating svg, .detail-kicker) { color: #c9d4b9; }
+:root[data-ui-theme="simpleUI"] :is(.hero-overview, .hero-tagline, .meta-row, .hero-original) { color: #b2baaa; }
+:root[data-ui-theme="simpleUI"] .home-page::before { background: linear-gradient(180deg, transparent 25%, #141714 88%); }
+:root[data-ui-theme="simpleUI"] :is(.loading-card__art, .loading-card > i) { border-color: #353e30; background: #252d22; }
+
+/* Keep the label reveal on opacity/transform; the rail itself no longer grows
+   through intermediate widths on every directional focus event. */
+:root[data-ui-theme="simpleUI"] .side-navigation__backdrop { width: var(--side-nav-open); background: #171d16; opacity: 0; }
+:root[data-ui-theme="simpleUI"] .side-navigation:is(:focus-within, :hover) .side-navigation__backdrop { width: var(--side-nav-open); opacity: 1; }
+:root[data-ui-theme="simpleUI"] .side-navigation__inner { background: #141714; }
+:root[data-ui-theme="simpleUI"] .side-navigation:is(:focus-within, :hover) .side-navigation__inner { background: #171d16; }
+:root[data-ui-theme="simpleUI"] .side-navigation .focus-button__icon { color: #aeb9a1; }
+:root[data-ui-theme="simpleUI"] .side-navigation .focus-button__label { color: #e2e7d7; }
+:root[data-ui-theme="simpleUI"] .side-navigation .focus-button:is(:focus-visible, [data-spatial-focus="true"]) { color: #f3f2e8; background: #3a4732; transform: translateX(2px); outline-offset: -2px; }
+:root[data-ui-theme="simpleUI"] .side-navigation .focus-button--ghost.is-active::after { background: #c8d5b4; }
+:root[data-ui-theme="simpleUI"] :is(.side-navigation__brand-mark, .side-navigation__avatar) { color: #d9dfcb; border: 1px solid #7f8d70; background: #252e21; }
+
+:root[data-ui-theme="simpleUI"] .detail-poster-wrap { -webkit-mask-image: none; mask-image: none; }
+:root[data-ui-theme="simpleUI"] .detail-poster-wrap::after {
+  background: linear-gradient(90deg, #141714 0%, #141714e8 12%, #14171460 43%, #14171415),
+    linear-gradient(0deg, #141714 0%, transparent 65%);
+}
+:root[data-ui-theme="simpleUI"] .detail-poster { border: 0; border-radius: 0; }
+:root[data-ui-theme="simpleUI"] :is(.detail-info-panel, .detail-tab-panel) { border-color: #374030; }
+:root[data-ui-theme="simpleUI"] .detail-state-action.is-active { color: #d5ddc6; background: #33402c; }
+
+/* Opaque local control surfaces keep video from participating in backdrop
+   filtering. Subtitles keep a small solid backing for bright movie frames. */
+:root[data-ui-theme="simpleUI"] :is(.app--player, .player-page, .player-backdrop) { background: #000; }
+:root[data-ui-theme="simpleUI"] .player-backdrop img { display: none; }
+:root[data-ui-theme="simpleUI"] .player-topbar { background: linear-gradient(#000c, transparent); }
+:root[data-ui-theme="simpleUI"] .screen-subtitle { padding: 6px 14px; border-radius: 5px; background: #000c; color: #fff; }
+:root[data-ui-theme="simpleUI"] .screen-subtitle:empty { display: none; }
+:root[data-ui-theme="simpleUI"] .seek-feedback::before,
+:root[data-ui-theme="simpleUI"] .seek-feedback__field { display: none; }
+:root[data-ui-theme="simpleUI"] .seek-feedback__icon { color: #dfe6d2; border: 1px solid #718163; background: #263320; }
+:root[data-ui-theme="simpleUI"] .seek-feedback__content { opacity: 1; }
+:root[data-ui-theme="simpleUI"] .seek-feedback__copy { padding: 10px 16px; border-radius: 10px; background: #10180fde; }
+
+:root[data-ui-theme="simpleUI"] .remote-tutorial { --tutorial-blue: #c8d5b4; --tutorial-dim: #b2bba6; }
+:root[data-ui-theme="simpleUI"] :is(.tutorial-practice, .tutorial-exit, .tutorial-recap > div, .tutorial-feedback) { color: #dfe5d5; border-color: #44513b; background: #20281d; }
+:root[data-ui-theme="simpleUI"] .tutorial-exit-layer { background: #10160fee; }
+:root[data-ui-theme="simpleUI"] .tutorial-button { color: #dfe5d5; border-color: #657459; background: #293322; }
+:root[data-ui-theme="simpleUI"] .tutorial-button:is(:focus-visible, [data-spatial-focus="true"]) { outline: 2px solid #e5e8d5; outline-offset: 4px; color: #1d2918; background: #d5ddc6; }
+:root[data-ui-theme="simpleUI"] .tutorial-cell.is-current { border-color: #e5e8d5; background: #3a4730; }
+:root[data-ui-theme="simpleUI"] .tutorial-cell.is-target { border-color: #a3b68c; color: #cfdfba; background: #2c3922; }
+:root[data-ui-theme="simpleUI"] .tutorial-light { background: #d5ddc6; }
+:root[data-ui-theme="simpleUI"] .tutorial-feedback.success { color: #c5e1b6; background: #2c3d23; }
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-ui-theme="simpleUI"] .seek-feedback { animation: simple-fade 140ms ease-out backwards !important; }
+}

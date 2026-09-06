@@ -5,7 +5,7 @@ import type { TutorialOutcome } from './tutorialState'
 // Development-only, server-free entry; never loads credentials or a media player.
 export default function TutorialPreview() {
   const [outcome, setOutcome] = useState<TutorialOutcome | null>(null)
-  if (!outcome) return <RemoteTutorial onExit={setOutcome} />
+  if (!outcome) return <RemoteTutorial simpleUi={document.documentElement.dataset.uiTheme === 'simpleUI'} onExit={setOutcome} />
   return (
     <div className="remote-tutorial">
       <main className="tutorial-complete" style={{ height: '100%' }}>

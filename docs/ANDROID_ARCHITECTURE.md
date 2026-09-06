@@ -106,6 +106,7 @@ length-limited, and whitelisted before use.
 | `retryGlasses` | Republish the session bootstrap after a catalog failure |
 | `shareDiagnostics` | Open Android's share sheet with a redacted diagnostic report |
 | `selectDisplayMode` | Save and request 2D/3D mode |
+| `selectUiTheme` | Persist exactly `liquid-glass` or `simpleUI` and publish it to both surfaces |
 | `setStereoScreen` | Save a bounded flat-screen disparity/size preference without switching hardware mode |
 | `setStereoTestPattern` | Enable/disable the temporary L/R reference overlay while stereo is applied |
 | `remoteCommand`, `searchText`, `previewHaptic` | Bounded touchpad input and the active Series-search query |
@@ -175,6 +176,24 @@ returns to the strip. Phone QWERTY input updates results on every edit, and the
 phone keyboard's search action focuses the first matching Series. Full pinyin,
 pinyin initials, English titles, and optional season/episode hints are resolved
 locally from the bounded Series index.
+
+## UI appearance preference
+
+`SessionRepository` stores `ui_theme` independently of accounts and display mode.
+Missing or unknown saved values use `liquid-glass`; `selectUiTheme` rejects every
+value except the two exact theme names before scheduling work on the UI thread.
+Both the phone state and glasses bootstrap include `uiTheme`. A theme edit updates
+system bars and the phone WebView background, then publishes the existing state
+channels. It does not increment `catalogGeneration`, request hardware mode changes,
+recreate a WebView, or remount the video. Logout preserves this device preference.
+
+Both React entry points restore the theme before their first render. The phone
+uses native acknowledgements to update its radio selection; it stores no second
+copy of the native preference in localStorage. Standalone browser previews and the
+dual-UI harness may save only the appearance choice under a preview-specific key.
+`SharedUI` supplies the exact enum normalization and simpleUI rendering rules;
+both Gradle frontend tasks include that directory in their build inputs.
+See [UI themes](UI_THEMES.md) for the visual design and verification boundary.
 
 ## RayNeo display state
 
@@ -359,6 +378,7 @@ minimum device regression set for any device-facing change.
 | Eye reference overlay | Close each eye alternately; compare baseline and increased disparity; leave settings, switch mode, disconnect, logout and kill renderer | Left eye sees L, right sees R; cyan plane moves closer relative to white reference, no persistent overlay after exit/recovery |
 | Stereo video composition | Moving frame-number video with DOM controls and text subtitles in both modes, while changing depth/size | Both eyes receive the same frame, video/subtitles/DOM receive identical transforms, no frozen video, duplicate sound/reporting, clipped edge or cross-eye leakage |
 | Browse and focus | Home, search, filters, folders, details, long lists, dialogs, remote back | Exactly one visible spatial focus target exists and overlays prevent background input |
+| UI themes | Default install, saved simpleUI cold launch, rapid switches during browse/direct play/HLS/tutorial in both 2D and SBS, disconnect/reconnect, renderer recovery, logout, reset preferences | Both surfaces and phone system bars agree; focus, document, video, audio and reporting remain single-instance; theme survives logout/recovery and reset restores liquid-glass; simpleUI has no decorative loops or blur |
 | Remote tutorial | First ready catalog, skip/relaunch, six phone gestures, wrong/rapid input, pause/resume/exit, sidebar replay, logout, 2D/SBS switch and renderer recovery | Each real gesture advances once; exactly one focus stays inside practice/dialog; completion or skipping is remembered; no media playback or background navigation; SVG motion and text remain readable in both eyes |
 | Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, text and bitmap subtitle | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |
 | Single-instance invariants | Mirror and stereo during representative playback | One glasses WebView, one HTML `<video>`, one audio stream, and one Jellyfin reporting stream remain active |

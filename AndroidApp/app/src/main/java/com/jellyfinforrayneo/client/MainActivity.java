@@ -232,9 +232,9 @@ public final class MainActivity extends Activity
                 new CompanionBridge(),
                 this::buildCompanionStateJson);
         setContentView(companionWebView.getView());
+        updatePhoneSurface();
         companionWebView.start();
         glassesPresentation.start();
-        updatePhoneSurface();
 
         if (!sessions.hasSession())
         {
@@ -618,6 +618,7 @@ public final class MainActivity extends Activity
             result.put("displayMode", displayState.requestedMode);
             result.put("glassesConnected", displayState.connected);
             result.put("catalogGeneration", glassesCatalogGeneration);
+            result.put("uiTheme", sessions == null ? UiTheme.DEFAULT : sessions.getUiTheme());
             SessionPayload session = sessions == null ? null : sessions.getSession();
             result.put("session", session == null ? JSONObject.NULL : session.toJsonObject());
         }
@@ -671,6 +672,7 @@ public final class MainActivity extends Activity
             result.put("glassesDisplayDisabled", glassesPresentation != null
                     && glassesPresentation.isSystemDisplayDisabled());
             result.put("stereoScreen", sessions.getStereoScreenSettings().toJson());
+            result.put("uiTheme", sessions.getUiTheme());
             result.put("stereoOutput", glassesPresentation == null
                     ? DisplayOutputGeometry.EMPTY.toJson() : glassesPresentation.getOutputGeometry().toJson());
             result.put("stereoTestPattern", glassesPresentation != null
@@ -712,8 +714,14 @@ public final class MainActivity extends Activity
     private void updatePhoneSurface()
     {
         boolean oled = "touchpad".equals(webScreen);
-        getWindow().setStatusBarColor(oled ? Color.BLACK : Color.rgb(234, 247, 250));
-        getWindow().setNavigationBarColor(oled ? Color.BLACK : Color.rgb(229, 245, 249));
+        boolean simple = sessions != null && UiTheme.SIMPLE.equals(sessions.getUiTheme());
+        int surfaceColor = oled ? Color.BLACK : simple ? Color.rgb(243, 240, 233) : Color.rgb(234, 247, 250);
+        getWindow().setStatusBarColor(surfaceColor);
+        getWindow().setNavigationBarColor(oled ? Color.BLACK : simple ? surfaceColor : Color.rgb(229, 245, 249));
+        if (companionWebView != null)
+        {
+            companionWebView.setSurfaceColor(surfaceColor);
+        }
         int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
         if (!oled)
         {
@@ -1392,6 +1400,25 @@ public final class MainActivity extends Activity
             {
                 sessions.setDisplayMode(normalized);
                 rayNeoDisplay.requestMode(normalized);
+            });
+        }
+
+        @JavascriptInterface
+        public void selectUiTheme(String theme)
+        {
+            if (!UiTheme.isValid(theme))
+            {
+                return;
+            }
+            runOnUiThread(() ->
+            {
+                if (!destroyed)
+                {
+                    sessions.setUiTheme(theme);
+                    updatePhoneSurface();
+                    glassesPresentation.refreshBootstrap();
+                    pushCompanionState();
+                }
             });
         }
 

@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { applyUiTheme, normalizeUiTheme, readPreviewTheme, savePreviewTheme } from '../../SharedUI/theme.mjs'
 import { Toast, usePresence } from './feedback'
 import {
   ArrowLeft,
@@ -172,6 +173,11 @@ function useStoredState(key, initialValue, enabled = true) {
 
 function App() {
   const isNative = useMemo(() => hasNativeBridge(), [])
+  const [uiTheme, setUiTheme] = useState(() => isNative
+    ? normalizeUiTheme(parseNativePayload(callNative('getState'))?.uiTheme)
+    : readPreviewTheme())
+  const simpleUi = uiTheme === 'simpleUI'
+  useLayoutEffect(() => { applyUiTheme(uiTheme) }, [uiTheme])
   const [session, setSession] = useStoredState('jellyfin-rayneo-session', null, !isNative)
   const [demoAccounts, setDemoAccounts] = useState(() => {
     if (isNative) return []
@@ -213,6 +219,15 @@ function App() {
   const opticsSampleRef = useRef(null)
   const opticsButtonRef = useRef(null)
   const opticsRectRef = useRef(null)
+
+  useEffect(() => {
+    if (!simpleUi) return
+    if (opticsFrameRef.current) window.cancelAnimationFrame(opticsFrameRef.current)
+    opticsFrameRef.current = 0
+    opticsSampleRef.current = null
+    opticsButtonRef.current = null
+    opticsRectRef.current = null
+  }, [simpleUi])
 
   const accounts = isNative ? nativeState?.accounts || [] : demoAccounts.map((account) => ({
     id: account.id,
@@ -287,6 +302,7 @@ function App() {
       lastNativePayloadRef.current = signature
 
       setNativeState(next)
+      setUiTheme(normalizeUiTheme(next.uiTheme))
       setDisplayMode(next.displayMode === 'stereo_screen' ? 'stereo' : 'mirror')
       // Ignore an older acknowledgement while the latest slider/button edit is still in flight.
       if (validStereoScreen(next.stereoScreen)
@@ -476,6 +492,15 @@ function App() {
     }
   }
 
+  const changeUiTheme = (theme) => {
+    if (theme !== 'liquid-glass' && theme !== 'simpleUI') return
+    if (isNative) callNative('selectUiTheme', theme)
+    else {
+      setUiTheme(theme)
+      savePreviewTheme(theme)
+    }
+  }
+
   const changeStereoScreen = (patch) => {
     const next = { ...stereoScreenRef.current, ...patch }
     if (!validStereoScreen(next) || sameStereoScreen(next, stereoScreenRef.current)) return
@@ -505,6 +530,7 @@ function App() {
   }
 
   const resetPreferences = () => {
+    changeUiTheme('liquid-glass')
     changeStereoTestPattern(false)
     changeStereoScreen(DEFAULT_STEREO_SCREEN)
     changeDisplayMode('mirror')
@@ -571,18 +597,19 @@ function App() {
 
   return (
     <div className={`prototype-shell ${screen === 'touchpad' ? 'is-touchpad' : ''} ${isNative ? 'is-native' : ''}`}>
-      <AmbientBackdrop dark={screen === 'touchpad'} />
+      {!simpleUi && <AmbientBackdrop dark={screen === 'touchpad'} />}
       <main
         className="phone-stage"
-        onPointerMove={moveButtonOptics}
-        onPointerOut={resetButtonOptics}
+        onPointerMove={simpleUi ? undefined : moveButtonOptics}
+        onPointerOut={simpleUi ? undefined : resetButtonOptics}
       >
-        <GlassOptics />
+        {!simpleUi && <GlassOptics />}
         {screen !== 'touchpad' && <StatusBar />}
 
         <div className="screen-stack" inert={manualOpen || Boolean(pendingRemoval)}>
           {screen === 'connect' && (
             <ConnectScreen
+              simpleUi={simpleUi}
               session={session}
               servers={servers}
               scanning={Boolean(nativeState?.discoveryScanning)}
@@ -599,6 +626,7 @@ function App() {
 
           {screen === 'auth' && (
             <AuthScreen
+              simpleUi={simpleUi}
               server={selectedServer}
               mode={authMode}
               setMode={setAuthMode}
@@ -617,6 +645,7 @@ function App() {
 
           {screen === 'home' && (
             <HomeScreen
+              simpleUi={simpleUi}
               session={session}
               server={selectedServer}
               onTouchpad={openTouchpad}
@@ -630,6 +659,8 @@ function App() {
 
           {screen === 'settings' && (
             <SettingsScreen
+              uiTheme={uiTheme}
+              onUiThemeChange={changeUiTheme}
               session={session}
               server={selectedServer}
               displayMode={displayMode}
@@ -666,6 +697,7 @@ function App() {
 
           {screen === 'touchpad' && (
             <TouchpadScreen
+              simpleUi={simpleUi}
               displayMode={displayMode}
               haptics={haptics}
               playback={nativeState?.playback}
@@ -773,6 +805,7 @@ function Brand({ compact = false }) {
 }
 
 function ConnectScreen({
+  simpleUi,
   session,
   servers,
   scanning: nativeScanning,
@@ -813,11 +846,11 @@ function ConnectScreen({
       </header>
 
       <div className="art-hero glass-panel">
-        <img src={assetUrl('liquid-blue.png')} alt="冰蓝色流体抽象艺术" />
+        {!simpleUi && <img src={assetUrl('liquid-blue.png')} alt="冰蓝色流体抽象艺术" />}
         <div className="art-hero__refraction" />
         <div className="art-hero__copy">
           <span className="eyebrow light">JELLYFIN COMPANION</span>
-          <h1>让影像<br />穿过玻璃</h1>
+          <h1>{simpleUi ? <>随身影院<br />静享光影</> : <>让影像<br />穿过玻璃</>}</h1>
           <p>Jellyfin × RayNeo Air</p>
         </div>
         <div className="art-hero__glint" />
@@ -912,6 +945,7 @@ function ConnectScreen({
 }
 
 function AuthScreen({
+  simpleUi,
   server,
   mode,
   setMode,
@@ -959,7 +993,7 @@ function AuthScreen({
       </header>
 
       <div className="auth-art glass-panel">
-        <img src={assetUrl('liquid-blue.png')} alt="" />
+        {!simpleUi && <img src={assetUrl('liquid-blue.png')} alt="" />}
         <div className="auth-art__glass">
           <span className="server-orb server-orb--light"><Link2 size={21} /></span>
           <div>
@@ -1135,6 +1169,7 @@ function QuickConnect({
 }
 
 function HomeScreen({
+  simpleUi,
   session,
   server,
   onTouchpad,
@@ -1182,7 +1217,7 @@ function HomeScreen({
       </div>
 
       <div className="device-hero glass-panel">
-        <img src={assetUrl('luma-device-card-light.png')} alt="" />
+        {!simpleUi && <img src={assetUrl('luma-device-card-light.png')} alt="" />}
         <div className="device-hero__mist" />
         <div className="device-hero__head">
           <span className={`connected-pill ${connected ? '' : 'is-offline'}`}><i /> {connected ? '眼镜已连接' : '等待连接眼镜'}</span>
@@ -1270,7 +1305,37 @@ function DisplayModeStatus({ value, state, onRetry }) {
   )
 }
 
+function ThemeSelector({ value, onChange }) {
+  return (
+    <fieldset className="theme-selector">
+      <legend className="theme-selector__intro">为手机与眼镜，选择同一种氛围</legend>
+      <div className="theme-selector__options">
+        {[
+          { id: 'liquid-glass', name: '液态玻璃', tag: '默认', detail: '通透光影 · 流动质感' },
+          { id: 'simpleUI', name: 'simpleUI', tag: '轻简', detail: '静谧展厅 · 轻盈省电' },
+        ].map((theme) => (
+          <label className={`theme-option ${value === theme.id ? 'is-selected' : ''}`} key={theme.id}>
+            <input type="radio" name="ui-theme" value={theme.id} checked={value === theme.id}
+              onChange={() => onChange(theme.id)} />
+            <span className={`theme-preview theme-preview--${theme.id}`} aria-hidden="true">
+              <span className="theme-preview__arch" />
+              <span className="theme-preview__caption" />
+              <span className="theme-preview__tiles"><i /><i /><i /></span>
+            </span>
+            <span className="theme-option__title"><strong>{theme.name}</strong><small>{theme.tag}</small></span>
+            <span className="theme-option__detail">{theme.detail}</span>
+            <span className="theme-option__check" aria-hidden="true">{value === theme.id && <Check size={12} />}</span>
+          </label>
+        ))}
+      </div>
+      <p className="theme-selector__note">自动保存，两端同步生效；眼镜重新连接后沿用。</p>
+    </fieldset>
+  )
+}
+
 function SettingsScreen({
+  uiTheme,
+  onUiThemeChange,
   session,
   server,
   displayMode,
@@ -1324,6 +1389,10 @@ function SettingsScreen({
           </span>
           <span className="setting-action">管理 <ChevronRight size={15} /></span>
         </button>
+      </SettingsGroup>
+
+      <SettingsGroup title="界面风格">
+        <ThemeSelector value={uiTheme} onChange={onUiThemeChange} />
       </SettingsGroup>
 
       <SettingsGroup title="显示">
@@ -1520,6 +1589,7 @@ function BottomNav({ active, onHome, onTouchpad, onSettings }) {
 }
 
 function TouchpadScreen({
+  simpleUi,
   displayMode,
   haptics,
   playback,
@@ -1732,7 +1802,7 @@ function TouchpadScreen({
         setPressed(false)
       }}
     >
-      <img className="touchpad-texture" src={assetUrl('luma-touchpad-void.png')} alt="" draggable="false" />
+      {!simpleUi && <img className="touchpad-texture" src={assetUrl('luma-touchpad-void.png')} alt="" draggable="false" />}
       <div ref={glowRef} className="finger-glow"><i /></div>
       <div className="touchpad-grain" />
 

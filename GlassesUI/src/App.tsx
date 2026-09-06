@@ -41,6 +41,7 @@ import {
   X,
 } from 'lucide-react'
 import type Hls from 'hls.js'
+import { applyUiTheme, normalizeUiTheme } from '../../SharedUI/theme.mjs'
 import {
   type CSSProperties,
   type ReactNode,
@@ -443,12 +444,14 @@ function Logo({ compact = false }: { compact?: boolean }) {
 }
 
 function AmbientBackground({
+  simpleUi = false,
   tone,
   imageUrl,
   dim = 0.45,
   homeCover = false,
   preview = false,
 }: {
+  simpleUi?: boolean
   tone: number
   imageUrl?: string
   dim?: number
@@ -461,6 +464,7 @@ function AmbientBackground({
   ).href
   const [artwork, setArtwork] = useState({ current: '', previous: '' })
   useEffect(() => {
+    if (simpleUi) return
     // Keep the current cover until its replacement loads; ignore late focus requests.
     let cancelled = false
     const image = new Image()
@@ -475,12 +479,19 @@ function AmbientBackground({
     }
     image.src = imageUrl ?? fallbackImage
     return () => { cancelled = true }
-  }, [fallbackImage, imageUrl])
+  }, [fallbackImage, imageUrl, simpleUi])
   const style = {
     '--tone': imageUrl ? '0deg' : `${tone * 31}deg`,
     '--drift-x': `${42 + (tone % 5) * 8}%`,
     '--dim': dim,
   } as CSSProperties
+
+  if (simpleUi) return (
+    <div className="ambient ambient--home-cover" aria-hidden="true">
+      {imageUrl && <div className="ambient__image" style={{ backgroundImage: `url(${JSON.stringify(imageUrl)})` }} />}
+      <div className="ambient__veil" />
+    </div>
+  )
 
   return (
     <div className={cx('ambient', homeCover && 'ambient--home-cover', preview && 'ambient--preview')} style={style} aria-hidden="true">
@@ -1620,6 +1631,7 @@ type PlayerStatus = 'preparing' | 'buffering' | 'playing' | 'paused' | 'ended' |
 type PlayerChrome = 'controls' | 'hidden' | 'topbar'
 
 function PlayerPage({
+  simpleUi,
   item,
   startPositionTicks,
   previousItem,
@@ -1631,6 +1643,7 @@ function PlayerPage({
   onPlayItem,
   onBack,
 }: {
+  simpleUi: boolean
   item: MediaItem
   startPositionTicks: number
   previousItem?: MediaItem
@@ -2342,7 +2355,7 @@ function PlayerPage({
       />
 
       {backdropMounted && <div className={cx('player-backdrop', hasVideoFrame && 'is-leaving')} aria-hidden="true">
-        {(item.imageUrl ?? item.backdropUrl ?? item.coverUrl) && <img src={item.imageUrl ?? item.backdropUrl ?? item.coverUrl} alt="" decoding="async" draggable={false} onError={(event) => { event.currentTarget.style.display = 'none' }} />}
+        {!simpleUi && (item.imageUrl ?? item.backdropUrl ?? item.coverUrl) && <img src={item.imageUrl ?? item.backdropUrl ?? item.coverUrl} alt="" decoding="async" draggable={false} onError={(event) => { event.currentTarget.style.display = 'none' }} />}
       </div>}
 
       <div className={cx('player-chrome', chrome === 'hidden' && 'is-hidden')} inert={chrome === 'hidden'} aria-hidden={chrome === 'hidden'}>
@@ -2474,10 +2487,12 @@ function RemoteHint({ dark = false }: { dark?: boolean }) {
 }
 
 function RuntimeGate({
+  simpleUi,
   status,
   error,
   onRetry,
 }: {
+  simpleUi: boolean
   status: JellyfinUiStatus
   error: string
   onRetry: () => void
@@ -2496,7 +2511,7 @@ function RuntimeGate({
 
   return (
     <div className="runtime-gate page-enter">
-      <AmbientBackground tone={2} dim={0.62} />
+      {!simpleUi && <AmbientBackground tone={2} dim={0.62} />}
       <header className="runtime-gate__header"><Logo /></header>
       <main className="runtime-gate__content glass-panel">
         <div className={cx('runtime-gate__orb', busy && 'is-loading')}>
@@ -2517,6 +2532,9 @@ function RuntimeGate({
 
 export default function App() {
   const jellyfin = useJellyfin()
+  const uiTheme = normalizeUiTheme(jellyfin.runtime?.uiTheme ?? document.documentElement.dataset.uiTheme)
+  const simpleUi = uiTheme === 'simpleUI'
+  useLayoutEffect(() => { applyUiTheme(uiTheme) }, [uiTheme])
   const [page, setPage] = useState<Page>('home')
   const [tutorialSeen, setTutorialSeen] = useState(hasSeenRemoteTutorial)
   const restoreTutorialFocus = useRef(false)
@@ -2944,6 +2962,7 @@ export default function App() {
   if (jellyfin.status !== 'ready' || !jellyfin.snapshot) {
     return (
       <RuntimeGate
+        simpleUi={simpleUi}
         status={jellyfin.status}
         error={jellyfin.error}
         onRetry={() => { void jellyfin.retry() }}
@@ -2952,8 +2971,8 @@ export default function App() {
   }
 
   const snapshot = jellyfin.snapshot
-  if (tutorialActive) return <RemoteTutorial onExit={closeTutorial} onComplete={completeTutorial} />
-  const homeShelfPreview = page === 'home' && homeFocusRegion === 'shelves'
+  if (tutorialActive) return <RemoteTutorial simpleUi={simpleUi} onExit={closeTutorial} onComplete={completeTutorial} />
+  const homeShelfPreview = !simpleUi && page === 'home' && homeFocusRegion === 'shelves'
   const homeBackgroundItem = homeShelfPreview ? backdropItem : snapshot.featured
 
   const pageNode = (() => {
@@ -2976,13 +2995,14 @@ export default function App() {
       key: 0,
     }
     const episodeIndex = detail?.episodes.findIndex((episode) => episode.id === request.item.id) ?? -1
-    return <PlayerPage key={request.key} item={request.item} startPositionTicks={request.startPositionTicks} previousItem={episodeIndex > 0 ? detail?.episodes[episodeIndex - 1] : undefined} nextItem={episodeIndex >= 0 ? detail?.episodes[episodeIndex + 1] : undefined} preparePlayback={jellyfin.preparePlayback} reportPlaybackStarted={jellyfin.reportPlaybackStarted} reportPlaybackProgress={jellyfin.reportPlaybackProgress} reportPlaybackStopped={jellyfin.reportPlaybackStopped} onPlayItem={playItem} onBack={goBack} />
+    return <PlayerPage key={request.key} simpleUi={simpleUi} item={request.item} startPositionTicks={request.startPositionTicks} previousItem={episodeIndex > 0 ? detail?.episodes[episodeIndex - 1] : undefined} nextItem={episodeIndex >= 0 ? detail?.episodes[episodeIndex + 1] : undefined} preparePlayback={jellyfin.preparePlayback} reportPlaybackStarted={jellyfin.reportPlaybackStarted} reportPlaybackProgress={jellyfin.reportPlaybackProgress} reportPlaybackStopped={jellyfin.reportPlaybackStopped} onPlayItem={playItem} onBack={goBack} />
   })()
 
   return (
     <div className={cx('app', `app--${page}`)}>
-      {page !== 'player' && (
+      {page !== 'player' && (!simpleUi || page === 'home') && (
         <AmbientBackground
+          simpleUi={simpleUi}
           tone={page === 'home' ? homeBackgroundItem.art : backdropItem.art}
           imageUrl={page === 'home'
             ? homeBackgroundItem.coverUrl ?? homeBackgroundItem.imageUrl ?? homeBackgroundItem.backdropUrl

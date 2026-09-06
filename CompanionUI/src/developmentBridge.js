@@ -36,6 +36,7 @@ const initialState = {
   searchInputActive: false,
   searchQuery: '',
   displayMode: 'mirror_2d',
+  uiTheme: 'liquid-glass',
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
   displayModeTransitioning: false,
@@ -146,6 +147,9 @@ export function installDevelopmentBridge() {
     retryGlasses: () => call('retryGlasses'),
     shareDiagnostics: () => call('shareDiagnostics'),
     selectDisplayMode: (mode) => call('selectDisplayMode', [boundedText(mode, 32)]),
+    selectUiTheme: (theme) => {
+      if (theme === 'liquid-glass' || theme === 'simpleUI') call('selectUiTheme', [theme])
+    },
     copyQuickConnectCode: () => {
       const code = boundedText(state.quickConnectCode, 32)
       if (code) void navigator.clipboard?.writeText(code)

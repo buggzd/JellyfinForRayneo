@@ -71,6 +71,9 @@ final class CompanionWebViewController
         void selectDisplayMode(String mode);
 
         @android.webkit.JavascriptInterface
+        void selectUiTheme(String theme);
+
+        @android.webkit.JavascriptInterface
         void setStereoScreen(String payload);
 
         @android.webkit.JavascriptInterface
@@ -115,6 +118,7 @@ final class CompanionWebViewController
     private boolean javascriptReady;
     private boolean destroyed;
     private String lastState;
+    private int surfaceColor = Color.rgb(234, 247, 250);
 
     CompanionWebViewController(
             Activity activity,
@@ -131,6 +135,16 @@ final class CompanionWebViewController
     View getView()
     {
         return root;
+    }
+
+    void setSurfaceColor(int color)
+    {
+        surfaceColor = color;
+        root.setBackgroundColor(color);
+        if (webView != null)
+        {
+            webView.setBackgroundColor(color);
+        }
     }
 
     void start()
@@ -249,7 +263,7 @@ final class CompanionWebViewController
     {
         destroyWebView();
         webView = new WebView(activity);
-        webView.setBackgroundColor(Color.rgb(234, 247, 250));
+        webView.setBackgroundColor(surfaceColor);
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         webView.setSaveEnabled(false);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);

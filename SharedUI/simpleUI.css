@@ -1,0 +1,49 @@
+/* simpleUI's rendering budget applies to every surface, including overlays and
+   pseudo-elements. Components opt back into brief opacity/transform motion.
+   !important prevents legacy hover states and inline artwork filters escaping. */
+:root[data-ui-theme="simpleUI"] *,
+:root[data-ui-theme="simpleUI"] *::before,
+:root[data-ui-theme="simpleUI"] *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  mix-blend-mode: normal !important;
+  will-change: auto !important;
+  animation: none !important;
+  transition-property: transform, opacity, visibility !important;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(.2, .8, .2, 1);
+}
+
+:root[data-ui-theme="simpleUI"] {
+  --motion-fast: 140ms;
+  --motion-enter: 240ms;
+  --motion-exit: 180ms;
+  --motion-ease: cubic-bezier(.2, .8, .2, 1);
+}
+
+@keyframes simple-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes simple-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes simple-exit { to { opacity: 0; } }
+@keyframes simple-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-ui-theme="simpleUI"] :is(.page-enter, .screen:not(.touchpad-screen), .bottom-sheet, .detail-tab-panel, .detail-info-panel, .track-panel) {
+    animation: simple-enter var(--motion-enter) var(--motion-ease) backwards !important;
+  }
+  :root[data-ui-theme="simpleUI"] :is(.toast, .player-volume, .sheet-scrim, .player-state) {
+    animation: simple-fade var(--motion-enter) ease-out backwards !important;
+  }
+  :root[data-ui-theme="simpleUI"] :is(.toast.is-leaving, .player-volume.is-leaving, .sheet-layer.is-leaving) {
+    animation: simple-exit var(--motion-exit) ease-in forwards !important;
+  }
+  /* Only transient progress indicators repeat; resting screens have no loops. */
+  :root[data-ui-theme="simpleUI"] :is(.is-spinning, .spin) {
+    animation: simple-spin 1s linear infinite !important;
+  }
+}
