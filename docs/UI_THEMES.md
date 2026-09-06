@@ -58,6 +58,10 @@ Android `SessionRepository` 的 `ui_theme` 是设备偏好的唯一持久化来�
 
 ## 验证与边界
 
+真机数据见 [2026-09-06 性能报告](performance/2026-09-06/README.md)：已实测两套主题的
+2D/Full-SBS 首页、导航、控件和实际 Jellyfin 播放开销，并补充暂停画面及系统帧轨迹对照。
+报告对应被测版本 `a634122`；后续界面修正须另行真机回归。以下保留桌面验证记录。
+
 2026-09-06 的验证使用生产构建、隔离 Chrome、合成媒体库与本地生成的 H.264/AAC
 测试视频，未读取开发服务器凭据。
 
@@ -73,7 +77,7 @@ Android `SessionRepository` 的 `ui_theme` 是设备偏好的唯一持久化来�
   Debug lint、Debug APK 组装与 `verify-no-unity.sh` 通过。
 
 这些检查证明高开销装饰已从 simpleUI 的渲染路径移除，不能换算为真机节电百分比。
-当前没有连接 Android/RayNeo 设备，真机帧时间、GPU/内存/功耗、系统栏观感、2D/SBS、
+上述桌面验证时尚未连接 Android/RayNeo 设备，真机帧时间、GPU/内存/功耗、系统栏观感、2D/SBS、
 重连和 renderer 恢复仍需按 [Android 真机回归矩阵](ANDROID_ARCHITECTURE.md#device-regression-matrix)
 执行。两种主题都保留正常播放和必要加载反馈的开销。
 
