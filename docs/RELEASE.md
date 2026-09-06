@@ -69,7 +69,7 @@ git diff --exit-code
 git status --short
 ```
 
-构建必须通过两套前端检查与生产 bundle、JVM 测试、Debug/Release lint、APK assembly 和 no-Unity 检查。构建后 `git diff --exit-code` 必须通过，确保已提交的生产 bundle 可复现。
+构建必须通过两套前端检查与生产 bundle、JVM 测试、Debug/Release lint、APK assembly 和 APK 边界检查。构建后 `git diff --exit-code` 必须通过，确保已提交的生产 bundle 可复现。
 
 确认 staged 内容后，使用聚焦的 Conventional Commit 并先推送 `main`：
 
@@ -94,7 +94,7 @@ git push origin v<versionName>
 
 1. 验证 SemVer、`versionCode`、annotated tag 和 `main` 可达性；
 2. 恢复临时 keystore 并构建正式签名的 ARM64 Release APK；
-3. 验证生产 bundle 没有变化、APK 不包含 Unity/敏感配置，并使用 `apksigner` 验签；
+3. 验证生产 bundle 没有变化、APK 通过边界检查，并使用 `apksigner` 验签；
 4. 生成 SHA-256 文件并创建 GitHub Release。
 
 CI 不会发布 unsigned APK，也不会回退到 Debug 证书。

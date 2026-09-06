@@ -46,7 +46,7 @@ git push origin main v<versionName>
 
 ## 发布签名
 
-Release 必须持续使用同一份长期保存的自有证书。更换证书会阻止已安装版本原位升级；若需要兼容旧 Unity 版本，还必须使用旧版本的同一证书。禁止使用 Debug、临时或仅保存在 CI 中且没有离线备份的证书。
+Release 必须持续使用同一份长期保存的自有证书。更换证书会阻止已安装版本原位升级。禁止使用 Debug、临时或仅保存在 CI 中且没有离线备份的证书。
 
 GitHub Actions 需要以下 Repository Secrets：
 

@@ -48,7 +48,7 @@ case "${BUILD_VARIANT}" in
 esac
 
 if [[ "${BUILD_VARIANT}" == debug || "${BUILD_VARIANT}" == all ]]; then
-    "${SCRIPT_DIR}/verify-no-unity.sh" --apk-only \
+    "${SCRIPT_DIR}/verify-android.sh" --apk-only \
         "AndroidApp/app/build/outputs/apk/debug/app-debug.apk"
 fi
 
@@ -61,5 +61,5 @@ if [[ "${BUILD_VARIANT}" == release || "${BUILD_VARIANT}" == all ]]; then
                 && -n "${ANDROID_KEY_PASSWORD:-}" ) ]]; then
         release_apk="AndroidApp/app/build/outputs/apk/release/app-release.apk"
     fi
-    "${SCRIPT_DIR}/verify-no-unity.sh" --apk-only "${release_apk}"
+    "${SCRIPT_DIR}/verify-android.sh" --apk-only "${release_apk}"
 fi

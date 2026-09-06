@@ -79,7 +79,7 @@ AirApi.switchTo2DMode() -> ArcheryDevice.disableSideBySideMode()
 | Air 系列采用 BirdBath 光学 | 官方开发文档概览 [R0] | 必须区分镜片成像与软件会聚；不能按裸手机屏幕尺寸建模 |
 | Air SDK 的眼镜 2D UI 示例区域宽 1920 | 官方眼镜 2D UI 制作 [R3] | 支持以单眼 1920 像素宽建立参考模型，不证明本机实际缓冲区尺寸 |
 | `GetInterpupilDistance()` 文档返回范围 60–70 | 官方 NativeModule [R2] | 这是 SDK 配置接口说明，不能当作自动测得的用户瞳距或 Air 3s 完整适配范围 |
-| `GetGlassesQualternion()` 返回 3DoF 姿态；`ChangeFov()` 调整渲染参数 | [R2] | 不是改变硬件光学焦距；本次不引入官方示例的 Unity/Cardboard 运行时 |
+| `GetGlassesQualternion()` 返回 3DoF 姿态；`ChangeFov()` 调整渲染参数 | [R2] | 不是改变硬件光学焦距 |
 
 本次也检查了官方 `air-3s-joydock` 页面，但其正文和比较表实际混用了 Air 3s Pro 与 Air 2 信息。[R5] **不把该表的 47°、1200 nits 或设备模式表冒充为 Air 3s 的精确规格。**
 
@@ -615,7 +615,7 @@ canvas.restoreToCount(rightSave);
 - Renderer 恢复、登录退出和会话过期后清理。
 - 对应硬件 MediaCodec、实际刷新率、双眼时序与合成负担。
 
-涉及 WebView/桥接的实际代码提交，需完成 GlassesUI 类型检查、两套前端生产构建、JVM 测试、Android lint、APK 组装和 `scripts/verify-no-unity.sh`，并有真机矩阵记录。分析阶段只新增本文；后续实现验证记录在第 14 节。
+涉及 WebView/桥接的实际代码提交，需完成 GlassesUI 类型检查、两套前端生产构建、JVM 测试、Android lint、APK 组装和 `scripts/verify-android.sh`，并有真机矩阵记录。分析阶段只新增本文；后续实现验证记录在第 14 节。
 
 ### 12.3 建模阶段完成的验证
 
@@ -629,7 +629,7 @@ canvas.restoreToCount(rightSave);
 
 - **[R0]** [RayNeo DevDocs 概览](https://rayneo.gitbook.io/rayneo-devdoc)：Air 系列 BirdBath 定位与开发文档入口。
 - **[R1]** [RayNeo Air 3s 独立产品页](https://www.rayneo.com/products/rayneo-air-3s-xr-glasses)：1080P、46°、201 英寸、120 Hz 游戏模式、650 nits 与调光频率。该页没有给出本文需要的完整光学标定。
-- **[R2]** [Air SDK — NativeModule](https://rayneo.gitbook.io/rayneo-devdoc/air-xi-lie/unity-kai-fa/api/nativemodule)：视场、瞳距配置接口及 3DoF 四元数。仅作为硬件/渲染职责参考，不引入 Unity 或 Cardboard。
+- **[R2]** [Air SDK — NativeModule](https://rayneo.gitbook.io/rayneo-devdoc/air-xi-lie/unity-kai-fa/api/nativemodule)：视场、瞳距配置接口及 3DoF 四元数。仅作为硬件与渲染职责参考。
 - **[R3]** [Air SDK — 眼镜 2D UI 制作](https://rayneo.gitbook.io/rayneo-devdoc/air-xi-lie/unity-kai-fa/api/yan-jing-2d-ui-zhi-zuo)：示例 UI 区域宽 1920。
 - **[R4]** [项目固定的官方 Air SDK 1.0.3 包](https://file-down.test.leiniao.com/03/008765713965800010022373251.zip)，获取位置同时记录于 `scripts/install-rayneo-sdk.sh`。包 MD5：`0ae0fb9de5dffae6cb0344535e20c454`。检查对象：`ffalcon-sdk-client-1.0.3.aar` 中的 `com.tcl.xr.api.AirApi`、`XR Plugin.prefab`、`ParamChangeUpdate.cs` 与 `SampleSettings.cs`。示例 prefab 的 `field of view: 22.3`、`m_StereoConvergence: 10`、`m_StereoSeparation: 0.022` 没有被当作 Air 3s 的实际光学参数。
 - **[R5]** [官方 Air 3s JoyDock 路径页面](https://www.rayneo.com/products/air-3s-joydock)：查阅时主体混用其他型号，仅记录来源辨别过程，不用其比较表推定 Air 3s 精确参数。
@@ -670,7 +670,7 @@ Full-SBS 检查要求物理显示模式与根 View 都是 32:9 总画幅（单�
 
 - GlassesUI TypeScript 检查与 7 项现有前端测试通过；两套前端生产构建完成，CompanionUI 生成资源已更新。GlassesUI 的既有 HLS 大包提示仍存在。
 - 55 项 JVM 测试通过：包含全部档位和大小的设置校验、左右对称/总视差符号、边缘完整性、缩放独立性、分辨率归一化、持久化、回调与布局不同先后顺序、超时、断开重连和无自动重试。
-- Android `lintDebug` 0 错误、0 告警；`assembleDebug` 通过；源代码与 APK 的 `verify-no-unity.sh` 检查通过。
+- Android `lintDebug` 0 错误、0 告警；`assembleDebug` 通过；源代码与 APK 的 `verify-android.sh` 检查通过。
 - 生产版 CompanionUI 在本机模拟原生桥中完成交互检查：默认轻微/90%、独立调参、80%/95% 键盘边界、检查图开关、输出失败时禁用、离开设置清理、恢复默认；360×800 视口目视检查通过，无浏览器错误日志。这验证手机 UI 契约，不替代 Android 桥或眼镜硬件验收。
 - ADB 未检测到连接设备。尚未完成架构文档中的真机矩阵，尤其是 Air 3s 的 L/R 眼序、正视差方向、DOM/视频/字幕同帧变换、实际 Full-SBS 分辨率切换、播放连续性及佩戴舒适度。不能据桌面测试声称这些硬件项目已通过。
 
@@ -804,4 +804,4 @@ Chromium 实现核对来源：[AwContents.java](https://github.com/chromium/chro
 
 自动化切换测试在 HyperOS 关闭输出后，通过 ADB 为已连接眼镜恢复显示，用于在 8 秒窗口内测量连续性。这个测试辅助没有进入应用；日常连接和模式切换后，仍遵循用户确认的系统「屏幕镜像」操作。模式切换耗时约 1.5–1.9 秒，包含该测试辅助，不能当作用户手动操作耗时。
 
-桌面验证：两套前端生产构建、GlassesUI TypeScript、66 项 JVM 测试（0 失败）、Android lint、Debug APK 构建、版本与无 Unity/XR SDK 依赖检查通过。既有 HLS 大包提示仍在。真机结论覆盖本次显示修复和代表性视频；文字字幕、完整编码/HLS/音轨矩阵、会话异常、renderer 崩溃、声音与服务端上报次数的独立测量尚未补全。测试标记已移除，恢复轻微档位/95% 大小，关闭检查图并退出试播。
+桌面验证：两套前端生产构建、GlassesUI TypeScript、66 项 JVM 测试（0 失败）、Android lint、Debug APK 构建、版本与运行时依赖边界检查通过。既有 HLS 大包提示仍在。真机结论覆盖本次显示修复和代表性视频；文字字幕、完整编码/HLS/音轨矩阵、会话异常、renderer 崩溃、声音与服务端上报次数的独立测量尚未补全。测试标记已移除，恢复轻微档位/95% 大小，关闭检查图并退出试播。

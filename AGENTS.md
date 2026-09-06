@@ -23,12 +23,11 @@ bridges, playback, diagnostics, remote input, or display modes, read
 
 ## Architecture Guardrails
 
-Do not add Unity, Cardboard, LibVLC, a native fallback player, or duplicate
-native UI. The phone owns discovery and authentication; the glasses own
-browsing and playback. `SessionRepository` is the sole native session source.
-Validate and bound every WebView message, never expose secrets or arbitrary
-server errors, and clear native and glasses state on logout or unauthorized
-restore.
+Keep application UI and video playback in the embedded frontends. The phone
+owns discovery and authentication; the glasses own browsing and playback.
+`SessionRepository` is the sole native session source. Validate and bound every
+WebView message, never expose secrets or arbitrary server errors, and clear
+native and glasses state on logout or unauthorized restore.
 
 Preserve one glasses WebView and one HTML `<video>` in both `Mirror2D` and
 `StereoVirtualScreen`. Only an active hardware-mode transition may hide the
@@ -51,7 +50,7 @@ npm --prefix CompanionUI ci
 
 For focused frontend work, run `npm --prefix GlassesUI run check` and both
 frontend builds. WebView changes require both builds, JVM tests, lint, APK
-assembly, and `scripts/verify-no-unity.sh`. Device-facing changes also require
+assembly, and `scripts/verify-android.sh`. Device-facing changes also require
 the regression matrix in `docs/ANDROID_ARCHITECTURE.md`.
 
 ## Code and Repository Hygiene

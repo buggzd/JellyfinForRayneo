@@ -49,7 +49,7 @@ fail()
 if [[ "${apk_only}" == false ]]; then
     for legacy_path in Assets Packages ProjectSettings; do
         if [[ -e "${PROJECT_DIR}/${legacy_path}" ]]; then
-            fail "legacy Unity path still exists: ${legacy_path}/"
+            fail "unsupported project directory exists: ${legacy_path}/"
         fi
     done
 
@@ -62,7 +62,7 @@ if [[ "${apk_only}" == false ]]; then
             "${PROJECT_DIR}/AndroidApp" \
             "${PROJECT_DIR}/GlassesUI/src" \
             "${PROJECT_DIR}/CompanionUI/src" >/dev/null; then
-        fail "native application source still references a Unity or LibVLC runtime"
+        fail "application source references an unsupported runtime"
     fi
 
     glasses_webview_count="$(
@@ -97,7 +97,7 @@ else
 
     if printf '%s\n' "${apk_entries}" | rg -i \
             '(^|/)(libunity\.so|libvlc\.so|globalgamemanagers|sharedassets[0-9]*\.|level[0-9]+$|assets/bin/Data/|\.unity3d$)' >/dev/null; then
-        fail "APK contains a Unity or LibVLC runtime artifact"
+        fail "APK contains an unsupported runtime artifact"
     fi
 
     if ! printf '%s\n' "${apk_entries}" | rg -x \
@@ -123,7 +123,7 @@ else
     dex_strings="$(unzip -p "${apk_path}" 'classes*.dex' | strings)"
     if printf '%s\n' "${dex_strings}" | rg \
             '(^Lcom/unity3d/|^Lcom/tcl/unity/unityadapter/|UnityPlayer|UnitySendMessage|^Lorg/videolan/|libvlc)' >/dev/null; then
-        fail "APK DEX contains a Unity adapter, Unity Player, or LibVLC class"
+        fail "APK DEX contains an unsupported runtime class"
     fi
 
     if printf '%s\n' "${dex_strings}" | rg \
@@ -144,9 +144,9 @@ else
 fi
 
 if (( failures > 0 )); then
-    echo "No-Unity verification failed with ${failures} error(s)." >&2
+    echo "Android verification failed with ${failures} error(s)." >&2
     exit 1
 fi
 
-echo "No-Unity verification passed: ${apk_path}"
+echo "Android verification passed: ${apk_path}"
 wc -c < "${apk_path}" | awk '{printf "APK size: %.1f MiB\n", $1 / 1048576}'
