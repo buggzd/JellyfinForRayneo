@@ -43,15 +43,12 @@
 }
 
 .tutorial-header { height: clamp(65px, 11vh, 112px); }
-.tutorial-brand, .tutorial-header__meta { display: flex; align-items: center; gap: 18px; }
+.tutorial-brand { display: flex; align-items: center; gap: 18px; }
 .tutorial-brand { font-size: clamp(14px, 1.25vw, 21px); }
 .tutorial-brand > span:first-child { display: grid; width: 41px; height: 41px; place-items: center; color: #b3dcff; border: 1px solid #6289b052; border-radius: 50%; }
 .tutorial-brand strong { font-size: 17px; font-weight: 550; letter-spacing: .2em; }
 .tutorial-brand i { width: 1px; height: 17px; background: #bfdfff32; }
 .tutorial-brand > span:last-child { color: #bacbdd; }
-.tutorial-header__meta { color: var(--tutorial-dim); font-size: clamp(13px, 1.1vw, 18px); }
-.tutorial-header__meta button { display: grid; width: 38px; height: 38px; margin-left: 10px; place-items: center; color: #b2c5da; border: 1px solid #bedafa26; border-radius: 50%; background: transparent; }
-.tutorial-header__meta button:hover { color: white; background: #bddaff18; }
 
 .tutorial-eyebrow { display: flex; align-items: center; gap: 14px; color: #9ac9f1; font-size: clamp(14px, 1.2vw, 20px); letter-spacing: .07em; }
 .tutorial-eyebrow > i { width: 7px; height: 7px; border-radius: 50%; background: #91c9ff; box-shadow: 0 0 15px #5baeff; }

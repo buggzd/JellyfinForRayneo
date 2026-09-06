@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, CheckCheck, ChevronRight, Compass, Move, RotateCcw, Smartphone, Sparkles, X } from 'lucide-react'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Check, CheckCheck, ChevronRight, Compass, Move, RotateCcw, Smartphone, Sparkles } from 'lucide-react'
 import { useEffect, useLayoutEffect, useReducer, useRef } from 'react'
 import {
   initialTutorialState,
@@ -102,7 +102,6 @@ export default function RemoteTutorial({ onExit, onComplete }: { onExit: (outcom
       <div className="tutorial-shell" inert={state.exitOpen}>
         <header className="tutorial-header">
           <div className="tutorial-brand"><span><Compass size={25} /></span><strong>LUCENT</strong><i /><span>遥控入门</span></div>
-          <div className="tutorial-header__meta"><span>跟着做，就会了</span><button type="button" tabIndex={-1} aria-label="退出教学" onClick={() => dispatch({ type: 'exit' })}><X size={23} /></button></div>
         </header>
 
         {state.phase === 'welcome' ? (
