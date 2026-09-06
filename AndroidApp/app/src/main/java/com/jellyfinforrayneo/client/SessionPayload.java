@@ -267,6 +267,11 @@ final class SessionPayload
         return serverId;
     }
 
+    String getUserId()
+    {
+        return userId;
+    }
+
     String getUserName()
     {
         return userName;

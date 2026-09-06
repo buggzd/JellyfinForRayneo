@@ -12,7 +12,7 @@ public final class GlassesMessageTests
     @Test
     public void parse_AcceptsUnauthorizedAndRuntimeState() throws Exception
     {
-        GlassesMessage unauthorized = GlassesMessage.parse("{\"type\":\"unauthorized\"}");
+        GlassesMessage unauthorized = GlassesMessage.parse("{\"type\":\"unauthorized\",\"catalogGeneration\":3}");
         GlassesMessage runtime = GlassesMessage.parse(
                 "{\"type\":\"runtime_state\",\"state\":\"ready\"}");
 
@@ -94,6 +94,19 @@ public final class GlassesMessageTests
         assertEquals(0L, message.positionTicks);
         assertEquals(GlassesMessage.MAX_MEDIA_TICKS, message.durationTicks);
         assertEquals("Transcode", message.playMethod);
+    }
+
+    @Test
+    public void unauthorized_RequiresBoundedGenerationToProtectNewlySwitchedAccount()
+    {
+        assertNull(GlassesMessage.parse("{\"type\":\"unauthorized\"}"));
+        for (String value : new String[] {"-1", "1.5", "2147483648", "\"3\"", "null"})
+        {
+            assertNull(GlassesMessage.parse("{\"type\":\"unauthorized\",\"catalogGeneration\":" + value + "}"));
+        }
+        GlassesMessage message = GlassesMessage.parse("{\"type\":\"unauthorized\",\"catalogGeneration\":3}");
+        assertNotNull(message);
+        assertEquals(3, message.catalogGeneration);
     }
 
     private static String repeat(char value, int count)

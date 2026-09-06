@@ -56,6 +56,12 @@ final class CompanionWebViewController
         void clearSession();
 
         @android.webkit.JavascriptInterface
+        void activateSession(String accountId);
+
+        @android.webkit.JavascriptInterface
+        void removeSession(String accountId);
+
+        @android.webkit.JavascriptInterface
         void retryGlasses();
 
         @android.webkit.JavascriptInterface

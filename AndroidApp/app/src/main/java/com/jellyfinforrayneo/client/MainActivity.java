@@ -307,7 +307,9 @@ public final class MainActivity extends Activity
             companionWebView.handleBack();
             return;
         }
-        if ("settings".equals(webScreen) || "auth".equals(webScreen))
+        if ("settings".equals(webScreen) || "auth".equals(webScreen)
+                || "accounts".equals(webScreen)
+                || ("connect".equals(webScreen) && sessions.hasSession()))
         {
             companionWebView.handleBack();
             return;
@@ -366,17 +368,35 @@ public final class MainActivity extends Activity
         {
             return;
         }
-        sessions.save(session, persist);
+        if (!sessions.save(session, persist))
+        {
+            authentication.cancel();
+            quickConnectCode = "";
+            state = sessions.hasSession() ? "session_ready" : "login_required";
+            busy = false;
+            error = true;
+            message = "最多保留 12 个账号，请先移除一个不再使用的账号。";
+            companionWebView.openScreen("accounts");
+            pushCompanionState();
+            return;
+        }
         diagnosticLog.record(persist
                 ? DiagnosticLog.Event.AUTH_SUCCEEDED_PERSISTED
                 : DiagnosticLog.Event.AUTH_SUCCEEDED_EPHEMERAL);
+        showActiveSession(session, persist
+                ? "Jellyfin 会话已保存，正在同步眼镜媒体库。"
+                : "Jellyfin 已连接；会话仅在本次运行期间保留。");
+    }
+
+    private void showActiveSession(SessionPayload session, String statusMessage)
+    {
+        authentication.cancel();
+        clearActiveRuntime();
         selectedServerUrl = session.getServerUrl();
         selectedServerName = session.getServerName();
         selectedUserName = session.getUserName();
         state = "session_ready";
-        message = persist
-                ? "Jellyfin 会话已保存，正在同步眼镜媒体库。"
-                : "Jellyfin 已连接；会话仅在本次运行期间保留。";
+        message = statusMessage;
         quickConnectCode = "";
         glassesRuntimeState = "loading";
         glassesRuntimeErrorCode = "none";
@@ -386,22 +406,29 @@ public final class MainActivity extends Activity
         discovery.cancel();
         discoveryScanning = false;
         glassesPresentation.refreshBootstrap();
+        companionWebView.openScreen("home");
         pushCompanionState();
     }
 
-    private void clearSession(boolean unauthorized)
+    private void clearActiveRuntime()
     {
         glassesPresentation.setStereoTestPattern(false);
-        authentication.cancel();
-        diagnosticLog.record(unauthorized
-                ? DiagnosticLog.Event.SESSION_UNAUTHORIZED
-                : DiagnosticLog.Event.SESSION_CLEARED);
-        sessions.clear();
         remoteCommands.clear();
         playback.clear();
         glassesSearchActive = false;
         glassesSearchQuery = "";
         companionWebView.hideSearchKeyboard();
+    }
+
+    private void clearSession(boolean unauthorized)
+    {
+        clearActiveRuntime();
+        authentication.cancel();
+        diagnosticLog.record(unauthorized
+                ? DiagnosticLog.Event.SESSION_UNAUTHORIZED
+                : DiagnosticLog.Event.SESSION_CLEARED);
+        sessions.clear();
+        advanceGlassesCatalogGeneration();
         quickConnectCode = "";
         glassesRuntimeState = "no-session";
         glassesRuntimeErrorCode = "none";
@@ -412,13 +439,13 @@ public final class MainActivity extends Activity
         busy = false;
         error = unauthorized;
         glassesPresentation.refreshBootstrap();
-        companionWebView.openScreen("connect");
+        companionWebView.openScreen(sessions.accountSummaries().length() > 0 ? "accounts" : "connect");
         pushCompanionState();
     }
 
     private void startDiscovery()
     {
-        if (destroyed || busy || discoveryScanning || sessions.hasSession())
+        if (destroyed || busy || discoveryScanning)
         {
             return;
         }
@@ -496,7 +523,10 @@ public final class MainActivity extends Activity
                 clearSession(false);
                 break;
             case UNAUTHORIZED:
-                clearSession(true);
+                if (incoming.catalogGeneration == glassesCatalogGeneration)
+                {
+                    clearSession(true);
+                }
                 break;
             case PLAYBACK_STATE:
                 playback.update(incoming);
@@ -506,6 +536,11 @@ public final class MainActivity extends Activity
                 recordRuntimeDiagnostic(incoming);
                 glassesRuntimeState = incoming.state;
                 glassesRuntimeErrorCode = incoming.errorCode;
+                if ("auth".equals(webScreen))
+                {
+                    pushCompanionState();
+                    break;
+                }
                 if ("error".equals(incoming.state))
                 {
                     state = "glasses_error";
@@ -554,7 +589,9 @@ public final class MainActivity extends Activity
                     remoteCommands.clear();
                 }
                 pushCompanionState();
-                if (glassesSearchActive && !wasSearchActive)
+                if (glassesSearchActive && !wasSearchActive
+                        && ("home".equals(webScreen) || "settings".equals(webScreen)
+                                || "touchpad".equals(webScreen)))
                 {
                     companionWebView.showSearchKeyboard();
                 }
@@ -610,6 +647,11 @@ public final class MainActivity extends Activity
             result.put("quickConnectCode", quickConnectCode);
             result.put("sessionAvailable", session != null);
             result.put("sessionSaved", sessions.isPersisted());
+            result.put("activeSessionId", sessions.getActiveId());
+            result.put("accounts", sessions.accountSummaries());
+            result.put("accountLimit", SessionRepository.MAX_ACCOUNTS);
+            result.put("loginServerUrl", selectedServerUrl);
+            result.put("loginServerName", selectedServerName);
             result.put("busy", busy);
             result.put("webHardwareAccelerated",
                     companionWebView != null && companionWebView.isHardwareAccelerated());
@@ -1172,8 +1214,21 @@ public final class MainActivity extends Activity
             String name = bounded(serverName, SessionPayload.MAX_SERVER_NAME_LENGTH).trim();
             runOnUiThread(() ->
             {
+                if (url.isEmpty())
+                {
+                    showInvalidServerAddress();
+                    companionWebView.openScreen("connect");
+                    return;
+                }
+                authentication.cancel();
                 selectedServerUrl = url;
                 selectedServerName = name;
+                selectedUserName = "";
+                quickConnectCode = "";
+                busy = false;
+                error = false;
+                state = sessions.hasSession() ? "session_ready" : "login_required";
+                message = "请登录所选服务器；当前连接会保留到登录成功。";
                 pushCompanionState();
             });
         }
@@ -1253,8 +1308,8 @@ public final class MainActivity extends Activity
             {
                 authentication.cancel();
                 busy = false;
-                state = "login_required";
-                message = "已取消快速登录。";
+                state = sessions.hasSession() ? "session_ready" : "login_required";
+                message = "已取消登录。";
                 quickConnectCode = "";
                 error = false;
                 pushCompanionState();
@@ -1265,6 +1320,56 @@ public final class MainActivity extends Activity
         public void clearSession()
         {
             runOnUiThread(() -> MainActivity.this.clearSession(false));
+        }
+
+        @JavascriptInterface
+        public void activateSession(String accountId)
+        {
+            if (!SessionRepository.validAccountId(accountId))
+            {
+                return;
+            }
+            runOnUiThread(() ->
+            {
+                if (destroyed)
+                {
+                    return;
+                }
+                if (accountId.equals(sessions.getActiveId()))
+                {
+                    companionWebView.openScreen("home");
+                    return;
+                }
+                SessionPayload session = sessions.activate(accountId);
+                if (session != null)
+                {
+                    showActiveSession(session, "已切换账号，正在同步眼镜媒体库。");
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void removeSession(String accountId)
+        {
+            if (!SessionRepository.validAccountId(accountId))
+            {
+                return;
+            }
+            runOnUiThread(() ->
+            {
+                if (destroyed)
+                {
+                    return;
+                }
+                if (accountId.equals(sessions.getActiveId()))
+                {
+                    MainActivity.this.clearSession(false);
+                }
+                else if (sessions.remove(accountId))
+                {
+                    pushCompanionState();
+                }
+            });
         }
 
         @JavascriptInterface
@@ -1383,6 +1488,7 @@ public final class MainActivity extends Activity
                     && !"auth".equals(requested)
                     && !"home".equals(requested)
                     && !"settings".equals(requested)
+                    && !"accounts".equals(requested)
                     && !"touchpad".equals(requested))
             {
                 return;

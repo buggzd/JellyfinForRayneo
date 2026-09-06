@@ -40,6 +40,7 @@ function patchCatalogItem(
 export function useJellyfin() {
   const [runtime, setRuntime] = useState<RuntimeBootstrap | null>(null)
   const [snapshot, setSnapshot] = useState<CatalogSnapshot | null>(null)
+  const [catalogOwner, setCatalogOwner] = useState<JellyfinClient | null>(null)
   const [status, setStatus] = useState<JellyfinUiStatus>('booting')
   const [error, setError] = useState('')
   const [errorCode, setErrorCode] = useState<JellyfinFailureCode>('none')
@@ -76,15 +77,16 @@ export function useJellyfin() {
   const client = useMemo(
     () => session ? new JellyfinClient(
       session,
-      () => postNativeMessage({ type: 'unauthorized' }),
+      () => postNativeMessage({ type: 'unauthorized', catalogGeneration }),
     ) : null,
     // The key deliberately includes the access token so a phone-side relogin replaces the client.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sessionKey],
+    [sessionKey, catalogGeneration],
   )
 
   const loadCatalog = useCallback(async (background = false) => {
     if (!client) return false
+    setCatalogOwner(client)
     const generation = ++loadGeneration.current
     if (background) setRefreshing(true)
     else {
@@ -263,14 +265,17 @@ export function useJellyfin() {
     return catalogSucceeded
   }, [loadCatalog, loadSeriesIndex])
 
+  // Hide the previous account's catalog before effects run, so an existing
+  // player cannot receive the new account's client with the old media item.
+  const ownsCatalog = catalogOwner === client
   return {
     runtime,
-    snapshot,
-    status,
-    error,
-    errorCode,
-    refreshing,
-    seriesIndex,
+    snapshot: ownsCatalog ? snapshot : null,
+    status: ownsCatalog ? status : client ? 'loading' as const : 'no-session' as const,
+    error: ownsCatalog ? error : '',
+    errorCode: ownsCatalog ? errorCode : 'none' as const,
+    refreshing: ownsCatalog && refreshing,
+    seriesIndex: ownsCatalog ? seriesIndex : [],
     seriesIndexStatus,
     refresh,
     retry,

@@ -30,9 +30,9 @@ import {
   Settings2,
   Share2,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles,
   UserRound,
+  Trash2,
   Vibrate,
   Wifi,
   X,
@@ -107,6 +107,20 @@ function serverFromNative(state) {
   }
 }
 
+function sameServer(server, account) {
+  if (server.id && server.id !== 'manual' && server.id === account.serverId) return true
+  const normalize = (value) => {
+    try {
+      const address = /^https?:\/\//i.test(value) ? value : `http://${value}`
+      return new URL(address).href.replace(/\/+$/, '')
+    } catch {
+      return ''
+    }
+  }
+  const address = normalize(server.host)
+  return Boolean(address) && address === normalize(account.serverUrl)
+}
+
 function profileInitials(username) {
   const normalized = (username || 'Jellyfin').trim()
   if (!normalized) return 'JF'
@@ -138,10 +152,10 @@ function normalizeRemoteSearchQuery(value) {
     .slice(0, 48)
 }
 
-function useStoredState(key, initialValue) {
+function useStoredState(key, initialValue, enabled = true) {
   const [value, setValue] = useState(() => {
     try {
-      const stored = localStorage.getItem(key)
+      const stored = enabled ? localStorage.getItem(key) : null
       return stored ? JSON.parse(stored) : initialValue
     } catch {
       return initialValue
@@ -149,15 +163,31 @@ function useStoredState(key, initialValue) {
   })
 
   useEffect(() => {
-    localStorage.setItem(key, JSON.stringify(value))
-  }, [key, value])
+    if (enabled && value?.saved !== false) localStorage.setItem(key, JSON.stringify(value))
+    else localStorage.removeItem(key)
+  }, [key, value, enabled])
 
   return [value, setValue]
 }
 
 function App() {
   const isNative = useMemo(() => hasNativeBridge(), [])
-  const [session, setSession] = useStoredState('jellyfin-rayneo-session', null)
+  const [session, setSession] = useStoredState('jellyfin-rayneo-session', null, !isNative)
+  const [demoAccounts, setDemoAccounts] = useState(() => {
+    if (isNative) return []
+    try {
+      const stored = JSON.parse(localStorage.getItem('jellyfin-rayneo-accounts') || '[]')
+      if (Array.isArray(stored) && stored.length) return stored.slice(0, 12)
+    } catch { /* A missing preview history starts empty. */ }
+    return session ? [{ ...session, id: session.id || 'demo-restored', saved: true }] : []
+  })
+  const [pendingRemoval, setPendingRemoval] = useState(null)
+  const pendingRemovalRef = useRef(null)
+  pendingRemovalRef.current = pendingRemoval
+  const activeSessionIdRef = useRef('')
+  const accountsAvailableRef = useRef(false)
+  const authReturnRef = useRef('connect')
+  const demoLoginTimer = useRef(null)
   const [displayMode, setDisplayMode] = useStoredState('jellyfin-rayneo-display', 'stereo')
   const [haptics, setHaptics] = useStoredState('jellyfin-rayneo-haptics', true)
   const [screen, setScreen] = useState(() => (!isNative && session ? 'home' : 'connect'))
@@ -184,6 +214,23 @@ function App() {
   const opticsButtonRef = useRef(null)
   const opticsRectRef = useRef(null)
 
+  const accounts = isNative ? nativeState?.accounts || [] : demoAccounts.map((account) => ({
+    id: account.id,
+    serverUrl: account.server.host,
+    serverName: account.server.name,
+    serverId: account.server.id,
+    username: account.username,
+    saved: account.saved !== false,
+    active: session?.id === account.id || (!session?.id && session?.username === account.username
+      && session?.server.host === account.server.host),
+  }))
+  accountsAvailableRef.current = accounts.length > 0
+
+  useEffect(() => {
+    if (isNative) localStorage.removeItem('jellyfin-rayneo-accounts')
+    else localStorage.setItem('jellyfin-rayneo-accounts', JSON.stringify(demoAccounts.filter((account) => account.saved !== false)))
+  }, [isNative, demoAccounts])
+
   const notify = (message, tone = 'info') => {
     window.clearTimeout(toastTimer.current)
     setToast({ text: message, tone })
@@ -202,7 +249,10 @@ function App() {
     manualOpenRef.current = manualOpen
   }, [manualOpen])
 
-  useEffect(() => () => window.clearTimeout(toastTimer.current), [])
+  useEffect(() => () => {
+    window.clearTimeout(toastTimer.current)
+    window.clearTimeout(demoLoginTimer.current)
+  }, [])
 
   useEffect(() => {
     screenRef.current = screen
@@ -248,20 +298,29 @@ function App() {
       setServers(Array.isArray(next.servers) ? next.servers : [])
 
       const stateServer = serverFromNative(next)
-      if (stateServer) setSelectedServer(stateServer)
+      const loginServer = serverFromNative({
+        serverUrl: next.loginServerUrl,
+        serverName: next.loginServerName,
+      })
+      if (loginServer) setSelectedServer(loginServer)
+      const previousSessionId = activeSessionIdRef.current
+      activeSessionIdRef.current = next.sessionAvailable ? next.activeSessionId : ''
 
       if (next.sessionAvailable) {
         const activeServer = stateServer || selectedServer
         setSession({
+          id: next.activeSessionId,
           username: next.username || 'Jellyfin',
           server: activeServer,
           restored: true,
           saved: Boolean(next.sessionSaved),
         })
-        if (screenRef.current === 'connect' || screenRef.current === 'auth') go('home')
+        if (!previousSessionId && (screenRef.current === 'connect' || screenRef.current === 'auth')) go('home')
       } else {
         setSession(null)
-        if (screenRef.current === 'home' || screenRef.current === 'settings') go('connect')
+        if (['home', 'settings', 'touchpad'].includes(screenRef.current)) {
+          go(next.accounts?.length ? 'accounts' : 'connect')
+        }
       }
 
       if (next.state === 'quick_connect_waiting') {
@@ -292,14 +351,17 @@ function App() {
     const nativeApi = {
       receiveState,
       openScreen: (requestedScreen) => {
-        if (requestedScreen === 'settings') {
-          go('settings')
-          return
-        }
+        if (!['home', 'settings', 'accounts', 'connect', 'auth'].includes(requestedScreen)) return
+        setManualOpen(false)
+        setPendingRemoval(null)
         setAuthMode('password')
-        go('connect')
+        go(requestedScreen)
       },
       handleBack: () => {
+        if (pendingRemovalRef.current) {
+          setPendingRemoval(null)
+          return
+        }
         if (manualOpenRef.current) {
           setManualOpen(false)
           return
@@ -309,7 +371,11 @@ function App() {
         } else if (screenRef.current === 'auth') {
           callNative('cancelQuickConnect')
           setAuthMode('password')
-          go('connect')
+          go(authReturnRef.current)
+        } else if (screenRef.current === 'accounts') {
+          go(activeSessionIdRef.current ? 'settings' : 'connect')
+        } else if (screenRef.current === 'connect' && accountsAvailableRef.current) {
+          go('accounts')
         }
       },
     }
@@ -323,40 +389,71 @@ function App() {
     }
   }, [isNative])
 
-  const chooseServer = (server) => {
+  const openLogin = (server, returnScreen = 'connect') => {
+    authReturnRef.current = returnScreen
     setSelectedServer(server)
     if (isNative) callNative('selectServer', server.host, server.name)
     setAuthMode('password')
     go('auth')
   }
 
-  const finishLogin = (username = 'demo') => {
+  const chooseServer = (server) => {
+    const matching = accounts.some((account) => sameServer(server, account))
+    if (matching) go('accounts')
+    else openLogin(server)
+  }
+
+  const finishLogin = (username = 'demo', remember = true) => {
+    const existing = demoAccounts.find((account) => account.server.host === selectedServer.host && account.username === username)
+    if (!existing && demoAccounts.length >= 12) {
+      notify('最多保留 12 个账号，请先移除一个不再使用的账号', 'error')
+      return
+    }
     const nextSession = {
+      id: existing?.id || crypto.randomUUID().replaceAll('-', ''),
       username,
       server: selectedServer,
       restored: false,
+      saved: remember,
     }
+    setDemoAccounts((current) => [...current.filter((account) => account.id !== nextSession.id), nextSession])
     setSession(nextSession)
     go('home')
-    notify('连接就绪，登录会话已保存', 'success')
+    notify(remember ? '连接就绪，账号已保存' : '连接就绪，仅本次运行保留', 'success')
   }
 
-  const changeServer = () => {
-    if (isNative) callNative('clearSession')
-    setSession(null)
-    go('connect')
+  const activateAccount = (account) => {
+    if (isNative) callNative('activateSession', account.id)
+    else {
+      const saved = demoAccounts.find((entry) => entry.id === account.id)
+      if (saved) {
+        setSession(saved)
+        setSelectedServer(saved.server)
+        go('home')
+      }
+    }
   }
 
-  const changeAccount = () => {
-    if (isNative) callNative('clearSession')
-    setSession(null)
+  const removeAccount = () => {
+    if (!pendingRemoval) return
+    if (isNative) callNative('removeSession', pendingRemoval.id)
+    else {
+      setDemoAccounts((current) => current.filter((account) => account.id !== pendingRemoval.id))
+      if (pendingRemoval.active) setSession(null)
+    }
+    setPendingRemoval(null)
+  }
+
+  const leaveLogin = () => {
+    window.clearTimeout(demoLoginTimer.current)
+    if (isNative) callNative('cancelQuickConnect')
     setAuthMode('password')
-    go('auth')
+    go(authReturnRef.current)
   }
 
   const login = (username, password, remember) => {
     if (!isNative) {
-      window.setTimeout(() => finishLogin(username), 820)
+      demoLoginTimer.current = window.setTimeout(() => finishLogin(username, remember), 820)
       return
     }
     callNative('login', selectedServer.host, username, password, remember)
@@ -483,7 +580,7 @@ function App() {
         <GlassOptics />
         {screen !== 'touchpad' && <StatusBar />}
 
-        <div className="screen-stack" inert={manualOpen}>
+        <div className="screen-stack" inert={manualOpen || Boolean(pendingRemoval)}>
           {screen === 'connect' && (
             <ConnectScreen
               session={session}
@@ -491,6 +588,8 @@ function App() {
               scanning={Boolean(nativeState?.discoveryScanning)}
               discoveryMessage={nativeState?.discoveryMessage || ''}
               onRestore={() => go('home')}
+              onBack={accounts.length ? () => go('accounts') : null}
+              onAccounts={accounts.length ? () => go('accounts') : null}
               onChoose={chooseServer}
               onManual={() => setManualOpen(true)}
               onScan={isNative ? () => callNative('scan') : null}
@@ -503,7 +602,7 @@ function App() {
               server={selectedServer}
               mode={authMode}
               setMode={setAuthMode}
-              onBack={() => go('connect')}
+              onBack={leaveLogin}
               onComplete={finishLogin}
               onLogin={login}
               onQuickStart={beginQuickConnect}
@@ -520,11 +619,10 @@ function App() {
             <HomeScreen
               session={session}
               server={selectedServer}
-              displayMode={displayMode}
-              setDisplayMode={changeDisplayMode}
               onTouchpad={openTouchpad}
               onRetry={() => callNative('retryGlasses')}
               onSettings={() => go('settings')}
+              onAccounts={() => go('accounts')}
               deviceState={nativeState}
               notify={notify}
             />
@@ -543,8 +641,8 @@ function App() {
               isNative={isNative}
               haptics={haptics}
               setHaptics={setHaptics}
-              onChangeAccount={changeAccount}
-              onChangeServer={changeServer}
+              onChangeAccount={() => go('accounts')}
+              onChangeServer={() => go('accounts')}
               onReset={resetPreferences}
               onShareDiagnostics={() => {
                 if (isNative) callNative('shareDiagnostics')
@@ -552,6 +650,17 @@ function App() {
               }}
               nativeState={nativeState}
               notify={notify}
+            />
+          )}
+
+          {screen === 'accounts' && (
+            <AccountsScreen
+              accounts={accounts}
+              onBack={() => go(session ? 'settings' : 'connect')}
+              onAddServer={() => go('connect')}
+              onAddAccount={(account) => openLogin(serverFromNative(account), 'accounts')}
+              onActivate={activateAccount}
+              onRemove={setPendingRemoval}
             />
           )}
 
@@ -585,14 +694,15 @@ function App() {
             open={manualOpen}
             onClose={() => setManualOpen(false)}
             onContinue={(server) => {
-              setSelectedServer(server)
               setManualOpen(false)
-              setAuthMode('password')
-              go('auth')
+              chooseServer(server)
             }}
           />
         )}
 
+        {pendingRemoval && (
+          <RemoveAccountDialog account={pendingRemoval} onCancel={() => setPendingRemoval(null)} onConfirm={removeAccount} />
+        )}
         <Toast message={toast} />
       </main>
     </div>
@@ -668,6 +778,8 @@ function ConnectScreen({
   scanning: nativeScanning,
   discoveryMessage,
   onRestore,
+  onBack,
+  onAccounts,
   onChoose,
   onManual,
   onScan,
@@ -694,7 +806,7 @@ function ConnectScreen({
   return (
     <section className="screen connect-screen">
       <header className="top-row">
-        <Brand />
+        {onBack ? <button className="icon-button glass-soft" onClick={onBack} aria-label="返回服务器与账号"><ArrowLeft size={20} /></button> : <Brand />}
         <button className="icon-button glass-soft" aria-label="更多选项" onClick={() => notify('Jellyfin for RayNeo · 手机伴侣')}>
           <MoreHorizontal size={20} />
         </button>
@@ -711,13 +823,19 @@ function ConnectScreen({
         <div className="art-hero__glint" />
       </div>
 
+      {onAccounts && (
+        <button className="saved-accounts-link glass-panel" onClick={onAccounts}>
+          <UserRound size={18} /><span>已登录的服务器与账号</span><ChevronRight size={18} />
+        </button>
+      )}
+
       {session && (
         <button className="restore-card glass-panel pressable" onClick={onRestore}>
           <span className="server-orb server-orb--ready"><Zap size={18} /></span>
           <span className="restore-card__copy">
-            <small>已保存的会话</small>
+            <small>当前连接</small>
             <strong>{session.server?.name ?? 'Jellyfin 媒体库'}</strong>
-            <em>{session.username} · 可直接恢复</em>
+            <em>{session.username} · 继续使用，无需登录</em>
           </span>
           <ChevronRight size={20} />
         </button>
@@ -809,16 +927,10 @@ function AuthScreen({
   notify,
 }) {
   const [passwordVisible, setPasswordVisible] = useState(false)
-  const [username, setUsername] = useState(nativeState?.username || '')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    if (!isNative) return
-    setLoading(Boolean(nativeState?.busy))
-    if (!username && nativeState?.username) setUsername(nativeState.username)
-  }, [isNative, nativeState?.busy, nativeState?.username])
 
   const login = () => {
     if (loading || nativeState?.busy) return
@@ -826,7 +938,7 @@ function AuthScreen({
       notify('请填写 Jellyfin 用户名', 'error')
       return
     }
-    setLoading(true)
+    if (!isNative) setLoading(true)
     onLogin(username.trim(), password, remember)
     setPassword('')
   }
@@ -1025,11 +1137,10 @@ function QuickConnect({
 function HomeScreen({
   session,
   server,
-  displayMode,
-  setDisplayMode,
   onTouchpad,
   onRetry,
   onSettings,
+  onAccounts,
   deviceState,
   notify,
 }) {
@@ -1047,23 +1158,10 @@ function HomeScreen({
     unknown: 'UNKNOWN',
   }[deviceState?.glassesRuntimeErrorCode] || 'UNKNOWN'
   let welcomeTitle = '等待连接 RayNeo Air'
-  let connectionLabel = '待连接'
-  if (connected) {
-    welcomeTitle = '眼镜画面正在启动'
-    connectionLabel = '已连接'
-  }
-  if (displayReady) {
-    welcomeTitle = '眼镜画面已启动'
-    connectionLabel = '画面已启动'
-  }
-  if (mediaError) {
-    welcomeTitle = '媒体库连接失败'
-    connectionLabel = '加载失败'
-  }
-  if (mediaReady) {
-    welcomeTitle = '媒体库已准备就绪'
-    connectionLabel = '媒体已连接'
-  }
+  if (connected) welcomeTitle = '正在准备眼镜画面'
+  if (displayReady) welcomeTitle = '画面已启动，正在连接媒体库'
+  if (mediaError) welcomeTitle = '媒体库连接失败，请重试连接'
+  if (mediaReady) welcomeTitle = '一切就绪，开始你的观影时光'
 
   return (
     <section className={`screen home-screen with-nav ${mediaError ? 'has-runtime-error' : ''}`}>
@@ -1077,23 +1175,23 @@ function HomeScreen({
 
       <div className="welcome-line">
         <div>
-          <span className="eyebrow">YOUR CONNECTION</span>
-          <h1>{welcomeTitle}</h1>
+          <span className="eyebrow">MY DEVICES</span>
+          <h1>我的设备</h1>
+          <p>{welcomeTitle}</p>
         </div>
-        <span className={`online-label ${!connected || mediaError ? 'is-offline' : ''}`}><i /> {connectionLabel}</span>
       </div>
 
       <div className="device-hero glass-panel">
-        <img src={assetUrl('luma-device-card-light.png')} alt="明亮的冰玻璃流体背景" />
+        <img src={assetUrl('luma-device-card-light.png')} alt="" />
         <div className="device-hero__mist" />
         <div className="device-hero__head">
           <span className={`connected-pill ${connected ? '' : 'is-offline'}`}><i /> {connected ? '眼镜已连接' : '等待连接眼镜'}</span>
           <button onClick={() => notify(deviceState?.displayMessage || 'RayNeo Air 3S · USB-C 空间显示')} aria-label="设备详情"><MoreHorizontal size={19} /></button>
         </div>
+        <img className="device-hero__product" src={assetUrl('rayneo-air-3s.webp')} alt="RayNeo Air 3S，深色一体式镜片与白色镜腿" />
         <div className="device-hero__info">
-          <small>RAYNEO AIR 3S</small>
-          <strong>空间显示器</strong>
-          <span><Zap size={13} fill="currentColor" /> {mediaReady ? '媒体库已就绪' : mediaError ? '媒体库连接失败' : displayReady ? '画面已启动，正在连接媒体库' : connected ? '正在准备画面' : 'USB-C 待连接'}</span>
+          <strong>RayNeo Air 3S</strong>
+          <span><Zap size={13} /> {connected ? 'USB-C 已连接' : '通过 USB-C 连接眼镜'}</span>
         </div>
       </div>
 
@@ -1109,23 +1207,6 @@ function HomeScreen({
         </div>
       )}
 
-      <section className="mode-card glass-panel">
-        <div className="card-title-row">
-          <div>
-            <span className="eyebrow">DISPLAY MODE</span>
-            <h2>画面输出</h2>
-          </div>
-          <SlidersHorizontal size={19} />
-        </div>
-        <ModeSelector value={displayMode} onChange={setDisplayMode} />
-        {deviceState && <DisplayModeStatus value={displayMode} state={deviceState} onRetry={() => setDisplayMode(displayMode)} />}
-        <p>
-          {displayMode === 'mirror'
-            ? '双眼显示相同的完整画面。'
-            : '将 2D 内容放在虚拟银幕上，可在设置中调整远近感与大小。'}
-        </p>
-      </section>
-
       <button className="touchpad-launch pressable" onClick={onTouchpad}>
         <span className="touchpad-launch__orb"><span /></span>
         <span className="touchpad-launch__copy">
@@ -1137,15 +1218,15 @@ function HomeScreen({
         <i className="touchpad-launch__glow" />
       </button>
 
-      <div className="connection-card glass-panel">
+      <button className="connection-card glass-panel pressable" onClick={onAccounts} aria-label="管理服务器与账号">
         <span className="server-orb server-orb--small"><Server size={17} /></span>
         <span>
-          <small>当前媒体会话</small>
+          <small>当前媒体库</small>
           <strong>{activeServer?.name ?? 'Jellyfin 媒体库'}</strong>
-          <em>{username} · {activeServer?.host ?? '尚未选择服务器'}</em>
+          <em>{username} · 当前账号</em>
         </span>
-        <span className="session-check"><Check size={14} /></span>
-      </div>
+        <span className="connection-card__action">管理 <ChevronRight size={16} /></span>
+      </button>
     </section>
   )
 }
@@ -1231,7 +1312,7 @@ function SettingsScreen({
           <strong>{username}</strong>
           <span><i /> 已登录 · {sessionSaved ? '会话已保存' : '仅本次运行'}</span>
         </div>
-        <button onClick={onChangeAccount}>更换</button>
+        <button onClick={onChangeAccount}>管理</button>
       </div>
 
       <SettingsGroup title="媒体服务器">
@@ -1241,7 +1322,7 @@ function SettingsScreen({
             <strong>{activeServer?.name ?? 'Jellyfin 媒体库'}</strong>
             <small>{activeServer?.host ?? '尚未选择服务器'}</small>
           </span>
-          <span className="setting-action">更换 <ChevronRight size={15} /></span>
+          <span className="setting-action">管理 <ChevronRight size={15} /></span>
         </button>
       </SettingsGroup>
 
@@ -1331,6 +1412,78 @@ function SettingsScreen({
 
       <p className="version-copy">JELLYFIN FOR RAYNEO · COMPANION</p>
     </section>
+  )
+}
+
+function AccountsScreen({ accounts, onBack, onAddServer, onAddAccount, onActivate, onRemove }) {
+  const groups = Object.values(accounts.reduce((result, account) => {
+    const key = account.serverUrl
+    if (!result[key]) result[key] = { server: account, accounts: [] }
+    result[key].accounts.push(account)
+    return result
+  }, Object.create(null)))
+
+  return (
+    <section className="screen accounts-screen">
+      <header className="subpage-header">
+        <button className="icon-button glass-soft" onClick={onBack} aria-label="返回"><ArrowLeft size={20} /></button>
+        <div className="subpage-header__title"><strong>服务器与账号</strong><span>{groups.length} 台服务器 · {accounts.length} 个账号</span></div>
+        <span className="account-header-icon"><Router size={22} /></span>
+      </header>
+      <div className="accounts-intro">
+        <h1>连接你的媒体库</h1>
+        <p>切换已登录账号，无需重复输入密码。添加服务器或账号时，当前连接会保留到登录成功。</p>
+      </div>
+      {groups.map((group) => (
+        <section className="account-server-card glass-panel" key={group.server.serverUrl}>
+          <header>
+            <span className="server-orb server-orb--small"><Server size={18} /></span>
+            <div><h2>{group.server.serverName || 'Jellyfin 媒体库'}</h2><p>{group.server.serverUrl}</p></div>
+          </header>
+          <div className="saved-account-list">
+            {group.accounts.map((account) => (
+              <div className={`saved-account-row ${account.active ? 'is-active' : ''}`} key={account.id}>
+                <button className="saved-account-select" onClick={() => onActivate(account)} aria-label={`${account.active ? '继续使用' : '切换到'} ${account.username}`}>
+                  <span className="saved-account-avatar">{profileInitials(account.username)}</span>
+                  <span className="saved-account-copy"><strong>{account.username || 'Jellyfin 用户'}</strong><small>{account.saved ? '登录已保存' : '仅本次运行'}</small></span>
+                  <span className="saved-account-state">{account.active ? <><Check size={13} /> 使用中</> : <>切换 <ChevronRight size={14} /></>}</span>
+                </button>
+                <button className="remove-account-button" onClick={() => onRemove(account)} aria-label={`移除 ${account.username} 的登录`}><Trash2 size={17} /></button>
+              </div>
+            ))}
+          </div>
+          <button className="add-account-button" onClick={() => onAddAccount(group.server)}><Plus size={16} /> 添加账号</button>
+        </section>
+      ))}
+      {!accounts.length && <div className="accounts-empty glass-panel"><UserRound size={28} /><strong>还没有已登录账号</strong><p>登录服务器后，账号会显示在这里。</p></div>}
+      <button className="primary-button pressable" onClick={onAddServer}><Plus size={18} /><span>添加服务器</span></button>
+      {accounts.length >= 12 && <p className="accounts-limit" role="status">已达到 12 个账号的上限，添加前请先移除不再使用的账号。</p>}
+    </section>
+  )
+}
+
+function RemoveAccountDialog({ account, onCancel, onConfirm }) {
+  const dialogRef = useRef(null)
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const opener = document.activeElement
+    const overflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    dialog.showModal()
+    return () => {
+      dialog.close()
+      document.body.style.overflow = overflow
+      if (opener?.isConnected) opener.focus({ preventScroll: true })
+    }
+  }, [])
+
+  return (
+    <dialog ref={dialogRef} className="account-dialog" aria-labelledby="remove-account-title" aria-describedby="remove-account-description" onCancel={(event) => { event.preventDefault(); onCancel() }}>
+      <h2 id="remove-account-title">移除这个登录账号？</h2>
+      <p className="remove-account-name">{account.username} · {account.serverName || 'Jellyfin'}</p>
+      <p id="remove-account-description">移除本机保存的登录状态，重新使用需要登录。{account.active ? '当前连接也会断开。' : ''}</p>
+      <div className="account-dialog-actions"><button className="secondary-button" autoFocus onClick={onCancel}>取消</button><button className="remove-account-confirm" onClick={onConfirm}>移除登录</button></div>
+    </dialog>
   )
 }
 

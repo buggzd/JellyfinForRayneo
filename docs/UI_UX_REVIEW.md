@@ -47,3 +47,21 @@
 - TypeScript、7 项前端测试、两端 production build、66 项 JVM 测试、Debug lint、APK 组装与 `verify-no-unity.sh` 均通过。
 
 当前没有连接 Android / RayNeo 测试设备。仍需按照 [Android 真机回归矩阵](ANDROID_ARCHITECTURE.md#device-regression-matrix) 验证实际 WebView、触控与系统键盘、显示连接、2D／SBS 切换、单音频／单上报及光学观感。本次未测量设备帧率、GPU 开销或功耗。
+
+
+## 手机设备页与多账号管理（2026-09-06）
+
+分支：`codex/companion-ui-server-settings`。
+
+- 设备页使用连续的纵向卡片布局，移除画面输出卡片，放大触控板入口；当前媒体库卡片可直接进入账号管理。
+- 设备图采用用户提供的 RayNeo Air 3S 官网产品图，裁切主体、保留透明背景并压缩为本地 WebP；显示模式与银幕调整统一保留在设置页。
+- 服务器与账号列表按服务器分组，支持同一服务器的多个账号、直接切换、添加以及确认后移除。进入管理、添加失败或取消均保留当前连接。
+- 已保存的账号由 Android 管理；旧会话自动迁移，未保存账号仅在本次运行中可切换。移除或失效只影响对应账号，切换后清除旧的播放、搜索与浏览状态。
+
+截图使用演示账号与保留的示例域名：
+
+<p><img src="images/companion-home.png" width="32%" alt="设备页"><img src="images/companion-accounts.png" width="32%" alt="服务器与账号管理"></p>
+
+验证覆盖手机 360×640、360×800、393×852、430×932 的布局、断开与媒体库错误状态、滚动时底部导航避让，以及两台服务器／三个账号的切换、密码登录失败、Quick Connect 取消、手动地址、原生返回键和移除确认。77 项 JVM 测试、13 项眼镜端测试与 9 项联调服务／会话测试通过；两端 production build、Debug lint、APK 组装及源码／APK 边界检查通过。
+
+当前无 Android / RayNeo 设备连接；上述浏览器桥模拟不替代真机回归，仍需执行架构文档中的设备矩阵。

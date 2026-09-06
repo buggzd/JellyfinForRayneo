@@ -36,7 +36,14 @@ screen.
 `SessionRepository` is the only native session source. Its private
 `SharedPreferences` file remains named `jellyfin_companion`, allowing an
 upgrade from the former Android activity to reuse its already validated
-session. A non-persistent login is held only in process memory.
+session. The legacy `session_json` entry migrates once into the bounded
+`accounts_v1` registry, then is removed. The registry stores up to 12 validated
+server/user sessions and exactly one active account ID in one JSON value.
+Each entry has an opaque 32-character local ID; the server URL and user ID
+identify an existing login when its token is renewed. A non-persistent login
+is switchable only in process memory and never enters the persisted registry.
+If the active login is transient, a cold launch has no active account but still
+allows choosing the other saved accounts.
 
 Every restored or newly authenticated session is rebuilt from exactly these
 eight string fields:
@@ -65,9 +72,15 @@ reliable URL representation for them. Jellyfin UDP discovery remains IPv4
 broadcast based, so IPv6-only endpoints are entered manually through an AAAA
 host name or a global/ULA literal.
 
-Login publishes a new bootstrap directly to the glasses WebView. Logout and a
-Jellyfin `401`/`403` clear the repository, pending remote commands, playback
-snapshot, and in-memory glasses bootstrap. There is no polling loop or second
+Server selection and an in-progress login leave the active account unchanged.
+Only successful authentication or explicit activation of an existing account
+replaces it and publishes a new bootstrap directly to the glasses WebView.
+Switching clears previous playback, remote commands and search state; glasses
+navigation and the player reset for the new identity. Logout, removal of the
+active account and a Jellyfin `401`/`403` remove that account, pending remote
+commands, playback snapshot, and in-memory glasses bootstrap. Other saved
+accounts remain available. Unauthorized events carry a bounded catalog
+generation; a late response from a previous account cannot clear the new one. There is no polling loop or second
 session replica. Native bootstrap payloads are compared with the last payload
 before injection, and `GlassesUI` compares their normalized value again before
 notifying React. A bounded `catalogGeneration` changes only after login or an
@@ -86,9 +99,10 @@ length-limited, and whitelisted before use.
 | Method | Purpose |
 | --- | --- |
 | `getState`, `ready` | Initial state and receiver readiness |
-| `scan`, `selectServer` | UDP discovery and server selection |
+| `scan`, `selectServer` | UDP discovery and login target selection, retaining the active account |
+| `activateSession`, `removeSession` | Activate/remove an existing opaque account ID; arbitrary or oversized IDs are rejected |
 | `login`, `startQuickConnect`, `cancelQuickConnect` | Authentication |
-| `clearSession` | Logout/change account |
+| `clearSession` | Logout and forget the active account |
 | `retryGlasses` | Republish the session bootstrap after a catalog failure |
 | `shareDiagnostics` | Open Android's share sheet with a redacted diagnostic report |
 | `selectDisplayMode` | Save and request 2D/3D mode |
@@ -100,7 +114,14 @@ length-limited, and whitelisted before use.
 
 Android pushes phone state through `window.LumaNative.receiveState`. This state
 includes connection, display, discovery, playback, and bounded search UI data,
-but never the access token or password. While the glasses search page is open,
+but never the access token or password. Its account list contains only the local
+ID, server metadata, username, persistence flag and active flag. `serverUrl` and
+`username` describe the active account; separate `loginServerUrl` and
+`loginServerName` describe the pending login target. Browsing the `accounts`,
+`connect` and `auth` surfaces never clears the active account, and state updates
+cannot redirect a pending login back to the current connection. Phone
+localStorage does not store native account/session metadata.
+While the glasses search page is open,
 `searchInputActive=true` moves the phone to its touchpad, focuses its search
 field, and requests the system QWERTY keyboard; `searchQuery` mirrors at most 48
 lowercase ASCII letters, digits, and spaces. `glassesPresentationReady` means
@@ -328,7 +349,8 @@ minimum device regression set for any device-facing change.
 | --- | --- | --- |
 | Install and lifecycle | First launch, cold launch, background/foreground, Activity recreation | Phone UI and glasses Presentation recover without a stale or duplicate session |
 | Authentication | IPv4 discovery, manual hostname/IPv6 URL, Quick Connect, password login, remembered and non-persistent login | Exactly one validated session reaches the glasses; passwords never persist |
-| Session cleanup | Logout, account change, restored `401`/`403` | Repository, bootstrap, pending commands, playback state, and both UIs clear together |
+| Account management | Two servers, two users on one server, remembered/transient accounts, old-version migration, cold restart, failed/cancelled password and Quick Connect login | Switching reuses the selected login, resets old browsing/playback state, and failed/cancelled additions retain the original connection |
+| Session cleanup | Logout, remove active/inactive account, restored `401`/`403`, late unauthorized event after switching | Only the affected account is forgotten; active cleanup clears bootstrap, pending commands, playback and both UIs together; other accounts remain usable |
 | Display connection | Glasses attached before launch, attached after launch, disconnected and reconnected | The intended external display is selected and phone UI stays on the default display |
 | Display modes | Confirmed Mirror 2D and stereo switch, USB permission denied, occupied interface, exception, physical output timeout | Consent waiting stays visible; only a hardware transition hides the WebView; failures end the transition without automatic retries, while OS-disabled output still requires system mirroring |
 | SBS geometry | Command response/write before/after actual 3840×1080 output; same-ID resize; EDID display recreation; unsupported half-SBS/rotated/inset viewport | Stereo requires command and physical/View evidence; document/video survive a bounded transition; all four page edges and full playback controls remain visible after both switch directions; invalid output falls back once |

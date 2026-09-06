@@ -30,6 +30,7 @@ final class GlassesMessage
     final String query;
     final long positionTicks;
     final long durationTicks;
+    final int catalogGeneration;
 
     private GlassesMessage(
             Type type,
@@ -41,7 +42,8 @@ final class GlassesMessage
             String playMethod,
             String query,
             long positionTicks,
-            long durationTicks)
+            long durationTicks,
+            int catalogGeneration)
     {
         this.type = type;
         this.state = state;
@@ -53,6 +55,7 @@ final class GlassesMessage
         this.query = query;
         this.positionTicks = positionTicks;
         this.durationTicks = durationTicks;
+        this.catalogGeneration = catalogGeneration;
     }
 
     static GlassesMessage parse(String payload)
@@ -92,6 +95,20 @@ final class GlassesMessage
             {
                 return null;
             }
+            int catalogGeneration = -1;
+            Object generation = source.opt("catalogGeneration");
+            if (generation instanceof Number)
+            {
+                double numeric = ((Number) generation).doubleValue();
+                if (numeric >= 0 && numeric <= Integer.MAX_VALUE && numeric == Math.rint(numeric))
+                {
+                    catalogGeneration = (int) numeric;
+                }
+            }
+            if (type == Type.UNAUTHORIZED && catalogGeneration < 0)
+            {
+                return null;
+            }
             return new GlassesMessage(
                     type,
                     state,
@@ -102,7 +119,8 @@ final class GlassesMessage
                     playMethod(source),
                     query,
                     boundedLong(source, "positionTicks"),
-                    boundedLong(source, "durationTicks"));
+                    boundedLong(source, "durationTicks"),
+                    catalogGeneration);
         }
         catch (Exception ignored)
         {

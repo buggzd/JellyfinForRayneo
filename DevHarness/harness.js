@@ -1,5 +1,5 @@
 const channel = 'jellyfin-rayneo-dual-ui-v1'
-const maximumMessageLength = 16_384
+const maximumMessageLength = 65_536
 const host = window.location.hostname === 'localhost' ? 'localhost' : '127.0.0.1'
 const origins = {
   companion: `http://${host}:4176`,
@@ -94,6 +94,9 @@ const remoteCommands = new Set([
 ])
 const phonePresets = new Set(['360x800', '393x852', '412x915', '430x932'])
 
+const savedSessions = new Map()
+let activeSessionId = ''
+let phoneScreen = 'connect'
 let session = null
 let catalogGeneration = 0
 let authenticationGeneration = 0
@@ -192,6 +195,19 @@ function publishCompanionState() {
   companionState.touchpadReady = frameReady.glasses && companionState.mediaReady
   postToFrame('companion', 'state', {
     ...companionState,
+    serverUrl: session?.serverUrl || companionState.serverUrl,
+    serverName: session?.serverName || companionState.serverName,
+    serverVersion: session?.serverVersion || companionState.serverVersion,
+    serverId: session?.serverId || companionState.serverId,
+    username: session?.userName || companionState.username,
+    loginServerUrl: companionState.serverUrl,
+    loginServerName: companionState.serverName,
+    activeSessionId,
+    accountLimit: 12,
+    accounts: [...savedSessions].map(([id, entry]) => ({
+      id, serverUrl: entry.serverUrl, serverName: entry.serverName, serverId: entry.serverId,
+      serverVersion: entry.serverVersion, username: entry.userName, saved: false, active: id === activeSessionId,
+    })),
     playback: { ...companionState.playback },
     servers: companionState.servers.map((server) => ({ ...server })),
   })
@@ -253,6 +269,11 @@ function applySession(nextSession) {
     throw new Error('开发服务器没有返回有效会话。')
   }
 
+  const existing = [...savedSessions].find(([, entry]) => entry.serverUrl === normalized.serverUrl && entry.userId === normalized.userId)
+  if (!existing && savedSessions.size >= 12) throw new Error('最多保留 12 个账号，请先移除一个不再使用的账号。')
+  authenticationGeneration += 1
+  activeSessionId = existing?.[0] || crypto.randomUUID().replaceAll('-', '')
+  savedSessions.set(activeSessionId, normalized)
   session = normalized
   applyServer(normalized)
   companionState.username = normalized.userName
@@ -270,11 +291,14 @@ function applySession(nextSession) {
   stopQuickConnect(false)
   publishCompanionState()
   publishGlassesBootstrap()
+  postToFrame('companion', 'open-screen', { screen: 'home' })
   setActivity('会话已注入；等待右侧眼镜端完成媒体库加载。', 'ready')
 }
 
 function resetSession(unauthorized = false) {
   authenticationGeneration += 1
+  savedSessions.delete(activeSessionId)
+  activeSessionId = ''
   session = null
   stopQuickConnect(true)
   companionState.state = 'login_required'
@@ -292,7 +316,7 @@ function resetSession(unauthorized = false) {
   catalogGeneration += 1
   publishCompanionState()
   publishGlassesBootstrap()
-  postToFrame('companion', 'open-screen', { screen: 'connect' })
+  postToFrame('companion', 'open-screen', { screen: savedSessions.size ? 'accounts' : 'connect' })
   setActivity(
     unauthorized ? '眼镜端报告会话失效，已同时清理两端状态。' : '开发会话已从双端内存中清除。',
     unauthorized ? 'error' : 'busy',
@@ -358,7 +382,7 @@ async function restoreDevelopmentSession() {
 }
 
 async function scanDevelopmentServer() {
-  if (companionState.discoveryScanning || session) return
+  if (companionState.discoveryScanning || companionState.busy) return
   companionState.discoveryScanning = true
   companionState.discoveryError = false
   companionState.discoveryMessage = '正在读取本机 Jellyfin 开发配置…'
@@ -385,7 +409,7 @@ async function scanDevelopmentServer() {
 }
 
 async function loginWithPassword(args) {
-  if (session || companionState.busy) return
+  if (companionState.busy) return
   const serverUrl = boundedText(args[0], 2_048)
   const username = boundedText(args[1], 512)
   let password = typeof args[2] === 'string' ? args[2].slice(0, 4_096) : ''
@@ -463,7 +487,7 @@ async function pollQuickConnect(generation) {
 }
 
 async function startQuickConnect(args) {
-  if (session || companionState.busy || quickConnectOperation) return
+  if (companionState.busy || quickConnectOperation) return
   const serverUrl = boundedText(args[0], 2_048)
   const generation = ++quickConnectGeneration
   companionState.state = 'native_connecting'
@@ -503,6 +527,7 @@ async function startQuickConnect(args) {
 }
 
 function cancelQuickConnect() {
+  authenticationGeneration += 1
   stopQuickConnect(true)
   companionState.busy = false
   companionState.state = 'login_required'
@@ -568,6 +593,8 @@ function handleCompanionCall(payload) {
       void scanDevelopmentServer()
       break
     case 'selectServer':
+      cancelQuickConnect()
+      companionState.username = ''
       companionState.serverUrl = boundedText(args[0], 2_048)
       companionState.serverName = boundedText(args[1], 512)
       publishCompanionState()
@@ -584,6 +611,20 @@ function handleCompanionCall(payload) {
     case 'clearSession':
       resetSession(false)
       break
+    case 'activateSession': {
+      const id = args[0]
+      if (typeof id !== 'string' || !/^[a-f0-9]{32}$/.test(id)) break
+      if (id === activeSessionId) postToFrame('companion', 'open-screen', { screen: 'home' })
+      else if (savedSessions.has(id)) applySession(savedSessions.get(id))
+      break
+    }
+    case 'removeSession': {
+      const id = args[0]
+      if (typeof id !== 'string' || !/^[a-f0-9]{32}$/.test(id)) break
+      if (id === activeSessionId) resetSession(false)
+      else if (savedSessions.delete(id)) publishCompanionState()
+      break
+    }
     case 'retryGlasses':
       if (!session) break
       companionState.glassesRuntimeState = 'loading'
@@ -627,6 +668,7 @@ function handleCompanionCall(payload) {
       break
     }
     case 'screenChanged':
+      phoneScreen = boundedText(args[0], 24)
       setActivity(`手机端当前页面：${boundedText(args[0], 24) || 'unknown'}`, 'ready')
       break
     default:
@@ -651,6 +693,7 @@ function handleRuntimeState(message) {
   const errorCode = runtimeErrorCodes.has(requestedErrorCode) ? requestedErrorCode : 'unknown'
   companionState.glassesRuntimeState = nextState
   companionState.glassesRuntimeErrorCode = nextState === 'error' ? errorCode : 'none'
+  if (phoneScreen === 'auth') { publishCompanionState(); return }
 
   if (nextState === 'error') {
     companionState.state = 'glasses_error'
@@ -733,7 +776,7 @@ function handleGlassesMessage(payload) {
     return
   }
   if (type === 'logout') resetSession(false)
-  if (type === 'unauthorized') resetSession(true)
+  if (type === 'unauthorized' && payload.catalogGeneration === catalogGeneration) resetSession(true)
 }
 
 window.addEventListener('message', (event) => {
@@ -816,7 +859,6 @@ phonePreset.addEventListener('change', () => {
 })
 
 document.querySelector('#load-session').addEventListener('click', () => {
-  if (session) resetSession(false)
   void restoreDevelopmentSession()
 })
 document.querySelector('#clear-session').addEventListener('click', () => resetSession(false))

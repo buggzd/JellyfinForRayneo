@@ -180,12 +180,18 @@ npm --prefix CompanionUI run build
 
 若仓库根目录存在被 Git 忽略的 `.jellyfin-dev.json`，联调页启动后会自动建立开发会话。在 Git linked worktree 中启动时，脚本会自动复用主工作区里的这份本地配置，因此不需要为每个 worktree 复制凭据。也可以通过 `RAYNEO_JELLYFIN_DEV_CONFIG=/absolute/path/to/config.json` 显式选择另一份本地配置。该文件不会被复制到 worktree、写入浏览器存储或纳入 Git。
 
-点击“清除会话”即可从连接页开始测试完整的手动地址、账号密码或 Quick Connect 流程；点击“读取开发会话”可重新使用本地配置。联调服务只监听 `127.0.0.1`，校验 API 来源、限制消息与响应大小，并且不会打印凭据、Token 或服务器响应。
+点击“清除会话”会移除当前账号，两端停止使用该登录；其他已登录账号仍可从手机端列表选择。点击“读取开发会话”可重新使用本地配置。联调页支持多服务器、多账号的切换与移除，账号仅保留在当前页面内存中；重新加载整个联调页会清除该列表。添加失败或取消时保留当前连接。联调服务只监听 `127.0.0.1`，校验 API 来源、限制消息与响应大小，并且不会打印凭据、Token 或服务器响应。
 
 只想启动服务而不自动打开浏览器时：
 
 ```bash
 RAYNEO_DUAL_UI_NO_OPEN=1 ./scripts/dev-dual-ui.sh
+```
+
+联调会话回归测试：
+
+```bash
+node --test DevHarness/*.test.mjs
 ```
 
 这套页面用于快速联调 WebView 消息和响应式 UI，不能模拟眼镜 USB、外接 Display、MediaCodec 或 Android WebView 的设备差异；上述部分仍需执行真机回归矩阵。

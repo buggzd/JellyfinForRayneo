@@ -1190,36 +1190,32 @@ button[aria-busy="true"] { opacity: .85; }
 }
 
 .home-screen {
-  display: grid;
-  grid-template-rows: auto auto minmax(180px, 1fr) auto auto auto;
-  gap: clamp(8px, 1.35dvh, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   min-height: calc(100vh - 31px);
   min-height: calc(100dvh - 31px);
-  padding: clamp(10px, 1.8dvh, 14px) var(--page-inline) var(--bottom-nav-clearance);
-  overflow: hidden;
+  padding: 18px var(--page-inline) var(--bottom-nav-clearance);
 }
 
-.home-screen.has-runtime-error {
-  grid-template-rows: auto auto minmax(180px, 1fr) auto auto auto auto;
-}
+.home-screen > * { flex-shrink: 0; }
 
 .home-top,
 .home-screen .welcome-line,
-.home-screen .mode-card,
 .home-screen .runtime-status-card,
 .home-screen .touchpad-launch,
 .home-screen .connection-card {
   margin: 0;
 }
 
-.home-top { min-height: 35px; }
+.home-top { min-height: 40px; }
 
 .profile-button {
   position: relative;
   display: grid;
   place-items: center;
-  width: 35px;
-  height: 35px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   border-radius: 50%;
   color: #226b8a;
@@ -1260,8 +1256,13 @@ button[aria-busy="true"] { opacity: .85; }
 }
 
 .home-screen .welcome-line h1 {
-  font-size: clamp(19px, 5.35vw, 23px);
+  margin-top: 6px;
+  font-size: 30px;
+  letter-spacing: -.035em;
 }
+
+.home-screen .welcome-line { padding: 4px 2px 2px; }
+.home-screen .welcome-line p { margin: 9px 0 0; color: #577586; font-size: 12px; line-height: 1.6; }
 
 .online-label {
   flex: 0 0 auto;
@@ -1289,14 +1290,14 @@ button[aria-busy="true"] { opacity: .85; }
 }
 
 .home-screen .device-hero {
-  align-self: center;
   width: 100%;
-  height: 100%;
+  height: 258px;
   min-height: 0;
-  max-height: min(300px, 70vw);
+  border-radius: 25px;
+  box-shadow: 0 12px 30px rgba(51, 106, 133, .09), inset 0 1px 0 rgba(255, 255, 255, .9);
 }
 
-.device-hero > img {
+.device-hero > img:not(.device-hero__product) {
   position: absolute;
   z-index: 0;
   inset: -3%;
@@ -1322,11 +1323,15 @@ button[aria-busy="true"] { opacity: .85; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: clamp(11px, 1.95dvh, 17px) clamp(12px, 4vw, 17px) 0;
+  padding: 10px 12px 0 18px;
 }
 
 .device-hero__head button {
-  padding: 4px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border: 0;
   color: rgba(28,77,96,.7);
   background: transparent;
@@ -1350,9 +1355,10 @@ button[aria-busy="true"] { opacity: .85; }
   text-shadow: 0 1px 9px rgba(255,255,255,.78);
 }
 
-.device-hero__info small { color: #52788a; font-size: 7px; letter-spacing: .18em; opacity: .88; }
-.device-hero__info strong { margin: 3px 0; font-size: 17px; letter-spacing: -.02em; }
-.device-hero__info span { display: flex; align-items: center; color: rgba(30,82,102,.72); font-size: 8px; }
+.device-hero__info strong { margin: 0 0 8px; font-size: 23px; letter-spacing: -.025em; }
+.device-hero__info span { display: flex; align-items: center; gap: 4px; color: #577b8c; font-size: 10px; }
+.device-hero__product { position: absolute; z-index: 2; top: 36px; right: 14px; width: 76%; max-width: 280px; height: auto; filter: drop-shadow(0 12px 10px rgba(30, 91, 117, .13)); }
+.home-screen .device-hero__info { bottom: 20px; left: 20px; }
 
 .runtime-status-card {
   display: flex;
@@ -1392,39 +1398,11 @@ button[aria-busy="true"] { opacity: .85; }
   cursor: pointer;
 }
 
-.mode-card {
-  margin-top: 13px;
-  padding: 16px;
-  border-radius: 25px 19px 25px 20px;
-}
-
-.home-screen .mode-card {
-  padding: clamp(11px, 1.85dvh, 16px);
-}
-
-.card-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.card-title-row svg { color: #7093a1; }
-.mode-card h2 { font-size: 16px; }
-.mode-card > p { margin: 11px 2px 0; color: #526f7f; font-size: 11px; line-height: 1.6; }
-
-.home-screen .mode-card > p {
-  margin-top: clamp(6px, 1.25dvh, 11px);
-}
-
 .mode-selector {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 7px;
   margin-top: 12px;
-}
-
-.home-screen .mode-selector {
-  margin-top: clamp(7px, 1.4dvh, 12px);
 }
 
 .mode-selector > button {
@@ -1441,10 +1419,6 @@ button[aria-busy="true"] { opacity: .85; }
   text-align: left;
   cursor: pointer;
   transition: transform var(--motion-fast) ease, background var(--motion-fast) ease, border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
-}
-
-.home-screen .mode-selector > button {
-  padding-block: clamp(7px, 1.15dvh, 10px);
 }
 
 .mode-selector > button:hover { transform: translateY(-1px); }
@@ -1506,8 +1480,9 @@ button[aria-busy="true"] { opacity: .85; }
 }
 
 .home-screen .touchpad-launch {
-  height: clamp(66px, 9.5dvh, 82px);
-  padding-block: clamp(9px, 1.5dvh, 13px);
+  height: 98px;
+  padding: 18px;
+  border-radius: 23px;
 }
 
 .touchpad-launch__orb {
@@ -1524,8 +1499,8 @@ button[aria-busy="true"] { opacity: .85; }
 }
 
 .home-screen .touchpad-launch__orb {
-  width: clamp(43px, 6dvh, 51px);
-  height: clamp(43px, 6dvh, 51px);
+  width: 54px;
+  height: 54px;
 }
 
 .touchpad-launch__orb::before,
@@ -1545,6 +1520,9 @@ button[aria-busy="true"] { opacity: .85; }
 .touchpad-launch__copy small { color: rgba(166,224,236,.6); font-size: 7px; letter-spacing: .16em; }
 .touchpad-launch__copy strong { margin: 3px 0 2px; font-size: 14px; }
 .touchpad-launch__copy em { color: rgba(210,238,244,.62); font-size: 8px; font-style: normal; }
+.home-screen .touchpad-launch__copy strong { margin: 5px 0; font-size: 18px; }
+.home-screen .touchpad-launch__copy em { font-size: 10px; }
+.home-screen .touchpad-launch__copy small { font-size: 8px; }
 .touchpad-launch__arrow { position: relative; z-index: 2; display: grid; place-items: center; width: 31px; height: 31px; border: 1px solid rgba(255,255,255,.13); border-radius: 50%; background: rgba(255,255,255,.06); }
 .touchpad-launch__glow { position: absolute; right: -22px; bottom: -42px; width: 140px; height: 120px; border-radius: 50%; background: rgba(54,200,228,.18); filter: blur(35px); }
 
@@ -1558,15 +1536,22 @@ button[aria-busy="true"] { opacity: .85; }
 }
 
 .home-screen .connection-card {
-  min-height: 51px;
-  padding-block: clamp(8px, 1.25dvh, 11px);
+  width: 100%;
+  min-height: 92px;
+  padding: 16px;
+  border-radius: 22px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .connection-card > span:nth-child(2) { display: flex; flex: 1; min-width: 0; flex-direction: column; }
 .connection-card small { color: #577586; font-size: 10px; }
 .connection-card strong { margin: 2px 0; font-size: 12px; }
 .connection-card em { overflow: hidden; color: #577586; font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
-.session-check { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 50%; color: #268b75; background: rgba(215,250,241,.58); }
+.home-screen .connection-card strong { margin: 5px 0; font-size: 15px; overflow-wrap: anywhere; }
+.home-screen .connection-card > .server-orb { width: 42px; height: 42px; border-radius: 14px; }
+.connection-card__action { display: flex; flex: 0 0 auto; align-items: center; gap: 3px; color: #4d8498; font-size: 11px; }
 
 .bottom-nav {
   position: fixed;
@@ -1712,7 +1697,7 @@ button[aria-busy="true"] { opacity: .85; }
 .display-mode-status strong { display: flex; align-items: center; gap: 7px; font-size: 12px; }
 .display-mode-status strong svg { flex-shrink: 0; }
 .display-mode-status.is-idle { background: rgba(109, 147, 163, .1); color: #526f7f; }
-.display-mode-status p, .mode-card .display-mode-status p { margin: 5px 0 0; color: inherit; font-size: 11px; }
+.display-mode-status p { margin: 5px 0 0; color: inherit; font-size: 11px; }
 .display-mode-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .display-mode-actions button { min-height: 44px; padding: 8px 12px; border: 1px solid currentColor; border-radius: 10px; background: transparent; color: inherit; cursor: pointer; }
 .stereo-settings { animation: mode-enter var(--motion-enter) var(--motion-ease) backwards; margin-top: 14px; padding: 14px 2px 0; border-top: 1px solid rgba(81,141,164,.15); }
@@ -2404,10 +2389,6 @@ button[aria-busy="true"] { opacity: .85; }
     box-shadow: 0 0 0 1px rgba(255,255,255,.35), 0 45px 120px rgba(20,67,88,.3);
   }
   .screen { min-height: calc(min(900px, 100dvh - 52px) - 47px); }
-  .home-screen {
-    height: calc(min(900px, 100dvh - 52px) - 47px);
-    min-height: 0;
-  }
   .touchpad-screen { min-height: calc(min(900px, 100dvh - 52px) - 16px); border-radius: 37px; }
   .bottom-nav {
     right: calc(50% - 195px);
@@ -2421,21 +2402,22 @@ button[aria-busy="true"] { opacity: .85; }
   .art-hero { height: 178px; }
 }
 
-@media (max-height: 680px) {
-  .home-screen.has-runtime-error .device-hero__info {
-    display: none;
-  }
+@media (max-height: 700px) {
+  .home-screen { gap: 12px; }
+  .home-screen .welcome-line h1 { font-size: 26px; }
+  .home-screen .device-hero { height: 232px; }
+  .home-screen .device-hero__product { width: 68%; max-width: 250px; }
+  .home-screen .device-hero__info strong { font-size: 21px; }
+  .home-screen .touchpad-launch { height: 86px; }
+  .home-screen .connection-card { min-height: 84px; }
 }
 
 @media (max-height: 600px) {
-  .home-screen .welcome-line .eyebrow,
-  .home-screen .mode-card .card-title-row .eyebrow,
-  .home-screen .mode-card > p {
+  .home-screen .welcome-line .eyebrow {
     display: none;
   }
 
-  .home-screen .welcome-line h1,
-  .home-screen .mode-card h2 {
+  .home-screen .welcome-line h1 {
     margin-top: 0;
   }
 }
@@ -2573,3 +2555,38 @@ button:disabled {
 .is-native button {
   touch-action: manipulation;
 }
+
+/* Saved server accounts share the phone's existing glass surfaces. */
+.saved-accounts-link { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 16px; padding: 16px; border-radius: 18px; color: #27677f; text-align: left; cursor: pointer; }
+.saved-accounts-link span { flex: 1; font-size: 12px; font-weight: 650; }
+.account-header-icon { display: grid; place-items: center; width: 44px; color: #517c90; }
+.accounts-intro { margin: 26px 0 20px; }
+.accounts-intro h1 { font-size: 25px; }
+.accounts-intro p, .accounts-limit { margin-top: 10px; color: #577586; font-size: 12px; line-height: 1.7; }
+.account-server-card { margin-bottom: 16px; padding: 16px; border-radius: 24px 19px 24px 20px; }
+.account-server-card > header { display: flex; align-items: center; gap: 12px; padding-bottom: 14px; }
+.account-server-card > header > div { min-width: 0; }
+.account-server-card h2 { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.account-server-card header p { margin: 5px 0 0; color: #577586; font-size: 11px; overflow-wrap: anywhere; }
+.saved-account-list { border-top: 1px solid rgba(96, 145, 164, .12); }
+.saved-account-row { display: flex; align-items: center; border-bottom: 1px solid rgba(96, 145, 164, .12); }
+.saved-account-select { display: flex; flex: 1; min-width: 0; align-items: center; gap: 10px; padding: 14px 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.saved-account-avatar { display: grid; place-items: center; flex: 0 0 34px; height: 34px; border-radius: 12px; background: #e0eff3; color: #42798d; font-size: 11px; font-weight: 700; }
+.saved-account-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 4px; }
+.saved-account-copy strong { color: #173e50; font-size: 13px; overflow-wrap: anywhere; }
+.saved-account-copy small { color: #577586; font-size: 10px; }
+.saved-account-state { display: flex; flex: 0 0 auto; align-items: center; gap: 3px; color: #577586; font-size: 10px; }
+.saved-account-row.is-active .saved-account-state { color: #23866e; }
+.saved-account-row.is-active .saved-account-avatar { background: #ddf3e9; color: #23866e; }
+.remove-account-button { display: grid; flex: 0 0 44px; min-height: 44px; place-items: center; border: 0; background: transparent; color: #7d8990; cursor: pointer; }
+.add-account-button { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 44px; margin-top: 8px; border: 0; border-radius: 12px; color: #367d96; background: transparent; font-size: 12px; cursor: pointer; }
+.accounts-empty { display: grid; justify-items: center; gap: 12px; margin-bottom: 18px; padding: 30px 15px; border-radius: 22px; color: #577586; font-size: 12px; }
+.accounts-empty p { margin: 0; }
+.account-dialog { width: min(360px, calc(100vw - 40px)); max-height: calc(100dvh - 40px); margin: auto; padding: 24px; border: 1px solid white; border-radius: 24px; color: #173e50; background: #eff9fb; box-shadow: 0 24px 80px rgba(12, 50, 65, .2); }
+.account-dialog::backdrop { background: rgba(21, 48, 60, .4); backdrop-filter: blur(4px); }
+.account-dialog h2 { margin: 0; font-size: 19px; }
+.account-dialog p { margin: 14px 0; color: #577586; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.account-dialog .remove-account-name { color: #173e50; font-weight: 650; }
+.account-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+.account-dialog-actions button { min-height: 44px; margin: 0; border-radius: 13px; font-size: 13px; cursor: pointer; }
+.remove-account-confirm { border: 0; background: #ad4251; color: white; }
