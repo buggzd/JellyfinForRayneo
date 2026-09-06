@@ -1,0 +1,39 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="440" viewBox="-18 -12 140 220" role="img" aria-labelledby="title"><title id="title">大拇指向上滑动</title><defs>
+    <linearGradient id="skin-blue" x1="345" y1="114" x2="493" y2="287" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#adbba0" /><stop offset="1" stop-color="#bcc8b0" />
+    </linearGradient>
+    <linearGradient id="hair-blue" x1="339" y1="28" x2="495" y2="221" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#859477" /><stop offset=".72" stop-color="#859477" /><stop offset="1" stop-color="#89987b" />
+    </linearGradient>
+    <linearGradient id="hand-blue" x1="27" y1="72" x2="89" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c1cdb4" /><stop offset=".65" stop-color="#b9c6ac" /><stop offset="1" stop-color="#aebb9f" />
+    </linearGradient>
+    <linearGradient id="lens-black" x1="508" y1="147" x2="519" y2="180" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#080808" /><stop offset="1" stop-color="#161616" />
+    </linearGradient>
+    <linearGradient id="frame-gray" x1="3" y1="0" x2="74" y2="147" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2e2e2e" /><stop offset=".55" stop-color="#444444" /><stop offset="1" stop-color="#282828" />
+    </linearGradient>
+    <clipPath id="screen-clip"><rect x="3" y="3" width="70" height="142" rx="10" /></clipPath></defs>
+<path d="M58 179 Q74 174 97 180 L103 208 H51Z" fill="#859477" /><g id="phone-and-hand"><g id="palm-behind-phone" fill="url(#hand-blue)"><path id="rear-palm" d="M73 62 C76 60 78 66 81 72 C87 84 94 97 96 108 C99 128 91 160 93 180 L61 182 C52 172 45 166 45 154 C49 137 62 97 73 62Z" /></g>
+    <g id="gripping-fingers" fill="#b6c3a9">
+      <path d="M4 64 C-4 60-10 61-11 67 C-12 72-6 76 4 79Z" />
+      <path d="M3 82 C-5 80-11 82-11 88 C-11 94-5 96 3 96Z" />
+      <path d="M3 95 C-5 92-10 95-10 101 C-10 106-4 109 4 109Z" />
+      <path d="M4 107 C-3 104-10 108-10 113 C-10 118-4 121 4 122Z" />
+      <path d="M-7 92 C-4 94-1 94 1 94 M-7 105 C-4 107-1 108 2 107" stroke="#7d8f70" stroke-width="1" fill="none" opacity=".28" />
+    </g>
+    <g id="phone">
+      <g id="connector">
+        <path d="M29 147 H43 V167 Q43 169 40 169 H32 Q29 169 29 166Z" fill="#303131" />
+        <path d="M33 167 H39 V176 H33Z" fill="#272a2a" />
+        <path d="M36 174 V188" stroke="#272a2a" stroke-width="4.4" stroke-linecap="round" />
+      </g>
+      <rect width="76" height="148" rx="12" fill="url(#frame-gray)" />
+      <rect x="2.8" y="2.8" width="70.4" height="142.4" rx="10" fill="#020202" />
+      <path d="M11 1.4 H64 C70 1.4 74.6 6 74.6 12 V135" fill="none" stroke="#555555" stroke-width=".65" opacity=".5" />
+    </g><g id="gesture-feedback" clip-path="url(#screen-clip)"><circle id="touch-contact" cx="39" cy="105.96" r="11.7" fill="none" stroke="#dce4cd" stroke-width="1.2" opacity="0.7" /><path id="direction-cue" d="M38 45 L38 21 M32 27 L38 21 L44 27" fill="none" stroke="#f0eee6" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round" opacity="0.72" />
+      <path id="swipe-trail" d="M39 106 Q37.3 88 39 70" pathLength="100" fill="none" stroke="#cfdbc0" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="100" stroke-dashoffset="99.89" opacity="0" /></g><g id="thumb-and-palm"><path id="hand-silhouette" d="M61 184  C54 174 47.69 174.21 50.69 160.21  C50.69 146.21 52.84 148.07 49.98 142.8  C46.16 135.77 46.19 130.03 42.79 125.08  C39.39 120.14 36.61 115.9 32.71 111.34  C29.74 107.87 30.14 102.64 33.62 99.67  C37.09 96.7 42.32 97.1 45.29 100.58  C49.19 105.14 55.21 109.25 58.61 114.2  C62.01 119.14 66.71 124.59 70.53 131.62  C73.88 137.77 96.3 119.62 95.3 133.62  C94.3 146.62 90 157 91 167  C91 174 93 179 94 184  C82 178 70 178 61 184Z" fill="url(#hand-blue)" />
+      <g id="hand-details" opacity="0.2" fill="none" stroke="#7d8f70" stroke-linecap="round"><path id="thenar-crease" d="M57.77 143.11 C65.26 144.21 68.26 155.21 63.26 163.21" stroke-width=".85" /><path id="thumb-joint" d="M46.57 123.7 C50.19 122.42 53.48 120.15 55.96 117.23" stroke-width=".65" /></g></g></g>
+  </svg>
