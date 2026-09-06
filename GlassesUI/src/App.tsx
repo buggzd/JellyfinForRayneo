@@ -18,7 +18,6 @@ import {
   LoaderCircle,
   LogOut,
   MonitorPlay,
-  MoreHorizontal,
   Pause,
   Play,
   RefreshCw,
@@ -33,6 +32,8 @@ import {
   Subtitles,
   UserRound,
   Volume2,
+  Volume1,
+  VolumeX,
   X,
 } from 'lucide-react'
 import type Hls from 'hls.js'
@@ -59,6 +60,7 @@ import type {
 import { postNativeMessage } from './runtime'
 import RemoteTutorial from './RemoteTutorial'
 import { hasSeenRemoteTutorial, rememberRemoteTutorial, type TutorialOutcome } from './tutorialState'
+import { LoadingCards, Toast, usePresence, type FeedbackTone, type ToastMessage } from './feedback'
 import {
   buildSeriesIndex,
   parseSeriesQuery,
@@ -164,14 +166,14 @@ function moveFocus(direction: Direction) {
       if (scrollDelta) {
         trackList.scrollTo({
           top: trackList.scrollTop + scrollDelta,
-          behavior: 'smooth',
+          behavior: motionScrollBehavior(),
         })
       }
       return
     }
 
     if (direction === 'up' && node.closest('.hero-section')) {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({ top: 0, behavior: motionScrollBehavior() })
       return
     }
 
@@ -185,7 +187,7 @@ function moveFocus(direction: Direction) {
           - (railRect.left + railRect.width / 2)
         episodeRail.scrollTo({
           left: episodeRail.scrollLeft + horizontalDelta,
-          behavior: 'smooth',
+          behavior: motionScrollBehavior(),
         })
       }
 
@@ -193,13 +195,13 @@ function moveFocus(direction: Direction) {
       const sectionTop = window.scrollY + episodeSection.getBoundingClientRect().top
       window.scrollTo({
         top: Math.max(0, sectionTop - topInset),
-        behavior: 'smooth',
+        behavior: motionScrollBehavior(),
       })
       return
     }
 
     node.scrollIntoView({
-      behavior: 'smooth',
+      behavior: motionScrollBehavior(),
       block: direction === 'up' || direction === 'down' ? 'center' : 'nearest',
       inline: 'center',
     })
@@ -324,7 +326,7 @@ function moveSeriesSearchFocus(current: HTMLElement, direction: Direction) {
       if (nextIndex < 0) return false
       const target = row[Math.min(row.length - 1, nextIndex)]
       focusSpatialElement(target)
-      target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+      target.scrollIntoView({ behavior: motionScrollBehavior(), block: 'nearest', inline: 'center' })
       return true
     }
 
@@ -332,7 +334,7 @@ function moveSeriesSearchFocus(current: HTMLElement, direction: Direction) {
       const target = results.find((result) => result.dataset.previewed === 'true') ?? results[0]
       if (target) {
         focusSpatialElement(target)
-        target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+        target.scrollIntoView({ behavior: motionScrollBehavior(), block: 'nearest', inline: 'nearest' })
       }
       return true
     }
@@ -362,8 +364,12 @@ function moveSeriesSearchFocus(current: HTMLElement, direction: Direction) {
       : true
   }
   focusSpatialElement(next)
-  next.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+  next.scrollIntoView({ behavior: motionScrollBehavior(), block: 'nearest', inline: 'nearest' })
   return true
+}
+
+function motionScrollBehavior(): ScrollBehavior {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'
 }
 
 function cx(...classes: Array<string | false | undefined>) {
@@ -380,6 +386,7 @@ type FocusButtonProps = {
   autoFocusTarget?: boolean
   label?: string
   disabled?: boolean
+  busy?: boolean
   onClick?: () => void
   onFocus?: () => void
 }
@@ -394,6 +401,7 @@ function FocusButton({
   autoFocusTarget,
   label,
   disabled,
+  busy = false,
   onClick,
   onFocus,
 }: FocusButtonProps) {
@@ -404,9 +412,11 @@ function FocusButton({
       data-autofocus={autoFocusTarget ? 'true' : undefined}
       aria-label={label}
       aria-pressed={active === undefined ? undefined : active}
-      disabled={disabled}
+      disabled={disabled && !busy}
+      aria-disabled={disabled || busy || undefined}
+      aria-busy={busy || undefined}
       className={cx('focus-button', `focus-button--${variant}`, active && 'is-active', className)}
-      onClick={onClick}
+      onClick={() => { if (!disabled && !busy) onClick?.() }}
       onFocus={onFocus}
     >
       <span className="focus-button__lens" aria-hidden="true" />
@@ -467,25 +477,35 @@ function ArtFrame({
   item,
   wide = false,
   className,
+  children,
 }: {
   item: MediaItem
   wide?: boolean
   className?: string
+  children?: ReactNode
 }) {
   const imageUrl = wide ? item.imageUrl : item.coverUrl ?? item.imageUrl
+  const [loadedUrl, setLoadedUrl] = useState('')
+  const [failedUrl, setFailedUrl] = useState('')
+  const imageReady = Boolean(imageUrl && loadedUrl === imageUrl)
   const fallbackImage = new URL(
     item.art % 3 === 1 ? './assets/monochrome-flow.png' : './assets/crystal-flow.png',
     document.baseURI,
   ).href
   const style = {
-    '--art-hue': imageUrl ? '0deg' : `${item.art * 28}deg`,
+    '--art-hue': imageReady ? '0deg' : `${item.art * 28}deg`,
     '--art-x': imageUrl ? '50%' : `${30 + (item.art % 5) * 14}%`,
     '--art-y': imageUrl ? '50%' : `${30 + (item.art % 4) * 15}%`,
-    backgroundImage: `url(${imageUrl ?? fallbackImage})`,
+    backgroundImage: `url(${fallbackImage})`,
   } as CSSProperties
   return (
-    <div className={cx('art-frame', imageUrl && 'art-frame--real', wide ? 'art-frame--wide' : 'art-frame--poster', className)}>
+    <div className={cx('art-frame', imageReady && 'art-frame--real', wide ? 'art-frame--wide' : 'art-frame--poster', className)}>
       <div className="art-frame__image" style={style} />
+      {imageUrl && failedUrl !== imageUrl && (
+        <img className={cx('art-frame__poster-image', imageReady && 'is-ready')} src={imageUrl}
+          alt="" loading="lazy" decoding="async" draggable={false}
+          onLoad={() => setLoadedUrl(imageUrl)} onError={() => setFailedUrl(imageUrl)} />
+      )}
       <div className={`art-frame__orb art-frame__orb--${item.art % 4}`} />
       <div className="art-frame__flare" />
       <div className="art-frame__index">L/{String(item.art + 1).padStart(2, '0')}</div>
@@ -493,7 +513,27 @@ function ArtFrame({
         <span>{item.original ?? item.title.toUpperCase()}</span>
         <strong>{item.title}</strong>
       </div>
+      {children}
     </div>
+  )
+}
+
+function MediaIndicators({ item }: { item: MediaItem }) {
+  const progress = Math.max(0, Math.min(100, item.progress ?? 0))
+  return (
+    <>
+      {(item.watched || item.favorite) && (
+        <span className="media-status-badges">
+          {item.watched && <span className="is-watched"><Check size={14} />已看</span>}
+          {item.favorite && <span aria-label="已收藏" title="已收藏"><Heart size={14} fill="currentColor" /></span>}
+        </span>
+      )}
+      {progress > 0 && !item.watched && (
+        <span className="media-progress" aria-label={`已观看 ${Math.round(progress)}%`}>
+          <i style={{ transform: `scaleX(${progress / 100})` }} />
+        </span>
+      )}
+    </>
   )
 }
 
@@ -542,7 +582,7 @@ function PageHeader({ active, onNavigate, onRefresh, onExit, serverName, userNam
         </div>
         <nav className="side-navigation__utilities" aria-label="服务器操作">
           <FocusButton className="side-navigation__item tutorial-launch" variant="ghost" icon={<BookOpen size={21} />} onClick={() => onNavigate('tutorial')}>遥控教学</FocusButton>
-          <FocusButton className="side-navigation__item" variant="ghost" disabled={refreshing} icon={<RefreshCw className={cx(refreshing && 'is-spinning')} size={21} />} onClick={onRefresh}>{refreshing ? '正在刷新' : '刷新媒体库'}</FocusButton>
+          <FocusButton className="side-navigation__item" variant="ghost" disabled={refreshing} busy={refreshing} icon={<RefreshCw className={cx(refreshing && 'is-spinning')} size={21} />} onClick={onRefresh}>{refreshing ? '正在刷新' : '刷新媒体库'}</FocusButton>
           <FocusButton className="side-navigation__item" variant="ghost" icon={<LogOut size={21} />} onClick={onExit}>管理登录</FocusButton>
         </nav>
       </div>
@@ -586,19 +626,14 @@ const MediaCard = memo(function MediaCard({
       onFocus={() => onPreview(item)}
     >
       <span className="media-card__glow" />
-      <ArtFrame item={item} wide={wide || library} />
+      <ArtFrame item={item} wide={wide || library}><MediaIndicators item={item} /></ArtFrame>
       <span className="media-card__badges">
         {item.folder && <span><Folder size={14} /> 文件夹</span>}
         {!item.folder && <span>{item.kind}</span>}
         {item.unwatched && <span className="count-badge">{item.unwatched} 未看</span>}
       </span>
-      {item.favorite && <span className="media-card__favorite"><Heart size={17} fill="currentColor" /></span>}
-      {item.watched && <span className="media-card__watched"><Check size={15} /> 已看</span>}
-      {item.progress !== undefined && item.progress > 0 && (
-        <span className="media-card__progress"><i style={{ width: `${item.progress}%` }} /></span>
-      )}
       <span className="media-card__copy">
-        <strong>{item.title}</strong>
+        <strong title={item.title}>{item.title}</strong>
         <small>{item.subtitle}</small>
       </span>
       <span className="media-card__enter"><ChevronRight size={18} /></span>
@@ -687,7 +722,7 @@ function HomePage({
         {shelves.map((shelf, shelfIndex) => (
           <section className="shelf" key={shelf.title}>
             <header className="shelf__header">
-              <div><small>{shelf.eyebrow}</small><h2>{shelf.title}</h2></div>
+              <div><small>{shelf.eyebrow}</small><h2>{shelf.title}<span className="section-count" aria-label={`${shelf.items.length} 项`}>{shelf.items.length}</span></h2></div>
               <FocusButton variant="ghost" trailing={<ChevronRight size={18} />} onClick={() => onNavigate('browse')}>查看全部</FocusButton>
             </header>
             <div className="shelf__rail">
@@ -750,29 +785,40 @@ function BrowsePage({
   const [sort, setSort] = useState<'最近加入' | '名称' | '评分最高'>('最近加入')
   const [visibleCount, setVisibleCount] = useState(BROWSE_BATCH_SIZE)
   const [folderLoading, setFolderLoading] = useState(mode === 'library' && Boolean(initialFolder))
+  const [folderError, setFolderError] = useState<{ item: MediaItem; replace: boolean } | null>(null)
+  const folderGeneration = useRef(0)
+  const browseRef = useRef<HTMLDivElement>(null)
   const loadMoreRef = useRef<HTMLElement | null>(null)
+
+  const loadFolder = useCallback(async (item: MediaItem, replace = false) => {
+    const generation = ++folderGeneration.current
+    setFolderLoading(true)
+    setFolderError(null)
+    try {
+      const children = await onLoadFolder(item.id)
+      if (generation !== folderGeneration.current) return
+      setPath((current) => replace ? [{ item, children }] : [...current, { item, children }])
+      setVisibleCount(BROWSE_BATCH_SIZE)
+    } catch {
+      if (generation === folderGeneration.current) setFolderError({ item, replace })
+    } finally {
+      if (generation === folderGeneration.current) setFolderLoading(false)
+    }
+  }, [onLoadFolder])
 
   useEffect(() => {
     if (mode !== 'library' || !initialFolder) {
       setPath([])
       setFolderLoading(false)
-      return
+      setFolderError(null)
+    } else {
+      setPath([{ item: initialFolder, children: [] }])
+      void loadFolder(initialFolder, true)
     }
-
-    let active = true
-    setPath([{ item: initialFolder, children: [] }])
-    setFolderLoading(true)
-    void onLoadFolder(initialFolder.id).then((children) => {
-      if (active) setPath([{ item: initialFolder, children }])
-    }).catch(() => {
-      if (active) setPath([{ item: initialFolder, children: [] }])
-    }).finally(() => {
-      if (active) setFolderLoading(false)
-    })
     return () => {
-      active = false
+      folderGeneration.current += 1
     }
-  }, [initialFolder, mode, onLoadFolder])
+  }, [initialFolder, loadFolder, mode])
 
   const baseItems = useMemo(() => {
     if (mode === 'favorites') return favorites
@@ -798,6 +844,15 @@ function BrowsePage({
   const eyebrow = mode === 'favorites' ? 'SAVED MOMENTS' : path.length ? 'FOLDER VIEW' : 'ALL LIBRARIES'
 
   useEffect(() => {
+    // Loading can remove the focused card. Recover only when no control kept focus.
+    if (currentSpatialFocus()) return
+    const root = browseRef.current
+    focusSpatialElement(root?.querySelector<HTMLElement>('.empty-state [data-focusable="true"]')
+      ?? root?.querySelector<HTMLElement>('.media-grid [data-focusable="true"]')
+      ?? root?.querySelector<HTMLElement>('.browse-toolbar [data-focusable="true"]'))
+  }, [folderError, folderLoading, shownItems])
+
+  useEffect(() => {
     setVisibleCount(BROWSE_BATCH_SIZE)
   }, [shownItems])
 
@@ -818,30 +873,29 @@ function BrowsePage({
     return () => observer.disconnect()
   }, [hasMore, shownItems.length, visibleCount])
 
-  const resetLibrary = () => {
-    setPath([])
+  const truncatePath = (length: number) => {
+    folderGeneration.current += 1
+    setFolderLoading(false)
+    setFolderError(null)
+    setPath((current) => current.slice(0, length))
     setVisibleCount(BROWSE_BATCH_SIZE)
+  }
+
+  const resetLibrary = () => {
+    truncatePath(0)
     onResetLibrary()
   }
 
-  const openItem = async (item: MediaItem) => {
+  const openItem = (item: MediaItem) => {
     if (item.folder && mode === 'library') {
-      setFolderLoading(true)
-      try {
-        const children = await onLoadFolder(item.id)
-        setPath((current) => [...current, { item, children }])
-        setVisibleCount(BROWSE_BATCH_SIZE)
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-      } finally {
-        setFolderLoading(false)
-      }
+      void loadFolder(item)
       return
     }
     onOpen(item)
   }
 
   return (
-    <div className="browse-page page-enter">
+    <div ref={browseRef} className="browse-page page-enter">
       <PageHeader
         active={mode === 'favorites' ? 'favorites' : 'browse'}
         serverName={serverName}
@@ -853,15 +907,15 @@ function BrowsePage({
       />
       <main className="browse-content">
         <div className="breadcrumbs">
-          <FocusButton variant="round" label="返回上一级" onClick={() => path.length > 1 ? setPath((current) => current.slice(0, -1)) : path.length ? resetLibrary() : onNavigate('home')}><ArrowLeft size={20} /></FocusButton>
+          <FocusButton variant="round" label="返回上一级" onClick={() => path.length > 1 ? truncatePath(path.length - 1) : path.length ? resetLibrary() : onNavigate('home')}><ArrowLeft size={20} /></FocusButton>
           <FocusButton variant="ghost" onClick={() => { setPath([]); onNavigate('home') }}><Home size={16} /> 首页</FocusButton>
           {mode === 'library' && <><ChevronRight size={15} /><FocusButton variant="ghost" active={!path.length} onClick={resetLibrary}>媒体库</FocusButton></>}
-          {path.map((crumb, index) => <span className="breadcrumb-part" key={crumb.item.id}><ChevronRight size={15} /><FocusButton variant="ghost" active={index === path.length - 1} onClick={() => setPath((current) => current.slice(0, index + 1))}>{crumb.item.title}</FocusButton></span>)}
+          {path.map((crumb, index) => <span className="breadcrumb-part" key={crumb.item.id}><ChevronRight size={15} /><FocusButton variant="ghost" active={index === path.length - 1} onClick={() => truncatePath(index + 1)}>{crumb.item.title}</FocusButton></span>)}
         </div>
 
         <header className="browse-title-row">
-          <div><small>{eyebrow}</small><h1>{title}</h1><p>{baseItems.length} 个项目 · Jellyfin / {serverName}</p></div>
-          <div className="layout-indicator"><Grid3X3 size={18} /><span>{path.length ? '横向缩略图' : '海报网格'}</span></div>
+          <div><small>{eyebrow}</small><h1>{title}</h1><p>{folderLoading ? '正在读取内容…' : folderError ? '内容尚未载入' : `${baseItems.length} 个项目`} · Jellyfin / {serverName}</p></div>
+          <div className="layout-indicator"><Grid3X3 size={18} /><span>{path.length && !showsSeriesPosters ? '横向缩略图' : '海报网格'}</span></div>
         </header>
 
         <section className="browse-toolbar glass-panel">
@@ -886,11 +940,14 @@ function BrowsePage({
         </section>
 
         {folderLoading ? (
-          <section className="empty-state glass-panel is-loading">
-            <div className="empty-state__orb"><LoaderCircle className="is-spinning" size={32} /></div>
-            <small>READING LIBRARY</small>
-            <h2>正在展开媒体库</h2>
-            <p>从 Jellyfin 读取这个目录的内容…</p>
+          <LoadingCards label="正在读取媒体库…" />
+        ) : folderError ? (
+          <section className="empty-state glass-panel is-error" role="alert">
+            <div className="empty-state__orb"><Info size={32} /></div>
+            <small>CONNECTION INTERRUPTED</small>
+            <h2>这个目录暂时无法加载</h2>
+            <p>请检查服务器连接，然后重新尝试。</p>
+            <FocusButton variant="primary" autoFocusTarget icon={<RefreshCw size={19} />} onClick={() => { void loadFolder(folderError.item, folderError.replace) }}>重新加载</FocusButton>
           </section>
         ) : shownItems.length ? (
           <section className={cx(
@@ -910,16 +967,18 @@ function BrowsePage({
             ))}
           </section>
         ) : (
-          <section className="empty-state glass-panel">
-            <div className="empty-state__orb"><Search size={32} /></div>
-            <small>NOTHING IN THIS FREQUENCY</small>
-            <h2>这里暂时空无一物</h2>
-            <p>当前筛选条件下没有内容，试试查看全部项目。</p>
-            <FocusButton variant="primary" autoFocusTarget icon={<X size={19} />} onClick={() => setFilter('all')}>清除条件</FocusButton>
+          <section className="empty-state glass-panel" role="status">
+            <div className="empty-state__orb">{mode === 'favorites' && filter === 'all' ? <Heart size={32} /> : <Search size={32} />}</div>
+            <small>{filter !== 'all' ? 'NO MATCHES' : mode === 'favorites' ? 'YOUR COLLECTION' : 'EMPTY LIBRARY'}</small>
+            <h2>{filter !== 'all' ? '没有符合条件的内容' : mode === 'favorites' ? '还没有收藏内容' : '这里还没有媒体内容'}</h2>
+            <p>{filter !== 'all' ? '试试其他筛选条件，或查看全部项目。' : mode === 'favorites' ? '在详情页点亮爱心，喜欢的作品就会出现在这里。' : '在 Jellyfin 中添加内容后，刷新媒体库即可查看。'}</p>
+            {filter !== 'all'
+              ? <FocusButton variant="primary" autoFocusTarget icon={<X size={19} />} onClick={() => setFilter('all')}>清除条件</FocusButton>
+              : <FocusButton variant="primary" autoFocusTarget icon={<Grid3X3 size={19} />} disabled={refreshing} onClick={() => mode === 'favorites' ? onNavigate('browse') : path.length ? resetLibrary() : onRefresh()}>{mode === 'favorites' || path.length ? '浏览媒体库' : refreshing ? '正在刷新' : '刷新媒体库'}</FocusButton>}
           </section>
         )}
 
-        {!folderLoading && shownItems.length > 0 && (
+        {!folderLoading && !folderError && shownItems.length > 0 && (
           <footer ref={loadMoreRef} className="infinite-scroll-status" aria-live="polite">
             <span>已显示 {visibleItems.length} 项 / 共 {shownItems.length} 项</span>
             <span className={cx('infinite-scroll-status__state', hasMore && 'is-loading')}>
@@ -1127,7 +1186,7 @@ function SearchPage({
                     onClick={() => append(key)}
                     onFocus={(event) => {
                       onKeyboardFocus(focusId)
-                      event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+                      event.currentTarget.scrollIntoView({ behavior: motionScrollBehavior(), block: 'nearest', inline: 'center' })
                     }}
                   >
                     {key}
@@ -1186,14 +1245,14 @@ function SearchPage({
                       onClick={() => onOpen(item, { season: parsedQuery.seasonHint, episode: parsedQuery.episodeHint })}
                       onFocus={() => { onResultFocus(item.id); onPreview(item) }}
                     >
-                      <ArtFrame item={item} className="series-search-result__art" />
+                      <ArtFrame item={item} className="series-search-result__art"><MediaIndicators item={item} /></ArtFrame>
                       <span className="series-search-result__title">{item.title}</span>
                     </button>
                   )
                 })}
               </div>
             ) : (
-              <div className={cx('series-search-empty', indexLoading && 'is-loading')}>
+              <div className={cx('series-search-empty', indexLoading && 'is-loading')} role="status">
                 {indexLoading ? <LoaderCircle className="is-spinning" size={30} /> : <Search size={30} />}
                 <strong>{indexLoading ? '正在建立剧集索引' : '没有匹配的剧集'}</strong>
                 <span>{indexLoading ? '索引到达后会自动显示在这里' : '试试标题拼音或拼音首字母'}</span>
@@ -1250,7 +1309,7 @@ function DetailPage({
   const extras = detail?.extras ?? []
   const [favorite, setFavorite] = useState(Boolean(resolvedItem.favorite))
   const [watched, setWatched] = useState(Boolean(resolvedItem.watched))
-  const [actionBusy, setActionBusy] = useState(false)
+  const [actionBusy, setActionBusy] = useState<'favorite' | 'watched' | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [infoTab, setInfoTab] = useState<'credits' | 'media'>('credits')
   const [detailSection, setDetailSection] = useState<'episodes' | 'similar' | 'clips' | 'details'>('episodes')
@@ -1295,23 +1354,23 @@ function DetailPage({
 
   const toggleFavorite = async () => {
     if (actionBusy) return
-    setActionBusy(true)
+    setActionBusy('favorite')
     try {
       const next = !favorite
       if (await onToggleFavorite(resolvedItem, next)) setFavorite(next)
     } finally {
-      setActionBusy(false)
+      setActionBusy(null)
     }
   }
 
   const toggleWatched = async () => {
     if (actionBusy) return
-    setActionBusy(true)
+    setActionBusy('watched')
     try {
       const next = !watched
       if (await onToggleWatched(resolvedItem, next)) setWatched(next)
     } finally {
-      setActionBusy(false)
+      setActionBusy(null)
     }
   }
 
@@ -1332,7 +1391,7 @@ function DetailPage({
       appliedEpisodeHint.current = hintKey
       setDetailSection('episodes')
       focusSpatialElement(target)
-      target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+      target.scrollIntoView({ behavior: motionScrollBehavior(), block: 'center', inline: 'center' })
     }, 120)
     return () => window.clearTimeout(timer)
   }, [detail?.selectedSeasonId, hintedEpisode, initialEpisodeNumber, loading])
@@ -1364,10 +1423,12 @@ function DetailPage({
               {mediaItem.container && <span>{mediaItem.container}</span>}
             </div>
             <div className="detail-facts">
-              {resolvedItem.year && <><span>{resolvedItem.year}</span><i /></>}
-              {detail?.seasons.length ? <><span>共 {detail.seasons.length} 季</span><i /></> : null}
-              {resolvedItem.duration && <><span>{resolvedItem.duration}</span><i /></>}
-              {resolvedItem.genres?.length ? <><span>{resolvedItem.genres.slice(0, 4).join('、')}</span><i /></> : null}
+              {[
+                resolvedItem.year,
+                detail?.seasons.length ? `共 ${detail.seasons.length} 季` : '',
+                resolvedItem.duration,
+                resolvedItem.genres?.slice(0, 4).join('、'),
+              ].filter(Boolean).map((fact, index) => <span key={index}>{fact}</span>)}
               {resolvedItem.rating && <span className="detail-score"><Star size={14} fill="currentColor" /> {resolvedItem.rating}</span>}
             </div>
             <div className={cx('detail-overview', expanded && 'is-expanded')}>
@@ -1384,12 +1445,12 @@ function DetailPage({
               <FocusButton variant="primary" autoFocusTarget={!initialEpisodeNumber} disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">ENTER</span>} onClick={() => playTarget && onPlay(playTarget)}>{hintedEpisode ? `${hintedEpisode.progress ? '继续' : '播放'}第 ${initialEpisodeNumber} 集` : playTarget?.progress ? '继续播放' : '立即播放'}</FocusButton>
               <FocusButton variant="glass" disabled={!playTarget || loading} icon={<RotateCcw size={20} />} onClick={() => playTarget && onPlay(playTarget, true)}>从头播放</FocusButton>
               {extras[0] && <FocusButton variant="round" label="播放预告片" onClick={() => onPlay(extras[0], true)}><MonitorPlay size={20} /></FocusButton>}
-              <FocusButton variant="round" disabled={actionBusy} active={favorite} label={favorite ? '取消收藏' : '收藏'} onClick={() => { void toggleFavorite() }}><Heart size={20} fill={favorite ? 'currentColor' : 'none'} /></FocusButton>
-              <FocusButton variant="round" disabled={actionBusy} active={watched} label={watched ? '标记为未看' : '标记已看'} onClick={() => { void toggleWatched() }}><Check size={21} /></FocusButton>
-              <FocusButton variant="round" label="更多操作"><MoreHorizontal size={21} /></FocusButton>
+              <FocusButton variant="round" className="detail-state-action" disabled={Boolean(actionBusy)} busy={actionBusy === 'favorite'} active={favorite} label={actionBusy === 'favorite' ? '正在更新收藏' : favorite ? '取消收藏' : '收藏'} onClick={() => { void toggleFavorite() }}>{actionBusy === 'favorite' ? <LoaderCircle className="is-spinning" size={20} /> : <Heart size={20} fill={favorite ? 'currentColor' : 'none'} />}</FocusButton>
+              <FocusButton variant="round" className="detail-state-action" disabled={Boolean(actionBusy)} busy={actionBusy === 'watched'} active={watched} label={actionBusy === 'watched' ? '正在更新观看状态' : watched ? '标记为未看' : '标记已看'} onClick={() => { void toggleWatched() }}>{actionBusy === 'watched' ? <LoaderCircle className="is-spinning" size={21} /> : <Check size={21} />}</FocusButton>
             </div>
-            {loading && <div className="detail-sync"><LoaderCircle className="is-spinning" size={16} /> 正在同步详情…</div>}
-            {error && <div className="detail-sync is-error">{error}</div>}
+            <div className={cx('detail-sync', error && 'is-error')} role="status">
+              {loading ? <><LoaderCircle className="is-spinning" size={16} /> 正在同步详情…</> : error ? <><Info size={16} />{error}</> : null}
+            </div>
           </div>
         </section>
 
@@ -1409,28 +1470,29 @@ function DetailPage({
           {detailSection === 'episodes' && (
             <section className="episode-section detail-tab-panel">
               <header className="section-heading">
-                <div><small>EPISODES</small><h2>剧集与章节</h2></div>
+                <div><small>EPISODES</small><h2>剧集与章节{!loading && <span className="section-count">{episodes.length}</span>}</h2></div>
                 <div className="season-switcher">
-                  {detail?.seasons.map((season) => <FocusButton key={season.id} variant="chip" disabled={loading} active={detail.selectedSeasonId === season.id} onClick={() => { setEpisodePreview(null); onPreview(resolvedItem); onSelectSeason(season.id) }}>{season.original || season.title}</FocusButton>)}
+                  {detail?.seasons.map((season) => <FocusButton key={season.id} variant="chip" disabled={loading} busy={loading} active={detail.selectedSeasonId === season.id} onClick={() => { setEpisodePreview(null); onPreview(resolvedItem); onSelectSeason(season.id) }}>{season.original || season.title}</FocusButton>)}
                 </div>
               </header>
-              <div className="episode-rail">
+              {loading ? <LoadingCards label="正在读取剧集…" rail /> : <div className="episode-rail">
                 {episodes.map((episode, index) => (
                     <button key={episode.id} type="button" data-focusable="true" data-autofocus={initialEpisodeNumber === episode.indexNumber ? 'true' : undefined} data-episode-number={episode.indexNumber} className="episode-card" onClick={() => onPlay(episode)} onFocus={() => setEpisodePreview(episode)}>
-                      <ArtFrame item={episode} wide />
-                      <span className="episode-card__number">{String(episode.indexNumber ?? index + 1).padStart(2, '0')}</span>
-                      <span className="episode-card__play"><Play size={19} fill="currentColor" /></span>
-                      <span className="episode-card__copy"><strong>{episode.original || episode.title}</strong><small>{episode.duration || episode.subtitle}</small></span>
-                      {episode.progress !== undefined && episode.progress > 0 && <span className="episode-card__progress"><i style={{ width: `${episode.progress}%` }} /></span>}
+                      <ArtFrame item={episode} wide>
+                        <span className="episode-card__number">{String(episode.indexNumber ?? index + 1).padStart(2, '0')}</span>
+                        <span className="episode-card__play"><Play size={19} fill="currentColor" /></span>
+                        <MediaIndicators item={episode} />
+                      </ArtFrame>
+                      <span className="episode-card__copy"><strong title={episode.original || episode.title}>{episode.original || episode.title}</strong><small>{episode.duration || episode.subtitle}</small></span>
                     </button>
                 ))}
-              </div>
+              </div>}
             </section>
           )}
 
           {detailSection === 'similar' && (
             <section className="similar-section detail-tab-panel">
-              <header className="section-heading"><div><small>SIMILAR FREQUENCIES</small><h2>更多类似内容</h2></div></header>
+              <header className="section-heading"><div><small>SIMILAR FREQUENCIES</small><h2>更多类似内容<span className="section-count">{similar.length}</span></h2></div></header>
               <div className="shelf__rail">
                 {similar.map((related) => <MediaCard key={related.id} item={related} wide onOpen={onOpen} onPreview={onPreview} />)}
               </div>
@@ -1439,7 +1501,7 @@ function DetailPage({
 
           {detailSection === 'clips' && (
             <section className="similar-section detail-tab-panel">
-              <header className="section-heading"><div><small>EXTRAS</small><h2>额外片段</h2></div></header>
+              <header className="section-heading"><div><small>EXTRAS</small><h2>额外片段<span className="section-count">{extras.length}</span></h2></div></header>
               <div className="shelf__rail">
                 {extras.map((clip) => <MediaCard key={clip.id} item={clip} wide onOpen={(selectedClip) => onPlay(selectedClip, true)} onPreview={onPreview} />)}
               </div>
@@ -1456,14 +1518,14 @@ function DetailPage({
                 </div>
               </header>
               {infoTab === 'credits' ? (
-                <div className="info-grid glass-panel">
+                <div key="credits" className="info-grid glass-panel detail-info-panel">
                   <dl><dt>导演</dt><dd>{directors.join('、') || '未提供'}</dd><dt>编剧</dt><dd>{writers.join('、') || '未提供'}</dd></dl>
                   <dl><dt>主演</dt><dd>{actors.slice(0, 8).join('、') || '未提供'}</dd><dt>工作室</dt><dd>{resolvedItem.studios?.join('、') || '未提供'}</dd></dl>
                   <dl><dt>加入日期</dt><dd>{premiere}</dd><dt>分类</dt><dd>{resolvedItem.kind}</dd></dl>
                   <dl><dt>标签</dt><dd>{resolvedItem.genres?.join('、') || '未提供'}</dd><dt>路径</dt><dd>{resolvedItem.path || '未提供'}</dd></dl>
                 </div>
               ) : (
-                <div className="spec-grid glass-panel">
+                <div key="media" className="spec-grid glass-panel detail-info-panel">
                   <div><MonitorPlay size={23} /><span><small>视频</small><strong>{[mediaItem.videoCodec, dimension, mediaItem.resolution].filter(Boolean).join(' · ') || '播放时由 Jellyfin 选择规格'}</strong></span></div>
                   <div><AudioLines size={23} /><span><small>音频</small><strong>{mediaItem.audioCodec || '播放时由 Jellyfin 选择音轨'}</strong></span></div>
                   <div><Subtitles size={23} /><span><small>字幕</small><strong>播放时可选择服务器提供的字幕轨</strong></span></div>
@@ -1591,6 +1653,7 @@ function PlayerPage({
   const [feedback, setFeedback] = useState<{ direction: 'backward' | 'forward'; id: number } | null>(null)
   const [volume, setVolume] = useState(100)
   const [volumeVisible, setVolumeVisible] = useState(false)
+  const volumeMounted = usePresence(volumeVisible)
   const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([])
   const [subtitleLoadError, setSubtitleLoadError] = useState(false)
   const hideTimer = useRef<number | null>(null)
@@ -1910,7 +1973,7 @@ function PlayerPage({
     if (scrollDelta) {
       list.scrollTo({
         top: list.scrollTop + scrollDelta,
-        behavior: 'smooth',
+        behavior: motionScrollBehavior(),
       })
     }
     return true
@@ -2258,11 +2321,12 @@ function PlayerPage({
         </div>
       )}
 
-      {volumeVisible && (
-        <div className="player-volume glass-panel" role="status" aria-label={`媒体音量 ${volume}%`}>
-          <Volume2 size={24} />
-          <span><small>媒体音量</small><strong>{volume}%</strong></span>
-          <i><b style={{ width: `${volume}%` }} /></i>
+      {volumeMounted && (
+        <div className={cx('player-volume', 'glass-panel', !volumeVisible && 'is-leaving', volume === 0 && 'is-muted')}
+          role="status" aria-atomic="true" aria-hidden={!volumeVisible}>
+          {volume === 0 ? <VolumeX size={24} /> : volume < 50 ? <Volume1 size={24} /> : <Volume2 size={24} />}
+          <span><small>{volume === 0 ? '已静音' : '媒体音量'}</small><strong>{volume}<em>%</em></strong></span>
+          <i aria-hidden="true"><b style={{ transform: `scaleX(${volume / 100})` }} /></i>
         </div>
       )}
 
@@ -2417,7 +2481,7 @@ export default function App() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [playback, setPlayback] = useState<PlaybackRequest | null>(null)
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
   const toastTimer = useRef<number | null>(null)
   const detailGeneration = useRef(0)
   const playbackKey = useRef(0)
@@ -2518,7 +2582,7 @@ export default function App() {
           ?? searchPage?.querySelector<HTMLElement>('[data-search-result="true"]')
         if (!target) return
         focusSpatialElement(target)
-        target.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+        target.scrollIntoView({ behavior: motionScrollBehavior(), block: 'nearest', inline: 'nearest' })
       })
     }
 
@@ -2572,7 +2636,7 @@ export default function App() {
     if (next === page) return
     setHistory((items) => [...items, page])
     setPage(next)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    window.scrollTo({ top: 0, behavior: motionScrollBehavior() })
   }, [page])
 
   const navigateDirect = useCallback((next: Page) => {
@@ -2591,7 +2655,7 @@ export default function App() {
       setPage('home')
       return []
     })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    window.scrollTo({ top: 0, behavior: motionScrollBehavior() })
   }, [])
 
   const closeTutorial = useCallback((outcome: TutorialOutcome) => {
@@ -2617,15 +2681,15 @@ export default function App() {
     restoreTutorialFocus.current = false
   }, [jellyfin.status, page])
 
-  const showToast = useCallback((message: string) => {
-    setToast(message)
+  const showToast = useCallback((message: string, tone: FeedbackTone = 'info') => {
+    setToast({ text: message, tone })
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setToast(null), 2200)
+    toastTimer.current = window.setTimeout(() => setToast(null), tone === 'error' ? 4000 : 2400)
   }, [])
 
   const refreshLibrary = useCallback(() => {
     void jellyfin.refresh().then((succeeded) => {
-      showToast(succeeded ? '媒体库已刷新' : '刷新失败，请检查 Jellyfin 服务器')
+      showToast(succeeded ? '媒体库已刷新' : '刷新失败，请检查 Jellyfin 服务器', succeeded ? 'success' : 'error')
     })
   }, [jellyfin.refresh, showToast])
 
@@ -2834,7 +2898,7 @@ export default function App() {
         : jellyfin.seriesIndex.length ? jellyfin.seriesIndex : fallbackSeries
       return <SearchPage series={searchableSeries} indexStatus={jellyfin.seriesIndexStatus} prioritySeriesIds={searchPrioritySeriesIds} query={searchQuery} focusPane={searchPane} keyboardMode={searchKeyboardMode} keyboardFocusId={searchKeyboardFocusId} resultFocusId={searchResultFocusId} phoneKeyboardState={phoneKeyboardState} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onQueryChange={setSearchQuery} onKeyboardModeChange={setSearchKeyboardMode} onKeyboardFocus={(id) => { setSearchPane('keyboard'); setSearchKeyboardFocusId(id) }} onResultFocus={(id) => { setSearchPane('results'); setSearchResultFocusId(id) }} onNavigate={navigateFromMenu} onOpen={openSearchSeries} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     }
-    if (page === 'detail') return <DetailPage key={selected.id} item={selected} detail={detail} loading={detailLoading} error={detailError} initialEpisodeNumber={searchEpisodeHint?.seriesId === selected.id ? searchEpisodeHint.episode : undefined} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigateFromMenu(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? '已加入收藏' : '已取消收藏'); return saved } catch { showToast('收藏状态更新失败'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? '已标记为看过' : '已标记为未看'); return saved } catch { showToast('观看状态更新失败'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
+    if (page === 'detail') return <DetailPage key={selected.id} item={selected} detail={detail} loading={detailLoading} error={detailError} initialEpisodeNumber={searchEpisodeHint?.seriesId === selected.id ? searchEpisodeHint.episode : undefined} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigateFromMenu(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? '已加入收藏' : '已取消收藏', 'success'); return saved } catch { showToast('收藏状态更新失败，请重试', 'error'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? '已标记为看过' : '已标记为未看', 'success'); return saved } catch { showToast('观看状态更新失败，请重试', 'error'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     const request = playback ?? {
       item: selected.canPlay
         ? selected
@@ -2861,7 +2925,7 @@ export default function App() {
         />
       )}
       {pageNode}
-      {toast && <div className="toast"><span><Check size={18} /></span>{toast}</div>}
+      <Toast message={toast} />
       <svg className="svg-filters" aria-hidden="true">
         <filter id="liquid-edge" x="-30%" y="-30%" width="160%" height="160%">
           <feTurbulence type="fractalNoise" baseFrequency="0.012 0.06" numOctaves="2" seed="8" result="noise" />
