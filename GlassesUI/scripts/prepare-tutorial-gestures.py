@@ -9,6 +9,18 @@ import xml.etree.ElementTree as ET
 SVG = '{http://www.w3.org/2000/svg}'
 ET.register_namespace('', SVG[1:-1])
 GESTURES = ('swipe-right', 'swipe-down', 'swipe-left', 'swipe-up', 'single-tap', 'double-tap')
+# Bake the gallery palette into static vectors; an <img> cannot inherit page
+# colors, and a runtime hue filter would defeat simpleUI's rendering budget.
+SIMPLE_PALETTE = {
+    '#1b6ef2': '#859477', '#1d70f3': '#89987b',
+    '#125cd4': '#586a4e', '#155fd7': '#617456', '#165fd6': '#637659',
+    '#1260d9': '#5b6e51', '#1460d9': '#65765b', '#1466e3': '#718366',
+    '#176be9': '#86967a', '#1666dc': '#7d8f70', '#1669df': '#7d8f70',
+    '#2475f4': '#adbba0', '#2b7cf5': '#bcc8b0', '#2f7df5': '#c8d2bc',
+    '#2d7ef6': '#c1cdb4', '#2b79f3': '#b9c6ac', '#2675f1': '#aebb9f',
+    '#2979f2': '#b6c3a9', '#a5dfff': '#cfdbc0', '#bfebff': '#dce4cd',
+    '#c2ebff': '#dce4cd', '#e8f6ff': '#f0eee6',
+}
 
 
 def parse_vector(archive, name):
@@ -67,9 +79,33 @@ def prepare(source, output):
         write_gesture(person, output, 'single-tap-full', 57)
 
 
+def prepare_simple_gestures(output):
+    target = output / 'simpleUI'
+    target.mkdir(parents=True, exist_ok=True)
+    for name in (*GESTURES, 'single-tap-full'):
+        root = ET.parse(output / (name + '-still.svg')).getroot()
+        for element in root.iter():
+            if element.tag.split('}')[-1] in ('animate', 'animateTransform', 'animateMotion', 'set'):
+                raise ValueError('simpleUI artwork must remain static.')
+            for attribute, value in list(element.attrib.items()):
+                if value in SIMPLE_PALETTE:
+                    element.set(attribute, SIMPLE_PALETTE[value])
+        description = root.find(SVG + 'desc')
+        if description is not None:
+            description.text = '苔绿与暖灰配色的静态遥控示意，纯矢量，无滤镜或循环动画。'
+        write_svg(root, target / (name + '-still.svg'))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('archive', type=Path)
+    parser.add_argument('archive', type=Path, nargs='?')
+    parser.add_argument('--simple-ui-only', action='store_true',
+                        help='Regenerate the simpleUI palette from the committed still vectors.')
     args = parser.parse_args()
-    prepare(args.archive, Path(__file__).resolve().parents[1] / 'public/assets/tutorial')
-    print('Prepared six hand gestures and a full-figure single tap, each with a still fallback.')
+    output = Path(__file__).resolve().parents[1] / 'public/assets/tutorial'
+    if not args.simple_ui_only:
+        if args.archive is None:
+            parser.error('Provide the source archive, or use --simple-ui-only.')
+        prepare(args.archive, output)
+    prepare_simple_gestures(output)
+    print('Prepared tutorial artwork, including seven static simpleUI vectors.')

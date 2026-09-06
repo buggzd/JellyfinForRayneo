@@ -11,6 +11,9 @@
   --glass: #222820;
   --glass-strong: #30382b;
   --focus-ring: #e5e8d5;
+  --simple-hero-veil:
+    linear-gradient(90deg, #141714 0%, #141714 2%, #141714ed 13%, #1417149c 32%, #14171426 60%, #14171400 82%),
+    linear-gradient(0deg, #141714 0%, #141714b3 12%, #14171400 40%);
 }
 :root[data-ui-theme="simpleUI"] :is(body, .app, .ambient, .remote-tutorial) { background: #141714; color: #f0eee6; }
 :root[data-ui-theme="simpleUI"] :is(.ambient__spectrum, .ambient__grain, .svg-filters, .media-card__glow, .art-frame__orb, .art-frame__flare, .tutorial-floor, .tutorial-orbit),
@@ -18,11 +21,16 @@
 :root[data-ui-theme="simpleUI"] :is(.focus-button, .detail-poster-wrap, .empty-state__orb)::before { display: none; }
 :root[data-ui-theme="simpleUI"] .focus-button__lens { display: none; }
 :root[data-ui-theme="simpleUI"] .ambient--home-cover .ambient__image { height: 115%; opacity: .7; transition: none; }
-:root[data-ui-theme="simpleUI"] .ambient--home-cover .ambient__veil {
-  background: linear-gradient(90deg, #141714 0%, #141714 47%, #141714e8 59%, #14171466 77%, #14171418),
-    linear-gradient(0deg, #141714, #14171400 50%);
+/* The fade starts at the artwork's actual edge, at every viewport ratio.
+   Opaque gradient endpoints meet the page color without a mask or blur. */
+:root[data-ui-theme="simpleUI"] .ambient--home-cover .ambient__image::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  background: var(--simple-hero-veil);
 }
-:root[data-ui-theme="simpleUI"] .home-page--shelves-active::before { background: #141714c9; }
+:root[data-ui-theme="simpleUI"] .ambient--home-cover .ambient__veil,
+:root[data-ui-theme="simpleUI"] :is(.home-page, .browse-page, .detail-page)::before { display: none; }
 
 :root[data-ui-theme="simpleUI"] :is(.glass-panel, .track-panel, .toast, .player-state, .player-volume, .player-subtitle-error, .browse-toolbar, .empty-state__orb) {
   color: #f0eee6;
@@ -63,7 +71,6 @@
 :root[data-ui-theme="simpleUI"] .remote-hint { color: #bfc5b7; }
 :root[data-ui-theme="simpleUI"] :is(.hero-eyebrow, .meta-row .rating svg, .detail-kicker) { color: #c9d4b9; }
 :root[data-ui-theme="simpleUI"] :is(.hero-overview, .hero-tagline, .meta-row, .hero-original) { color: #b2baaa; }
-:root[data-ui-theme="simpleUI"] .home-page::before { background: linear-gradient(180deg, transparent 25%, #141714 88%); }
 :root[data-ui-theme="simpleUI"] :is(.loading-card__art, .loading-card > i) { border-color: #353e30; background: #252d22; }
 
 /* Keep the label reveal on opacity/transform; the rail itself no longer grows
@@ -78,10 +85,9 @@
 :root[data-ui-theme="simpleUI"] .side-navigation .focus-button--ghost.is-active::after { background: #c8d5b4; }
 :root[data-ui-theme="simpleUI"] :is(.side-navigation__brand-mark, .side-navigation__avatar) { color: #d9dfcb; border: 1px solid #7f8d70; background: #252e21; }
 
-:root[data-ui-theme="simpleUI"] .detail-poster-wrap { -webkit-mask-image: none; mask-image: none; }
+:root[data-ui-theme="simpleUI"] .detail-poster-wrap { opacity: 1; -webkit-mask-image: none; mask-image: none; }
 :root[data-ui-theme="simpleUI"] .detail-poster-wrap::after {
-  background: linear-gradient(90deg, #141714 0%, #141714e8 12%, #14171460 43%, #14171415),
-    linear-gradient(0deg, #141714 0%, transparent 65%);
+  background: var(--simple-hero-veil);
 }
 :root[data-ui-theme="simpleUI"] .detail-poster { border: 0; border-radius: 0; }
 :root[data-ui-theme="simpleUI"] :is(.detail-info-panel, .detail-tab-panel) { border-color: #374030; }
@@ -101,14 +107,39 @@
 :root[data-ui-theme="simpleUI"] .seek-feedback__copy { padding: 10px 16px; border-radius: 10px; background: #10180fde; }
 
 :root[data-ui-theme="simpleUI"] .remote-tutorial { --tutorial-blue: #c8d5b4; --tutorial-dim: #b2bba6; }
+:root[data-ui-theme="simpleUI"] :is(.tutorial-brand > span, .tutorial-eyebrow, .tutorial-eyebrow > span, .tutorial-recap svg, .tutorial-exit__icon) { color: #c8d5b4; border-color: #657459; }
+:root[data-ui-theme="simpleUI"] :is(.remote-tutorial p, .tutorial-welcome__facts, .tutorial-footer__hint, .tutorial-progress small, .tutorial-recap span, .tutorial-stage-note, .tutorial-stage-status, .tutorial-movie-card__copy small) { color: #b2bba6; }
+:root[data-ui-theme="simpleUI"] :is(.tutorial-eyebrow > i, .tutorial-art-caption > span, .tutorial-feedback__dot, .tutorial-practice__header i) { background: #c8d5b4; }
+:root[data-ui-theme="simpleUI"] .tutorial-brand i { background: #657459; }
+:root[data-ui-theme="simpleUI"] .tutorial-person { -webkit-mask-image: none; mask-image: none; }
+:root[data-ui-theme="simpleUI"] .tutorial-person::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, #141714 2%, #14171400 24%); pointer-events: none; }
+:root[data-ui-theme="simpleUI"] :is(.tutorial-art-caption, .tutorial-gesture-label > span) { color: #d5ddc6; border-color: #44513b; background: #20281d; }
 :root[data-ui-theme="simpleUI"] :is(.tutorial-practice, .tutorial-exit, .tutorial-recap > div, .tutorial-feedback) { color: #dfe5d5; border-color: #44513b; background: #20281d; }
+:root[data-ui-theme="simpleUI"] .tutorial-practice__header { color: #dfe5d5; }
 :root[data-ui-theme="simpleUI"] .tutorial-exit-layer { background: #10160fee; }
 :root[data-ui-theme="simpleUI"] .tutorial-button { color: #dfe5d5; border-color: #657459; background: #293322; }
 :root[data-ui-theme="simpleUI"] .tutorial-button:is(:focus-visible, [data-spatial-focus="true"]) { outline: 2px solid #e5e8d5; outline-offset: 4px; color: #1d2918; background: #d5ddc6; }
 :root[data-ui-theme="simpleUI"] .tutorial-cell.is-current { border-color: #e5e8d5; background: #3a4730; }
 :root[data-ui-theme="simpleUI"] .tutorial-cell.is-target { border-color: #a3b68c; color: #cfdfba; background: #2c3922; }
+:root[data-ui-theme="simpleUI"] .tutorial-cell { border-color: #35402f; background: #242d20; }
+:root[data-ui-theme="simpleUI"] .tutorial-cell small { color: #c8d5b4; }
+:root[data-ui-theme="simpleUI"] .tutorial-cell__point { background: #657459; }
 :root[data-ui-theme="simpleUI"] .tutorial-light { background: #d5ddc6; }
 :root[data-ui-theme="simpleUI"] .tutorial-feedback.success { color: #c5e1b6; background: #2c3d23; }
+:root[data-ui-theme="simpleUI"] .tutorial-status-ring { border-color: #a3b68c; }
+:root[data-ui-theme="simpleUI"] :is(.tutorial-movie-card, .tutorial-detail) { color: #e7e9dc; border-color: #c8d5b4; background: #2c3925; }
+:root[data-ui-theme="simpleUI"] .tutorial-movie-art { background: #1c2719; }
+:root[data-ui-theme="simpleUI"] .tutorial-movie-art > span { color: #e7e9dc; }
+:root[data-ui-theme="simpleUI"] .tutorial-planet { border-color: #a3b68c; background: linear-gradient(135deg, #d5ddc6, #7d9169 40%, #34452a 75%); }
+:root[data-ui-theme="simpleUI"] .tutorial-planet::after { border-color: #b6c8a6; }
+:root[data-ui-theme="simpleUI"] .tutorial-detail__art { background: #1c2719; }
+:root[data-ui-theme="simpleUI"] .tutorial-detail__art::after { background: linear-gradient(0deg, #1c2719, #1c271940 70%); }
+:root[data-ui-theme="simpleUI"] :is(.tutorial-detail__badge, .tutorial-return-target, .tutorial-complete__seal) { color: #d5ddc6; border-color: #a3b68c; background: #2c3d23; }
+:root[data-ui-theme="simpleUI"] .tutorial-progress > span { color: #89967b; border-color: #35402f; background: #1d251a; }
+:root[data-ui-theme="simpleUI"] .tutorial-progress > .is-active { color: #e5e8d5; border-color: #b6c8a6; background: #34452a; }
+:root[data-ui-theme="simpleUI"] .tutorial-progress > .is-done { color: #c5e1b6; border-color: #718763; background: #2c3d23; }
+:root[data-ui-theme="simpleUI"] .is-success :is(.tutorial-cell.is-current, .tutorial-light) { color: #1d2918; border-color: #c5e1b6; background: #a3bd8e; }
+:root[data-ui-theme="simpleUI"] .tutorial-stage-status.is-done { color: #c5e1b6; }
 @media (prefers-reduced-motion: no-preference) {
   :root[data-ui-theme="simpleUI"] .seek-feedback { animation: simple-fade 140ms ease-out backwards !important; }
 }
