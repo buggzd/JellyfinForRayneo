@@ -1,6 +1,6 @@
 const CHANNEL = 'jellyfin-rayneo-dual-ui-v1'
-const MAX_MESSAGE_LENGTH = 16_384
-const allowedScreens = new Set(['connect', 'auth', 'home', 'settings', 'touchpad'])
+const MAX_MESSAGE_LENGTH = 65_536
+const allowedScreens = new Set(['connect', 'auth', 'home', 'settings', 'accounts', 'touchpad'])
 const allowedRemoteCommands = new Set([
   'up',
   'down',
@@ -141,6 +141,8 @@ export function installDevelopmentBridge() {
     startQuickConnect: (serverUrl) => call('startQuickConnect', [boundedText(serverUrl, 2_048)]),
     cancelQuickConnect: () => call('cancelQuickConnect'),
     clearSession: () => call('clearSession'),
+    activateSession: (id) => { if (typeof id === 'string' && /^[a-f0-9]{32}$/.test(id)) call('activateSession', [id]) },
+    removeSession: (id) => { if (typeof id === 'string' && /^[a-f0-9]{32}$/.test(id)) call('removeSession', [id]) },
     retryGlasses: () => call('retryGlasses'),
     shareDiagnostics: () => call('shareDiagnostics'),
     selectDisplayMode: (mode) => call('selectDisplayMode', [boundedText(mode, 32)]),

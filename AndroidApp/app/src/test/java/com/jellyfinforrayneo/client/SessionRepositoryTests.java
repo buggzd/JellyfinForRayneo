@@ -60,8 +60,8 @@ public final class SessionRepositoryTests
         repository.save(validSession(), true);
 
         assertTrue(repository.isPersisted());
-        assertNotNull(SessionPayload.fromJson(
-                store.getString(SessionRepository.KEY_SESSION, "")));
+        assertNotNull(new SessionRepository(store).getSession());
+        assertFalse(store.values.containsKey(SessionRepository.KEY_SESSION));
     }
 
     @Test
@@ -76,8 +76,10 @@ public final class SessionRepositoryTests
 
         assertNotNull(repository.getSession());
 
-        JSONObject canonical = new JSONObject(
-                store.getString(SessionRepository.KEY_SESSION, ""));
+        JSONObject canonical = repository.getSession().toJsonObject();
+        assertEquals(1, repository.accountSummaries().length());
+        assertFalse(store.values.containsKey(SessionRepository.KEY_SESSION));
+        assertNotNull(new SessionRepository(store).getSession());
         assertEquals(8, canonical.length());
         assertFalse(canonical.has("createdAt"));
         assertFalse(canonical.has("ignored"));
@@ -119,6 +121,168 @@ public final class SessionRepositoryTests
         assertTrue(StereoScreenSettings.DEFAULT.sameAs(repository.getStereoScreenSettings()));
         repository.setStereoScreenSettings(null);
         assertTrue(StereoScreenSettings.DEFAULT.sameAs(repository.getStereoScreenSettings()));
+    }
+
+    @Test
+    public void switch_RemembersTwoServersAndRestoresTheSelectedAccount()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        repository.save(validSession(), true);
+        String first = repository.getActiveId();
+        repository.save(account("https://other.example.test", "user-id", "other-token"), true);
+        String second = repository.getActiveId();
+
+        assertEquals(2, repository.accountSummaries().length());
+        assertEquals("Home", repository.activate(first).getServerName());
+        assertEquals(first, new SessionRepository(store).getActiveId());
+        assertEquals("https://other.example.test", repository.activate(second).getServerUrl());
+        assertEquals(second, new SessionRepository(store).getActiveId());
+    }
+
+    @Test
+    public void save_SameServerSupportsDifferentUsersAndRefreshesExistingLogin()
+    {
+        SessionRepository repository = new SessionRepository(new FakeStore());
+        repository.save(validSession(), true);
+        String first = repository.getActiveId();
+        repository.save(account("http://jellyfin.local:8096", "another-user", "second-token"), true);
+        assertEquals(2, repository.accountSummaries().length());
+        repository.save(account("http://jellyfin.local:8096", "user-id", "refreshed-token"), true);
+
+        assertEquals(first, repository.getActiveId());
+        assertEquals(2, repository.accountSummaries().length());
+        assertTrue(repository.getSession().toJson().contains("refreshed-token"));
+    }
+
+    @Test
+    public void clear_InvalidActiveLoginDoesNotForgetOtherAccounts()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        repository.save(validSession(), true);
+        String first = repository.getActiveId();
+        repository.save(account("https://other.example.test", "other", "other-token"), true);
+        String removed = repository.getActiveId();
+        repository.clear();
+
+        SessionRepository restored = new SessionRepository(store);
+        assertNull(restored.getSession());
+        assertEquals(1, restored.accountSummaries().length());
+        assertNull(restored.activate(removed));
+        assertNotNull(restored.activate(first));
+    }
+
+    @Test
+    public void remove_InactiveAccountKeepsCurrentConnectionAndPreferences()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        repository.save(validSession(), true);
+        String first = repository.getActiveId();
+        repository.save(account("https://other.example.test", "other", "other-token"), true);
+        String active = repository.getActiveId();
+        assertTrue(repository.remove(first));
+        assertEquals(active, repository.getActiveId());
+        assertEquals(active, new SessionRepository(store).getActiveId());
+        assertEquals(1, repository.accountSummaries().length());
+    }
+
+    @Test
+    public void ephemeralLogin_CanSwitchInProcessButNeverRestoresAfterRestart()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        repository.save(validSession(), true);
+        String persisted = repository.getActiveId();
+        repository.save(account("https://other.example.test", "other", "ephemeral-token"), false);
+        String ephemeral = repository.getActiveId();
+        repository.activate(persisted);
+        assertNotNull(repository.activate(ephemeral));
+        assertFalse(store.getString(SessionRepository.KEY_ACCOUNTS, "").contains("ephemeral-token"));
+
+        SessionRepository restored = new SessionRepository(store);
+        assertNull(restored.getSession());
+        assertEquals(1, restored.accountSummaries().length());
+        assertNotNull(restored.activate(persisted));
+        assertNull(restored.activate(ephemeral));
+    }
+
+    @Test
+    public void saveWithoutRemembering_RemovesOlderPersistedTokenForSameAccount()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        repository.save(validSession(), true);
+        repository.save(account("http://jellyfin.local:8096", "user-id", "ephemeral-token"), false);
+        assertNotNull(repository.getSession());
+        assertEquals(0, new SessionRepository(store).accountSummaries().length());
+    }
+
+    @Test
+    public void summaries_ExposeOnlyBoundedAccountMetadata() throws Exception
+    {
+        SessionRepository repository = new SessionRepository(new FakeStore());
+        repository.save(validSession(), true);
+        JSONObject summary = repository.accountSummaries().getJSONObject(0);
+        assertEquals(8, summary.length());
+        assertEquals(repository.getActiveId(), summary.getString("id"));
+        assertTrue(summary.getBoolean("active"));
+        assertTrue(summary.getBoolean("saved"));
+        assertFalse(summary.has("accessToken"));
+        assertFalse(summary.has("password"));
+        assertFalse(summary.has("userId"));
+        assertFalse(summary.has("deviceId"));
+        assertFalse(summary.toString().contains("access-token"));
+    }
+
+    @Test
+    public void unknownOrUnboundedId_CannotSwitchOrRemoveAnAccount()
+    {
+        SessionRepository repository = new SessionRepository(new FakeStore());
+        repository.save(validSession(), true);
+        String active = repository.getActiveId();
+        for (String id : new String[] {null, "", active + "x", "00000000000000000000000000000000"})
+        {
+            assertNull(repository.activate(id));
+            assertFalse(repository.remove(id));
+            assertEquals(active, repository.getActiveId());
+        }
+    }
+
+    @Test
+    public void fullAccountList_RejectsNewLoginWithoutEvictingAnyAccount()
+    {
+        SessionRepository repository = new SessionRepository(new FakeStore());
+        for (int index = 0; index < SessionRepository.MAX_ACCOUNTS; index++)
+        {
+            assertTrue(repository.save(account("https://media.example.test", "user-" + index, "token"), true));
+        }
+        String active = repository.getActiveId();
+        assertFalse(repository.save(validSession(), true));
+        assertEquals(active, repository.getActiveId());
+        assertEquals(SessionRepository.MAX_ACCOUNTS, repository.accountSummaries().length());
+        assertTrue(repository.save(account("https://media.example.test", "user-0", "new-token"), true));
+    }
+
+    @Test
+    public void corruptRegistry_CannotRestoreLegacyOrArbitraryActiveSession()
+    {
+        FakeStore store = new FakeStore();
+        store.putString(SessionRepository.KEY_SESSION, validSession().toJson());
+        store.putString(SessionRepository.KEY_ACCOUNTS, "invalid");
+        SessionRepository repository = new SessionRepository(store);
+        assertNull(repository.getSession());
+        assertEquals(0, repository.accountSummaries().length());
+        assertFalse(store.values.containsKey(SessionRepository.KEY_SESSION));
+    }
+
+    private static SessionPayload account(String server, String userId, String token)
+    {
+        SessionPayload session = SessionPayload.create(server, "Media", "10.10", "server-id", token,
+                userId, "Test user", "device-id");
+        assertNotNull(session);
+        return session;
     }
 
     private static SessionPayload validSession()

@@ -36,3 +36,11 @@ not redistribute Jellyfin server software.
 
 The application does not embed or link LibVLC, Google Cardboard, or a Unity
 runtime.
+
+## RayNeo product image
+
+`CompanionUI/public/art/rayneo-air-3s.webp` is cropped and resized from the
+RayNeo Air 3S official product artwork supplied by the user. It preserves the
+product's original appearance and transparency. The product artwork and RayNeo
+marks remain the property of their respective owners and are not covered by
+this repository's MIT license.

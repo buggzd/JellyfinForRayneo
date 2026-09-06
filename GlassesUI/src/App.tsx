@@ -2531,6 +2531,14 @@ export default function App() {
     : ''
 
   useEffect(() => {
+    detailGeneration.current += 1
+    setPage('home')
+    setHistory([])
+    setDetail(null)
+    setDetailError('')
+    setPlayback(null)
+    setBrowseEntry(null)
+    setToast(null)
     setSearchQuery('')
     setSearchPane('keyboard')
     setSearchKeyboardMode('letters')

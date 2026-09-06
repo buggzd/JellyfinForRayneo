@@ -2,12 +2,20 @@ package com.jellyfinforrayneo.client;
 
 import android.content.SharedPreferences;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 final class SessionRepository
 {
     static final String PREFERENCES_NAME = "jellyfin_companion";
     static final String KEY_SESSION = "session_json";
+    static final String KEY_ACCOUNTS = "accounts_v1";
+    static final int MAX_ACCOUNTS = 12;
+    private static final int MAX_ACCOUNTS_JSON_LENGTH = MAX_ACCOUNTS * SessionPayload.MAX_JSON_LENGTH + 4_096;
     static final String KEY_DEVICE_ID = "device_id";
     static final String KEY_SERVER_URL = "server_url";
     static final String KEY_USER_NAME = "username";
@@ -52,7 +60,21 @@ final class SessionRepository
     }
 
     private final Store store;
-    private SessionPayload transientSession;
+    private final Map<String, Account> accounts = new LinkedHashMap<>();
+    private String activeId = "";
+    private boolean loaded;
+
+    private static final class Account
+    {
+        final SessionPayload session;
+        final boolean persisted;
+
+        Account(SessionPayload session, boolean persisted)
+        {
+            this.session = session;
+            this.persisted = persisted;
+        }
+    }
 
     SessionRepository(SharedPreferences preferences)
     {
@@ -64,55 +86,174 @@ final class SessionRepository
         this.store = store;
     }
 
-    synchronized SessionPayload getSession()
+    private void load()
     {
-        if (transientSession != null)
+        if (loaded)
         {
-            return transientSession;
+            return;
         }
-
-        String stored = store.getString(KEY_SESSION, "");
-        SessionPayload restored = SessionPayload.fromJson(stored);
-        if (restored == null && !stored.isEmpty())
+        loaded = true;
+        String stored = store.getString(KEY_ACCOUNTS, "");
+        if (!stored.isEmpty() && stored.length() <= MAX_ACCOUNTS_JSON_LENGTH)
         {
-            store.remove(KEY_SESSION);
-        }
-        else if (restored != null)
-        {
-            transientSession = restored;
-            String canonical = restored.toJson();
-            if (!canonical.equals(stored))
+            try
             {
-                store.putString(KEY_SESSION, canonical);
+                JSONObject root = new JSONObject(stored);
+                JSONArray entries = root.getJSONArray("accounts");
+                for (int index = 0; index < Math.min(entries.length(), MAX_ACCOUNTS); index++)
+                {
+                    JSONObject entry = entries.optJSONObject(index);
+                    if (entry == null)
+                    {
+                        continue;
+                    }
+                    String id = entry.optString("id", "");
+                    SessionPayload session = SessionPayload.fromJson(entry.optString("session", ""));
+                    if (validAccountId(id) && session != null && findAccount(session).isEmpty())
+                    {
+                        accounts.put(id, new Account(session, true));
+                    }
+                }
+                String restoredId = root.optString("activeId", "");
+                activeId = accounts.containsKey(restoredId) ? restoredId : "";
+            }
+            catch (Exception ignored)
+            {
+                accounts.clear();
             }
         }
-        return restored;
+        if (stored.isEmpty())
+        {
+            SessionPayload legacy = SessionPayload.fromJson(store.getString(KEY_SESSION, ""));
+            if (legacy != null)
+            {
+                activeId = newAccountId();
+                accounts.put(activeId, new Account(legacy, true));
+            }
+        }
+        persistAccounts();
+        store.remove(KEY_SESSION);
     }
 
-    synchronized void save(SessionPayload session, boolean persist)
+    private void persistAccounts()
+    {
+        JSONObject root = new JSONObject();
+        JSONArray entries = new JSONArray();
+        try
+        {
+            for (Map.Entry<String, Account> item : accounts.entrySet())
+            {
+                if (item.getValue().persisted)
+                {
+                    JSONObject entry = new JSONObject();
+                    entry.put("id", item.getKey());
+                    entry.put("session", item.getValue().session.toJson());
+                    entries.put(entry);
+                }
+            }
+            Account active = accounts.get(activeId);
+            root.put("activeId", active != null && active.persisted ? activeId : "");
+            root.put("accounts", entries);
+            store.putString(KEY_ACCOUNTS, root.toString());
+        }
+        catch (Exception ignored)
+        {
+            throw new IllegalStateException("Unable to save validated accounts.");
+        }
+    }
+
+    private String findAccount(SessionPayload session)
+    {
+        for (Map.Entry<String, Account> item : accounts.entrySet())
+        {
+            SessionPayload existing = item.getValue().session;
+            if (existing.getServerUrl().equals(session.getServerUrl())
+                    && existing.getUserId().equals(session.getUserId()))
+            {
+                return item.getKey();
+            }
+        }
+        return "";
+    }
+
+    private static String newAccountId()
+    {
+        return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    static boolean validAccountId(String id)
+    {
+        return id != null && id.matches("[a-f0-9]{32}");
+    }
+
+    synchronized SessionPayload getSession()
+    {
+        load();
+        Account active = accounts.get(activeId);
+        return active == null ? null : active.session;
+    }
+
+    synchronized String getActiveId()
+    {
+        load();
+        return activeId;
+    }
+
+    synchronized boolean save(SessionPayload session, boolean persist)
     {
         if (session == null)
         {
             throw new IllegalArgumentException("A validated session is required.");
         }
+        load();
+        String id = findAccount(session);
+        if (id.isEmpty())
+        {
+            if (accounts.size() >= MAX_ACCOUNTS)
+            {
+                return false;
+            }
+            id = newAccountId();
+        }
+        accounts.put(id, new Account(session, persist));
+        activate(id);
+        return true;
+    }
 
-        transientSession = session;
-        store.putString(KEY_SERVER_URL, session.getServerUrl());
-        store.putString(KEY_USER_NAME, session.getUserName());
-        if (persist)
+    synchronized SessionPayload activate(String id)
+    {
+        load();
+        Account account = validAccountId(id) ? accounts.get(id) : null;
+        if (account == null)
         {
-            store.putString(KEY_SESSION, session.toJson());
+            return null;
         }
-        else
+        activeId = id;
+        store.putString(KEY_SERVER_URL, account.session.getServerUrl());
+        store.putString(KEY_USER_NAME, account.session.getUserName());
+        persistAccounts();
+        return account.session;
+    }
+
+    synchronized boolean remove(String id)
+    {
+        load();
+        if (!validAccountId(id) || accounts.remove(id) == null)
         {
-            store.remove(KEY_SESSION);
+            return false;
         }
+        if (activeId.equals(id))
+        {
+            activeId = "";
+        }
+        persistAccounts();
+        return true;
     }
 
     synchronized void clear()
     {
-        transientSession = null;
-        store.remove(KEY_SESSION);
+        load();
+        remove(activeId);
     }
 
     synchronized boolean hasSession()
@@ -122,7 +263,39 @@ final class SessionRepository
 
     synchronized boolean isPersisted()
     {
-        return SessionPayload.fromJson(store.getString(KEY_SESSION, "")) != null;
+        load();
+        Account active = accounts.get(activeId);
+        return active != null && active.persisted;
+    }
+
+    // Phone metadata is deliberately independent of the credential-bearing session JSON.
+    synchronized JSONArray accountSummaries()
+    {
+        load();
+        JSONArray result = new JSONArray();
+        for (Map.Entry<String, Account> item : accounts.entrySet())
+        {
+            Account account = item.getValue();
+            SessionPayload session = account.session;
+            JSONObject summary = new JSONObject();
+            try
+            {
+                summary.put("id", item.getKey());
+                summary.put("serverUrl", session.getServerUrl());
+                summary.put("serverName", session.getServerName());
+                summary.put("serverVersion", session.getServerVersion());
+                summary.put("serverId", session.getServerId());
+                summary.put("username", session.getUserName());
+                summary.put("saved", account.persisted);
+                summary.put("active", activeId.equals(item.getKey()));
+                result.put(summary);
+            }
+            catch (Exception ignored)
+            {
+                // Only validated, fixed-shape metadata is published.
+            }
+        }
+        return result;
     }
 
     synchronized String getOrCreateDeviceId()

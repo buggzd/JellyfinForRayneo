@@ -25,3 +25,16 @@ deliberately excludes passwords and access tokens. The settings page can ask
 Android to share an in-memory redacted diagnostic report; the report omits the
 full server address, account, media names, Quick Connect code, credentials, and
 response bodies.
+
+The device page keeps connection status and the touchpad entry; display controls
+live in Settings. Both settings management entries open the server/account list.
+Android retains validated logins, supports multiple users per server, and keeps
+the current connection active while another login is attempted. The browser
+preview uses account metadata only; the dual-UI harness keeps real development
+sessions only in memory.
+
+Account regression tests for the development harness run without a browser:
+
+```bash
+node --test ../DevHarness/*.test.mjs
+```
