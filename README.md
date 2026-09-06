@@ -80,6 +80,7 @@
 | 会话边界、WebView 桥、显示状态机与播放架构 | [Android 架构说明](docs/ANDROID_ARCHITECTURE.md) |
 | SBS 视差、RayNeo Air 3s 参数依据与校准边界 | [虚拟银幕数学分析](docs/SBS_GEOMETRY_ANALYSIS.md) |
 | 保持视觉效果的性能优化、基准与验证边界 | [性能审阅](docs/PERFORMANCE_REVIEW.md) |
+| 界面层次、状态一致性、细节动效与验证记录 | [UI / UX 审阅](docs/UI_UX_REVIEW.md) |
 | 已有能力与后续功能优先级 | [功能路线图](docs/JELLYFIN_FEATURE_ROADMAP.md) |
 | Jellyfin Web 的信息架构与交互采样 | [Jellyfin Web 复现规格](docs/Jellyfin-Web-Reproduction-Spec.md) |
 

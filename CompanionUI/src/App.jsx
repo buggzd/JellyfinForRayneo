@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Toast, usePresence } from './feedback'
 import {
   ArrowLeft,
   ArrowRight,
@@ -13,6 +14,8 @@ import {
   Glasses,
   KeyRound,
   Link2,
+  LoaderCircle,
+  Info,
   LockKeyhole,
   Monitor,
   MoreHorizontal,
@@ -55,7 +58,6 @@ const DEMO_SERVERS = [
   },
 ]
 
-const springEase = 'cubic-bezier(.2, .9, .25, 1.25)'
 const DEFAULT_STEREO_SCREEN = { depthLevel: 1, sizePercent: 90 }
 const DEPTH_LABELS = ['基准', '轻微', '适中', '较近']
 
@@ -163,6 +165,8 @@ function App() {
   const [servers, setServers] = useState(() => (isNative ? [] : DEMO_SERVERS))
   const [authMode, setAuthMode] = useState('password')
   const [manualOpen, setManualOpen] = useState(false)
+  const manualMounted = usePresence(manualOpen)
+  const manualOpenRef = useRef(false)
   const [toast, setToast] = useState('')
   const [nativeState, setNativeState] = useState(null)
   const [stereoScreen, setStereoScreen] = useState(DEFAULT_STEREO_SCREEN)
@@ -180,19 +184,25 @@ function App() {
   const opticsButtonRef = useRef(null)
   const opticsRectRef = useRef(null)
 
-  const notify = (message) => {
+  const notify = (message, tone = 'info') => {
     window.clearTimeout(toastTimer.current)
-    setToast(message)
-    toastTimer.current = window.setTimeout(() => setToast(''), 2100)
+    setToast({ text: message, tone })
+    toastTimer.current = window.setTimeout(() => setToast(''), tone === 'error' ? 4000 : 2400)
   }
 
   const go = (next) => {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    window.scrollTo({ top: 0, behavior: 'instant' })
     if (next === 'touchpad') setToast('')
     if (next !== 'settings') setDemoStereoTestPattern(false)
     screenRef.current = next
     setScreen(next)
   }
+
+  useEffect(() => {
+    manualOpenRef.current = manualOpen
+  }, [manualOpen])
+
+  useEffect(() => () => window.clearTimeout(toastTimer.current), [])
 
   useEffect(() => {
     screenRef.current = screen
@@ -261,7 +271,7 @@ function App() {
 
       if (next.isError && next.message && next.message !== lastNativeErrorRef.current) {
         lastNativeErrorRef.current = next.message
-        notify(next.message)
+        notify(next.message, 'error')
       } else if (!next.isError) {
         lastNativeErrorRef.current = ''
       }
@@ -290,6 +300,10 @@ function App() {
         go('connect')
       },
       handleBack: () => {
+        if (manualOpenRef.current) {
+          setManualOpen(false)
+          return
+        }
         if (screenRef.current === 'touchpad' || screenRef.current === 'settings') {
           go('home')
         } else if (screenRef.current === 'auth') {
@@ -324,7 +338,7 @@ function App() {
     }
     setSession(nextSession)
     go('home')
-    notify('连接就绪，登录会话已保存')
+    notify('连接就绪，登录会话已保存', 'success')
   }
 
   const changeServer = () => {
@@ -398,7 +412,7 @@ function App() {
     changeStereoScreen(DEFAULT_STEREO_SCREEN)
     changeDisplayMode('mirror')
     setHaptics(true)
-    notify('偏好已恢复默认')
+    notify('偏好已恢复默认', 'success')
   }
 
   const moveButtonOptics = (event) => {
@@ -469,7 +483,7 @@ function App() {
         <GlassOptics />
         {screen !== 'touchpad' && <StatusBar />}
 
-        <div className="screen-stack">
+        <div className="screen-stack" inert={manualOpen}>
           {screen === 'connect' && (
             <ConnectScreen
               session={session}
@@ -566,8 +580,9 @@ function App() {
           />
         )}
 
-        {manualOpen && (
+        {manualMounted && (
           <ManualServerSheet
+            open={manualOpen}
             onClose={() => setManualOpen(false)}
             onContinue={(server) => {
               setSelectedServer(server)
@@ -672,7 +687,7 @@ function ConnectScreen({
     window.setTimeout(() => {
       setDemoScanning(false)
       setScanRound((round) => round + 1)
-      notify('扫描完成，找到 2 台服务器')
+      notify('扫描完成，找到 2 台服务器', 'success')
     }, 1350)
   }
 
@@ -713,7 +728,7 @@ function ConnectScreen({
           <span className="eyebrow">LOCAL NETWORK</span>
           <h2>选择媒体服务器</h2>
         </div>
-        <button className={`scan-button ${scanning ? 'is-scanning' : ''}`} onClick={scan}>
+        <button className={`scan-button ${scanning ? 'is-scanning' : ''}`} onClick={scan} disabled={scanning} aria-busy={scanning}>
           <RefreshCw size={15} />
           {scanning ? '发现中' : '重新扫描'}
         </button>
@@ -747,7 +762,7 @@ function ConnectScreen({
           </button>
         ))}
         {servers.length === 0 && (
-          <div className={`scan-empty glass-panel ${scanning ? 'is-scanning' : ''}`}>
+          <div className={`scan-empty glass-panel ${scanning ? 'is-scanning' : ''}`} role="status">
             <span className="server-orb"><Radar size={20} /></span>
             <span>
               <strong>{scanning ? '正在发现 Jellyfin' : '尚未发现服务器'}</strong>
@@ -806,8 +821,9 @@ function AuthScreen({
   }, [isNative, nativeState?.busy, nativeState?.username])
 
   const login = () => {
+    if (loading || nativeState?.busy) return
     if (!username.trim()) {
-      notify('请填写 Jellyfin 用户名')
+      notify('请填写 Jellyfin 用户名', 'error')
       return
     }
     setLoading(true)
@@ -842,18 +858,18 @@ function AuthScreen({
         </div>
       </div>
 
-      <div className="auth-tabs glass-soft" role="tablist">
-        <button className={mode === 'password' ? 'is-active' : ''} onClick={() => setMode('password')}>
+      <div className="auth-tabs glass-soft" role="group" aria-label="登录方式">
+        <button aria-pressed={mode === 'password'} className={mode === 'password' ? 'is-active' : ''} disabled={busy} onClick={() => setMode('password')}>
           账号密码
         </button>
-        <button className={mode === 'quick' ? 'is-active' : ''} onClick={() => setMode('quick')}>
+        <button aria-pressed={mode === 'quick'} className={mode === 'quick' ? 'is-active' : ''} disabled={busy} onClick={() => setMode('quick')}>
           Quick Connect
         </button>
         <span className={`auth-tabs__indicator auth-tabs__indicator--${mode}`} />
       </div>
 
       {mode === 'password' ? (
-        <div className="auth-content mode-enter" key="password">
+        <form className="auth-content mode-enter" key="password" onSubmit={(event) => { event.preventDefault(); login() }}>
           <div className="form-heading">
             <span className="eyebrow">WELCOME BACK</span>
             <h2>登录你的媒体库</h2>
@@ -864,7 +880,7 @@ function AuthScreen({
             <UserRound size={19} />
             <span>
               <small>用户名</small>
-              <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
+              <input value={username} onChange={(event) => setUsername(event.target.value)} aria-label="用户名" autoComplete="username" />
             </span>
           </label>
 
@@ -876,15 +892,15 @@ function AuthScreen({
                 type={passwordVisible ? 'text' : 'password'}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
+                aria-label="密码" autoComplete="current-password"
               />
             </span>
-            <button type="button" onClick={() => setPasswordVisible((visible) => !visible)} aria-label="显示或隐藏密码">
+            <button type="button" onClick={() => setPasswordVisible((visible) => !visible)} aria-label={passwordVisible ? '隐藏密码' : '显示密码'} aria-pressed={passwordVisible}>
               {passwordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </label>
 
-          <button className="remember-row" onClick={() => setRemember((value) => !value)}>
+          <button type="button" role="switch" aria-checked={remember} className="remember-row" onClick={() => setRemember((value) => !value)}>
             <span className={`check-box ${remember ? 'is-checked' : ''}`}>
               {remember && <Check size={13} strokeWidth={3} />}
             </span>
@@ -894,14 +910,14 @@ function AuthScreen({
             </span>
           </button>
 
-          <button className={`primary-button pressable ${busy ? 'is-loading' : ''}`} onClick={login} disabled={busy}>
+          <button className={`primary-button pressable ${busy ? 'is-loading' : ''}`} type="submit" disabled={busy} aria-busy={busy}>
             <span>{busy ? '正在建立安全连接' : '登录并连接'}</span>
             {busy ? <i className="button-loader" /> : <ArrowRight size={19} />}
           </button>
           {isNative && nativeState?.message && (
-            <p className={`native-status ${nativeState.isError ? 'is-error' : ''}`}>{nativeState.message}</p>
+            <p className={`native-status ${nativeState.isError ? 'is-error' : ''}`} role="status">{nativeState.message}</p>
           )}
-        </div>
+        </form>
       ) : (
         <QuickConnect
           onComplete={() => onComplete('demo')}
@@ -947,7 +963,7 @@ function QuickConnect({
       // Clipboard access can be restricted in embedded previews; visual feedback still demonstrates the action.
     }
     setCopied(true)
-    notify('登录码已复制')
+    notify('登录码已复制', 'success')
     window.setTimeout(() => setCopied(false), 1600)
   }
 
@@ -1000,7 +1016,7 @@ function QuickConnect({
         <X size={16} /> 取消快速登录
       </button>
       {isNative && nativeState?.message && (
-        <p className={`native-status ${nativeState.isError ? 'is-error' : ''}`}>{nativeState.message}</p>
+        <p className={`native-status ${nativeState.isError ? 'is-error' : ''}`} role="status">{nativeState.message}</p>
       )}
     </div>
   )
@@ -1053,7 +1069,7 @@ function HomeScreen({
     <section className={`screen home-screen with-nav ${mediaError ? 'has-runtime-error' : ''}`}>
       <header className="top-row home-top">
         <Brand compact />
-        <button className="profile-button glass-soft" onClick={onSettings}>
+        <button className="profile-button glass-soft" onClick={onSettings} aria-label="账户与设置">
           <span>{profileInitials(username)}</span>
           <i />
         </button>
@@ -1061,7 +1077,7 @@ function HomeScreen({
 
       <div className="welcome-line">
         <div>
-          <span className="eyebrow">GOOD MORNING</span>
+          <span className="eyebrow">YOUR CONNECTION</span>
           <h1>{welcomeTitle}</h1>
         </div>
         <span className={`online-label ${!connected || mediaError ? 'is-offline' : ''}`}><i /> {connectionLabel}</span>
@@ -1136,13 +1152,13 @@ function HomeScreen({
 
 function ModeSelector({ value, onChange }) {
   return (
-    <div className="mode-selector">
-      <button className={value === 'mirror' ? 'is-active' : ''} onClick={() => onChange('mirror')}>
+    <div className="mode-selector" role="group" aria-label="画面输出模式">
+      <button aria-pressed={value === 'mirror'} className={value === 'mirror' ? 'is-active' : ''} onClick={() => onChange('mirror')}>
         <span><Monitor size={19} /></span>
         <div><strong>镜像 2D</strong><small>双眼相同画面</small></div>
         <i className="radio-check">{value === 'mirror' && <Check size={11} />}</i>
       </button>
-      <button className={value === 'stereo' ? 'is-active' : ''} onClick={() => onChange('stereo')}>
+      <button aria-pressed={value === 'stereo'} className={value === 'stereo' ? 'is-active' : ''} onClick={() => onChange('stereo')}>
         <span><Box size={19} /></span>
         <div><strong>虚拟银幕</strong><small>可调远近与大小</small></div>
         <i className="radio-check">{value === 'stereo' && <Check size={11} />}</i>
@@ -1157,9 +1173,11 @@ function DisplayModeStatus({ value, state, onRetry }) {
   const active = Boolean(state?.displayModeApplied && !transitioning)
   const stereoActive = active && state?.activeDisplayMode === 'stereo_screen'
   const waiting = value === 'stereo' && !stereoActive
+  const pending = transitioning || waiting || displayDisabled
+  const Icon = transitioning ? LoaderCircle : active && !displayDisabled ? Check : Info
   return (
-    <div className={`display-mode-status ${waiting ? 'is-pending' : ''}`} role="status">
-      <strong>{displayDisabled ? '系统尚未启用眼镜输出' : transitioning ? '正在切换眼镜输出…' : stereoActive ? '当前：虚拟银幕已启用' : state?.glassesConnected ? '当前：镜像 2D' : '等待眼镜输出'}</strong>
+    <div className={`display-mode-status ${pending ? 'is-pending' : active ? 'is-ready' : 'is-idle'}`} role="status">
+      <strong><Icon size={16} className={transitioning ? 'is-spinning' : ''} aria-hidden="true" />{displayDisabled ? '系统尚未启用眼镜输出' : transitioning ? '正在切换眼镜输出…' : stereoActive ? '当前：虚拟银幕已启用' : state?.glassesConnected ? '当前：镜像 2D' : '等待眼镜输出'}</strong>
       <p>{displayDisabled ? '眼镜已连接。请在手机系统中开启“屏幕镜像”，允许眼镜显示画面。HyperOS 在连接或切换模式后可能需要再次手动开启。' : state?.displayMessage || '等待眼镜连接。'}</p>
       {waiting && !transitioning && <p>虚拟银幕尚未启用，远近与大小设置目前只会保存。</p>}
       {waiting && !transitioning && state?.glassesConnected && (
@@ -1201,7 +1219,7 @@ function SettingsScreen({
           <span className="eyebrow">PREFERENCES</span>
           <h1>连接与偏好</h1>
         </div>
-        <button className="icon-button glass-soft" onClick={() => notify('所有设置已自动保存')} aria-label="设置说明">
+        <button className="icon-button glass-soft" onClick={() => notify('偏好会自动保存；眼镜输出状态以页面提示为准')} aria-label="设置说明">
           <CircleHelp size={20} />
         </button>
       </header>
@@ -1272,7 +1290,7 @@ function SettingsScreen({
       </SettingsGroup>
 
       <SettingsGroup title="触控反馈">
-        <button className="setting-row" onClick={() => {
+        <button className="setting-row" role="switch" aria-checked={haptics} onClick={() => {
           setHaptics((value) => {
             const next = !value
             if (next) callNative('previewHaptic')
@@ -1286,14 +1304,14 @@ function SettingsScreen({
           </span>
           <Toggle checked={haptics} />
         </button>
-        <button className="setting-row" onClick={() => notify('已播放光点反馈预览')}>
+        <div className="setting-row">
           <span className="setting-row__icon pearl"><Sparkles size={19} /></span>
           <span className="setting-row__copy">
             <strong>微光反馈</strong>
             <small>跟随手指的低亮度光点</small>
           </span>
           <span className="setting-value">柔和</span>
-        </button>
+        </div>
       </SettingsGroup>
 
       <SettingsGroup title="诊断">
@@ -1331,8 +1349,8 @@ function Toggle({ checked }) {
 
 function BottomNav({ active, onHome, onTouchpad, onSettings }) {
   return (
-    <nav className="bottom-nav glass-panel">
-      <button className={active === 'home' ? 'is-active' : ''} onClick={onHome}>
+    <nav className="bottom-nav glass-panel" aria-label="手机导航">
+      <button aria-current={active === 'home' ? 'page' : undefined} className={active === 'home' ? 'is-active' : ''} onClick={onHome}>
         <span><Glasses size={20} /></span>
         <small>设备</small>
       </button>
@@ -1340,7 +1358,7 @@ function BottomNav({ active, onHome, onTouchpad, onSettings }) {
         <span><i /></span>
         <small>触控</small>
       </button>
-      <button className={active === 'settings' ? 'is-active' : ''} onClick={onSettings}>
+      <button aria-current={active === 'settings' ? 'page' : undefined} className={active === 'settings' ? 'is-active' : ''} onClick={onSettings}>
         <span><Settings2 size={20} /></span>
         <small>设置</small>
       </button>
@@ -1671,8 +1689,41 @@ function TouchpadScreen({
   )
 }
 
-function ManualServerSheet({ onClose, onContinue }) {
+function ManualServerSheet({ open, onClose, onContinue }) {
   const [address, setAddress] = useState('')
+  const sheetRef = useRef(null)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
+  useEffect(() => {
+    if (!open) return
+    const opener = document.querySelector('.manual-card')
+    const overflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const keydown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeRef.current()
+      }
+      if (event.key !== 'Tab') return
+      const targets = [...sheetRef.current.querySelectorAll('button:not(:disabled), input')]
+      const first = targets[0]
+      const last = targets.at(-1)
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last?.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first?.focus()
+      }
+    }
+    document.addEventListener('keydown', keydown)
+    return () => {
+      document.body.style.overflow = overflow
+      document.removeEventListener('keydown', keydown)
+      if (opener?.isConnected) opener.focus({ preventScroll: true })
+    }
+  }, [open])
 
   const submit = () => {
     const clean = address.trim()
@@ -1689,16 +1740,16 @@ function ManualServerSheet({ onClose, onContinue }) {
   }
 
   return (
-    <div className="sheet-layer" role="dialog" aria-modal="true" aria-label="手动添加服务器">
-      <button className="sheet-scrim" onClick={onClose} aria-label="关闭" />
-      <section className="bottom-sheet">
+    <div className={`sheet-layer${open ? '' : ' is-leaving'}`} inert={!open} role="dialog" aria-modal="true" aria-hidden={!open} aria-label="手动添加服务器">
+      <button className="sheet-scrim" onClick={onClose} aria-label="关闭" tabIndex={-1} />
+      <form ref={sheetRef} className="bottom-sheet" onSubmit={(event) => { event.preventDefault(); submit() }}>
         <div className="sheet-handle" />
         <div className="sheet-title">
           <div>
             <span className="eyebrow">MANUAL CONNECTION</span>
             <h2>添加服务器地址</h2>
           </div>
-          <button className="icon-button glass-soft" onClick={onClose}><X size={18} /></button>
+          <button type="button" className="icon-button glass-soft" onClick={onClose} aria-label="关闭添加服务器"><X size={18} /></button>
         </div>
         <p>支持域名、IPv4 和 IPv6；IPv6 带端口时需要使用方括号。</p>
         <label className="address-field">
@@ -1709,24 +1760,20 @@ function ManualServerSheet({ onClose, onContinue }) {
               value={address}
               onChange={(event) => setAddress(event.target.value)}
               placeholder="jellyfin.local:8096"
+              inputMode="url"
+              enterKeyHint="go"
+              autoComplete="url"
+              autoCapitalize="none"
+              spellCheck={false}
               autoFocus
             />
           </span>
         </label>
         <div className="address-example">例如：jellyfin.local:8096 或 http://[2001:db8::20]:8096</div>
-        <button className="primary-button pressable" onClick={submit}>
+        <button className="primary-button pressable" type="submit" disabled={!address.trim()}>
           <span>继续登录</span><ArrowRight size={19} />
         </button>
-      </section>
-    </div>
-  )
-}
-
-function Toast({ message }) {
-  return (
-    <div className={`toast ${message ? 'is-visible' : ''}`} aria-live="polite">
-      <Check size={15} />
-      <span>{message}</span>
+      </form>
     </div>
   )
 }
