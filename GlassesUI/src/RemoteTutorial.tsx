@@ -14,10 +14,11 @@ const gestureUrl = (name: string) => new URL(`./assets/tutorial/${name}.svg`, do
 const commandIcons = { right: ArrowRight, down: ArrowDown, left: ArrowLeft, up: ArrowUp, enter: Check, back: RotateCcw }
 
 function GestureArt({ gesture, label, full = false }: { gesture: string; label: string; full?: boolean }) {
+  const asset = full ? `${gesture}-full` : gesture
   return (
     <picture className={full ? 'tutorial-person' : 'tutorial-hand'}>
-      <source media="(prefers-reduced-motion: reduce)" srcSet={gestureUrl(full ? 'person' : `${gesture}-still`)} />
-      <img key={gesture} src={gestureUrl(full ? 'person' : gesture)} alt={label} draggable={false} />
+      <source media="(prefers-reduced-motion: reduce)" srcSet={gestureUrl(`${asset}-still`)} />
+      <img key={asset} src={gestureUrl(asset)} alt={label} draggable={false} />
     </picture>
   )
 }
@@ -116,7 +117,7 @@ export default function RemoteTutorial({ onExit, onComplete }: { onExit: (outcom
             </div>
             <div className="tutorial-welcome__art">
               <div className="tutorial-orbit" aria-hidden="true" />
-              <GestureArt gesture="single-tap" label="戴着眼镜，单手握住手机，用拇指操作触控板" full />
+              <GestureArt gesture="single-tap" label="戴着眼镜，单手握住手机，用拇指单击触控板，开始教学" full />
               <div className="tutorial-art-caption"><span /> 看着眼镜里的画面，试着单击手机</div>
             </div>
           </main>

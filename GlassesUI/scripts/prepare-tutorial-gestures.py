@@ -25,6 +25,20 @@ def write_svg(root, path):
     ET.ElementTree(root).write(path, encoding='utf-8', xml_declaration=True)
 
 
+def write_gesture(root, output, name, contact_frame):
+    write_svg(root, output / (name + '.svg'))
+    for parent in root.iter():
+        for child in list(parent):
+            if child.tag != SVG + 'animate':
+                continue
+            values = child.get('values', '').split(';')
+            # A held contact pose makes the reduced-motion fallback useful.
+            if len(values) > contact_frame:
+                parent.set(child.get('attributeName'), values[contact_frame])
+            parent.remove(child)
+    write_svg(root, output / (name + '-still.svg'))
+
+
 def prepare(source, output):
     output.mkdir(parents=True, exist_ok=True)
     with ZipFile(source) as archive:
@@ -43,24 +57,14 @@ def prepare(source, output):
                 'd': 'M58 179 Q74 174 97 180 L103 208 H51Z', 'fill': '#1b6ef2',
             }))
             root.append(hand)
-            write_svg(root, output / (gesture + '.svg'))
-            for parent in root.iter():
-                for child in list(parent):
-                    if child.tag != SVG + 'animate':
-                        continue
-                    values = child.get('values', '').split(';')
-                    # A held contact pose makes the reduced-motion fallback useful.
-                    if len(values) > 67:
-                        parent.set(child.get('attributeName'), values[67 if gesture == 'double-tap' else 57])
-                    parent.remove(child)
-            write_svg(root, output / (gesture + '-still.svg'))
-        person = parse_vector(archive, 'reference-default')
+            write_gesture(root, output, gesture, 67 if gesture == 'double-tap' else 57)
+        person = parse_vector(archive, 'thumb-single-tap')
         person.attrib.update({'viewBox': '160 0 575 576', 'width': '575', 'height': '576'})
         for parent in person.iter():
             for child in list(parent):
                 if child.get('id') == 'background':
                     parent.remove(child)
-        write_svg(person, output / 'person.svg')
+        write_gesture(person, output, 'single-tap-full', 57)
 
 
 if __name__ == '__main__':
@@ -68,4 +72,4 @@ if __name__ == '__main__':
     parser.add_argument('archive', type=Path)
     args = parser.parse_args()
     prepare(args.archive, Path(__file__).resolve().parents[1] / 'public/assets/tutorial')
-    print('Prepared six animated gestures, six stills, and a transparent reference figure.')
+    print('Prepared six hand gestures and a full-figure single tap, each with a still fallback.')

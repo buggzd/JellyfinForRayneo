@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <svg xmlns="http://www.w3.org/2000/svg" width="575" height="576" viewBox="160 0 575 576" role="img" aria-labelledby="title description">
-<title id="title">图一 · 默认握持姿态</title>
-<desc id="description">根据两张蓝色人物插画重绘。蓝色人物戴黑色眼镜，右手握持以线缆连接的手机。静态参考姿态，所有可见图形均为矢量路径。</desc>
+<title id="title">大拇指单击屏幕</title>
+<desc id="description">根据两张蓝色人物插画重绘。从图一的自然握持姿势开始，按图二的弯指姿势单击屏幕，抬起后回到初始握持姿势。3.2 秒无缝循环，使用原生 SVG 路径动画，纯矢量，无外部依赖。</desc>
 <defs>
     <linearGradient id="skin-blue" x1="345" y1="114" x2="493" y2="287" gradientUnits="userSpaceOnUse">
       <stop stop-color="#2475f4" /><stop offset="1" stop-color="#2b7cf5" />
@@ -58,7 +58,7 @@
     <path d="M429 177 C409 198 400 232 398 261 C394 306 400 345 417 382 C437 426 473 451 508 456 C535 461 559 455 575 443 C599 425 608 399 613 371 L618 345" stroke="#272a2a" stroke-width="4.6" />
     <path d="M429 177 C410 198 401 232 399 261 C395 306 401 345 418 381 C438 424 473 449 508 454" stroke="#434545" stroke-width=".75" opacity=".36" />
   </g>
-<g id="phone-and-hand" transform="matrix(.994 .105 -.173 .99 612 169)"><g id="palm-behind-phone" fill="url(#hand-blue)"><path id="rear-palm" d="M69 81 C73 76 77 80 80 87 C84 97 89 114 94 127 C98 143 90 162 93 180 L61 182 C52 172 45 166 45 154 C49 137 59 116 69 81Z" /></g>
+<g id="phone-and-hand" transform="matrix(.994 .105 -.173 .99 612 169)"><g id="palm-behind-phone" fill="url(#hand-blue)"><path id="rear-palm" d="M73 62 C76 60 78 66 81 72 C87 84 94 97 96 108 C99 128 91 160 93 180 L61 182 C52 172 45 166 45 154 C49 137 62 97 73 62Z" /></g>
     <g id="gripping-fingers" fill="#2979f2">
       <path d="M4 64 C-4 60-10 61-11 67 C-12 72-6 76 4 79Z" />
       <path d="M3 82 C-5 80-11 82-11 88 C-11 94-5 96 3 96Z" />
@@ -75,9 +75,8 @@
       <rect width="76" height="148" rx="12" fill="url(#frame-gray)" />
       <rect x="2.8" y="2.8" width="70.4" height="142.4" rx="10" fill="#020202" />
       <path d="M11 1.4 H64 C70 1.4 74.6 6 74.6 12 V135" fill="none" stroke="#555555" stroke-width=".65" opacity=".5" />
-    </g><g id="thumb-and-palm"><path id="hand-silhouette" d="M61 184  C54 174 44 173 47 159  C47 145 68.47 118.33 67.92 112.35  C67.19 104.39 69.36 98.98 68.29 93.08  C67.22 87.17 66.77 81.92 65.19 76.13  C64.01 71.82 66.55 67.36 70.87 66.19  C75.18 65.01 79.64 67.55 80.81 71.87  C82.39 77.66 86.12 83.75 87.19 89.65  C88.25 95.56 90.49 102.24 91.22 110.21  C91.87 117.18 96 119 95 133  C94 146 90 157 91 167  C91 174 93 179 94 184  C82 178 70 178 61 184Z" fill="url(#hand-blue)" />
-      <g id="hand-details" opacity="0" fill="none" stroke="#1666dc" stroke-linecap="round">
-      <path id="thenar-crease" d="M74.96 115.72 C84.57 118.28 87.57 129.28 82.57 137.28" stroke-width=".85" /><path id="thumb-joint" d="M72.31 93.36 C76.13 93.69 80.06 92.98 83.53 91.33" stroke-width=".65" /></g></g></g>
+    </g><g id="gesture-feedback" clip-path="url(#screen-clip)"><circle id="touch-contact" cx="36" cy="87" r="11.7" fill="none" stroke="#c2ebff" stroke-width="1.2" opacity="0.35" /><circle id="tap-ripple-1" cx="36" cy="87" r="9.66" opacity="0.85" fill="none" stroke="#bfebff" stroke-width="1.2" /></g><g id="thumb-and-palm"><path id="hand-silhouette" d="M61 184  C54 174 47.52 162 50.52 148  C50.52 134 52.65 127.96 49.45 122.88  C45.17 116.12 44.84 110.39 41.12 105.68  C37.4 100.97 34.35 96.93 30.16 92.63  C26.97 89.37 27.03 84.13 30.29 80.94  C33.56 77.75 38.8 77.81 41.99 81.07  C46.18 85.36 52.47 89.07 56.19 93.77  C59.91 98.48 64.96 103.62 69.23 110.38  C72.97 116.3 96.23 117.56 95.23 131.56  C94.23 144.56 90 157 91 167  C91 174 93 179 94 184  C82 178 70 178 61 184Z" fill="url(#hand-blue)" />
+      <g id="hand-details" opacity="0.2" fill="none" stroke="#1666dc" stroke-linecap="round"><path id="thenar-crease" d="M57.25 122.69 C64.34 123.63 67.34 134.63 62.34 142.63" stroke-width=".85" /><path id="thumb-joint" d="M44.8 104.05 C48.33 102.54 51.46 100.06 53.75 96.98" stroke-width=".65" /></g></g></g>
   <g id="cuff" fill="#1b6ef2">
     <path d="M624 362 C624 356 634 351 649 348 C663 345 676 347 684 353 C687 355 688 361 689 368 L692 389 C672 389 645 385 623 376Z" />
   </g></g>
