@@ -1,0 +1,13 @@
+{
+  "subtitleUrlPresent": true,
+  "subtitleSelected": 2,
+  "response": {
+    "status": 200,
+    "characters": 3218604,
+    "webVtt": false,
+    "hasCueSeparators": false
+  },
+  "subtitleError": true,
+  "visibleCharacters": 0,
+  "sourceUnchanged": "GlassesUI/src/jellyfin.ts and the subtitle parser are identical to baseline 67662d5; subtitleUrl uses a provided DeliveryUrl directly."
+}

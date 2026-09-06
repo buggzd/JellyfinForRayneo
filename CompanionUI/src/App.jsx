@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { applyUiTheme, normalizeUiTheme, readPreviewTheme, savePreviewTheme } from '../../SharedUI/theme.mjs'
+import { suspendHiddenAnimations } from '../../SharedUI/hiddenAnimations.mjs'
 import { Toast, usePresence } from './feedback'
 import {
   ArrowLeft,
@@ -1602,6 +1603,7 @@ function TouchpadScreen({
   native,
 }) {
   const surfaceRef = useRef(null)
+  const introRef = useRef(null)
   const searchInputRef = useRef(null)
   const glowRef = useRef(null)
   const point = useRef({ x: 50, y: 50, tx: 50, ty: 50, vx: 0, vy: 0 })
@@ -1614,6 +1616,7 @@ function TouchpadScreen({
   const [pressed, setPressed] = useState(false)
   const [feedback, setFeedback] = useState('')
   const [introVisible, setIntroVisible] = useState(true)
+  useLayoutEffect(() => suspendHiddenAnimations(introRef.current, !introVisible || searchActive), [introVisible, searchActive])
   const [searchValue, setSearchValue] = useState(() => normalizeRemoteSearchQuery(searchQuery))
 
   const animateGlow = () => {
@@ -1897,7 +1900,7 @@ function TouchpadScreen({
         <small>{feedback === 'CONFIRM' ? '确认' : feedback === 'BACK' ? '返回' : feedback ? `向${{ UP: '上', DOWN: '下', LEFT: '左', RIGHT: '右' }[feedback]}` : ''}</small>
       </div>
 
-      <div className={`touchpad-intro ${introVisible && !searchActive ? 'is-visible' : ''}`}>
+      <div ref={introRef} className={`touchpad-intro ${introVisible && !searchActive ? 'is-visible' : ''}`}>
         <span className="touchpad-intro__mark"><i /></span>
         <strong>触控已就绪</strong>
         <small>在任意位置开始</small>

@@ -2992,6 +2992,10 @@ kbd {
   transition: opacity var(--motion-enter) ease, transform var(--motion-enter) var(--motion-ease), visibility 0s;
 }
 
+.player-chrome--bottom.has-suspended-animations .playing-bars i {
+  animation-play-state: paused;
+}
+
 .player-controls {
   margin: 0 var(--safe-x) clamp(28px, 4vh, 50px);
   padding: 20px 25px 14px;

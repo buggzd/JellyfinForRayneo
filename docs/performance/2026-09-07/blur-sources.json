@@ -1,0 +1,61 @@
+{
+  "webViewVersion": "150.0.7871.181",
+  "skiaRevision": "587c5b0f5a7b0260826a0c19094c2d952195066e",
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/chromium/chromium/150.0.7871.181/DEPS",
+      "bytes": 190458,
+      "sha256": "4cd2fa49e5c6d6963d94594193a0686deec8517fa30cdf181ce6c4b6ea42d72b"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/google/skia/587c5b0f5a7b0260826a0c19094c2d952195066e/src/effects/imagefilters/SkBlurImageFilter.cpp",
+      "bytes": 10257,
+      "sha256": "1a6bd9c49920f232c4f46bf3c80b5f728fc207db25d93ceb83cbc6454078ea6f"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/google/skia/587c5b0f5a7b0260826a0c19094c2d952195066e/src/core/SkBlurEngine.cpp",
+      "bytes": 73884,
+      "sha256": "38f795202a4f498fb356880d8af965c4d8b2142db524c29339cdeaa6adb3d41c"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/chromium/chromium/150.0.7871.181/third_party/blink/renderer/platform/graphics/filters/fe_gaussian_blur.cc",
+      "bytes": 3982,
+      "sha256": "23277b42777d05361d21acf855f6410da222e34c133b8732d16ddc390da9cde8"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/google/skia/587c5b0f5a7b0260826a0c19094c2d952195066e/src/gpu/ganesh/GrBlurUtils.cpp",
+      "bytes": 113822,
+      "sha256": "ca7feaf220c1260b14a4b6450ea2ed213d2a2d10e00d175bbc1a75fe0e1abf4a"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/google/skia/587c5b0f5a7b0260826a0c19094c2d952195066e/src/core/SkImageFilterTypes.cpp",
+      "bytes": 113072,
+      "sha256": "784694423528805d20fd5049837531eb53f285f02390ceebb24e980d2bed0c36"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/google/skia/587c5b0f5a7b0260826a0c19094c2d952195066e/src/core/SkKnownRuntimeEffects.cpp",
+      "bytes": 24858,
+      "sha256": "57d91681ef6b51c05249dd23ef232accc058ef115343f5fec8a3cc1ef12a06d0"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/chromium/chromium/150.0.7871.181/cc/paint/paint_filter.cc",
+      "bytes": 59735,
+      "sha256": "88aa99c77d67e8bbd16f722d1fe0b99971db4c1247ff5c611021c63aaf4f5b58"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/google/skia/587c5b0f5a7b0260826a0c19094c2d952195066e/src/core/SkBlurEngine.h",
+      "bytes": 15487,
+      "sha256": "56d524c90403ef9debd9f826d1161b05471e761e5c2a1456743ddd46c78286e8"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/chromium/chromium/150.0.7871.181/cc/paint/render_surface_filters.cc",
+      "bytes": 11211,
+      "sha256": "cc6a6295eb7a4fe313b1a3fcd89eeb681d673daf727abf776d3b6facbf39bd70"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/chromium/chromium/150.0.7871.181/components/viz/service/display/skia_renderer.cc",
+      "bytes": 186566,
+      "sha256": "d590c07e25981930a1727b29db70184aad1b46f0ba373f914d9d839f6cfc8da5"
+    }
+  ]
+}

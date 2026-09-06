@@ -1,0 +1,153 @@
+{
+  "subtitle": {
+    "loadedCues": 75,
+    "candidate": true,
+    "visible": true,
+    "characters": 23,
+    "rect": {
+      "x": 565.4010620117188,
+      "y": 518.5521240234375,
+      "width": 309.19793701171875,
+      "height": 46.44791793823242
+    },
+    "viewport": {
+      "width": 1440,
+      "height": 810
+    },
+    "paused": true,
+    "pixelComparison": {
+      "meanAbsoluteChannelDifference": 0.0003590848466194727,
+      "exactlyEqualPixelPercent": 99.92091583735167,
+      "crop": [
+        1824,
+        1026
+      ]
+    }
+  },
+  "resume": true,
+  "controls": {
+    "playing": true,
+    "seekDelta": 10,
+    "videos": 1
+  },
+  "toMirror": {
+    "mode": "mirror_2d",
+    "switchMs": 2372,
+    "systemDisplayEnableCount": 1,
+    "state": {
+      "activeDisplayMode": "mirror_2d",
+      "displayModeApplied": true,
+      "displayModeTransitioning": false,
+      "glassesDisplayDisabled": false,
+      "stereoOutput": {
+        "modeWidth": 1920,
+        "modeHeight": 1080,
+        "viewWidth": 1920,
+        "viewHeight": 1080,
+        "refreshRate": 60.000003814697266,
+        "stereoReady": false
+      },
+      "uiTheme": "liquid-glass",
+      "stereoScreen": {
+        "depthLevel": 1,
+        "sizePercent": 95
+      }
+    },
+    "continuity": {
+      "sameDocument": true,
+      "sameVideo": true,
+      "sameSource": true,
+      "videoCount": 1,
+      "elapsedMediaSeconds": 0,
+      "requestCountsBefore": {
+        "plan": 4,
+        "started": 2,
+        "progress": 19,
+        "stopped": 1
+      },
+      "requestCountsAfter": {
+        "plan": 4,
+        "started": 2,
+        "progress": 20,
+        "stopped": 1
+      }
+    }
+  },
+  "toStereo": {
+    "mode": "stereo_screen",
+    "switchMs": 2980,
+    "systemDisplayEnableCount": 1,
+    "state": {
+      "activeDisplayMode": "stereo_screen",
+      "displayModeApplied": true,
+      "displayModeTransitioning": false,
+      "glassesDisplayDisabled": false,
+      "stereoOutput": {
+        "modeWidth": 3840,
+        "modeHeight": 1080,
+        "viewWidth": 3840,
+        "viewHeight": 1080,
+        "refreshRate": 60.000003814697266,
+        "stereoReady": true
+      },
+      "uiTheme": "liquid-glass",
+      "stereoScreen": {
+        "depthLevel": 1,
+        "sizePercent": 95
+      }
+    },
+    "continuity": {
+      "sameDocument": true,
+      "sameVideo": true,
+      "sameSource": true,
+      "videoCount": 1,
+      "elapsedMediaSeconds": 0,
+      "requestCountsBefore": {
+        "plan": 4,
+        "started": 2,
+        "progress": 20,
+        "stopped": 1
+      },
+      "requestCountsAfter": {
+        "plan": 4,
+        "started": 2,
+        "progress": 21,
+        "stopped": 1
+      }
+    }
+  },
+  "rendererRecovery": {
+    "dom": {
+      "videos": 0,
+      "home": true,
+      "theme": "liquid-glass"
+    },
+    "state": {
+      "mediaReady": true,
+      "mode": "stereo_screen",
+      "applied": true,
+      "theme": "liquid-glass"
+    },
+    "hardwareVideoResources": 0
+  },
+  "userdata": [
+    {
+      "sample": "hevc_4k60",
+      "status": 200,
+      "restored": true,
+      "originalLastPlayedDateRestored": null
+    },
+    {
+      "sample": "hls_mkv",
+      "status": 200,
+      "restored": true,
+      "originalLastPlayedDateRestored": null
+    },
+    {
+      "sample": "subtitle_compatibility",
+      "status": 200,
+      "restored": true,
+      "originalLastPlayedDateRestored": null
+    }
+  ]
+}

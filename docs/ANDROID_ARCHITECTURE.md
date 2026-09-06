@@ -325,8 +325,26 @@ Normal 2D content remains a flat screen and follows head motion.
 
 Settings animate disparity and size over 180 ms (respecting disabled system
 animations) using only Canvas transforms. They do not request a new WebView
-layout, bootstrap, hardware switch or player. Visibility/attachment callbacks
-restart the stereo redraw loop after transitions and stop it when hidden.
+layout, bootstrap, hardware switch or player. WebView descendant invalidations
+redraw both eye copies together; the settings animator invalidates changed
+geometry. There is no unconditional stereo vsync loop, so static pages and
+paused video can stop submitting frames. Video, subtitles, CSS motion and scroll
+must still update both eyes; moving-video device checks are required when this
+invalidation path changes.
+
+The phone and Mirror 2D use WebView's normal hardware-accelerated window drawing
+(`LAYER_TYPE_NONE`, not a software layer). Applied stereo alone retains one
+explicit hardware View layer so both transformed eye draws reuse the same
+WebView texture. No second WebView, video, decoder or audio stream is created.
+
+Player sound bars and the phone touchpad introduction retain their visible
+animation and full exit transition. `SharedUI/hiddenAnimations.mjs` waits for the
+root's finite transitions to settle before CSS pauses the invisible decorative
+loops. Reveal cancels pending suspension before paint and restores CSS's own
+play state, including a paused video's bars. Older WebViews without animation
+inspection retain the existing behavior. Blur and visible decorative motion
+remain unchanged; see the [performance follow-up](performance/2026-09-07/README.md)
+and [version-pinned blur audit](performance/2026-09-07/blur-audit.md).
 
 `stereoScreen`, `stereoOutput`, `stereoTestPattern` and `glassesDisplayDisabled` are included in native phone
 state. The frontend keeps an in-memory editor, ignores older acknowledgements

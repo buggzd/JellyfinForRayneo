@@ -1,0 +1,167 @@
+{
+  "scope": "One 20-second simpleUI SBS HEVC trace per version, collected optimized then baseline using the same configuration and source segment. Video before/after metadata includes trace retrieval time and is not a 20-second video quality window.",
+  "baseline": {
+    "phase": "baseline",
+    "metadata": {
+      "pid": 23643,
+      "before": {
+        "time": 65.158685,
+        "frames": 842,
+        "dropped": 50
+      },
+      "after": {
+        "time": 90.712814,
+        "frames": 2375,
+        "dropped": 70,
+        "videos": 1
+      },
+      "requestedTraceSeconds": 20
+    },
+    "trace": [
+      {
+        "seconds": 19.990762
+      }
+    ],
+    "lossStats": [],
+    "layers": [
+      {
+        "layer_name": "TX - #21929",
+        "frames": 1196,
+        "firstS": 97086.660934,
+        "lastS": 97106.600288,
+        "meanFrameMs": 34.122726,
+        "p95FrameMs": 45.985573
+      }
+    ],
+    "intervals": [
+      {
+        "layer_name": "TX - #21929",
+        "intervals": 1195,
+        "meanGapMs": 16.666882,
+        "p95GapMs": 24.580812
+      }
+    ],
+    "classifications": [
+      {
+        "present_type": "Late Present",
+        "jank_type": "App Deadline Missed, Buffer Stuffing, SurfaceFlinger Stuffing",
+        "frames": 41,
+        "meanFrameMs": 38.933436
+      },
+      {
+        "present_type": "Late Present",
+        "jank_type": "App Deadline Missed, Buffer Stuffing, Unknown Jank",
+        "frames": 2,
+        "meanFrameMs": 41.46224
+      },
+      {
+        "present_type": "Late Present",
+        "jank_type": "Buffer Stuffing, SurfaceFlinger Stuffing",
+        "frames": 518,
+        "meanFrameMs": 29.921126
+      },
+      {
+        "present_type": "Late Present",
+        "jank_type": "Buffer Stuffing, Unknown Jank",
+        "frames": 633,
+        "meanFrameMs": 37.229882
+      },
+      {
+        "present_type": "Late Present",
+        "jank_type": "SurfaceFlinger CPU Deadline Missed, Buffer Stuffing",
+        "frames": 2,
+        "meanFrameMs": 32.963255
+      }
+    ],
+    "lateness": [
+      {
+        "expectedMeanMs": 16.666666,
+        "actualMeanMs": 34.122726,
+        "meanLatenessMs": 19.400344,
+        "frames": 1196
+      }
+    ],
+    "renderThread": [
+      {
+        "name": "RenderThread",
+        "onCpuSeconds": 3.576212
+      }
+    ]
+  },
+  "optimized": {
+    "phase": "optimized",
+    "metadata": {
+      "pid": 20144,
+      "before": {
+        "time": 65.598907,
+        "frames": 813,
+        "dropped": 5
+      },
+      "after": {
+        "time": 99.241858,
+        "frames": 2832,
+        "dropped": 34,
+        "videos": 1
+      },
+      "requestedTraceSeconds": 20
+    },
+    "trace": [
+      {
+        "seconds": 20.005764
+      }
+    ],
+    "lossStats": [],
+    "layers": [
+      {
+        "layer_name": "TX - #21826",
+        "frames": 1180,
+        "firstS": 96975.062537,
+        "lastS": 96995.043845,
+        "meanFrameMs": 7.105,
+        "p95FrameMs": 11.109958
+      }
+    ],
+    "intervals": [
+      {
+        "layer_name": "TX - #21826",
+        "intervals": 1179,
+        "meanGapMs": 16.943884,
+        "p95GapMs": 21.419443
+      }
+    ],
+    "classifications": [
+      {
+        "present_type": "Late Present",
+        "jank_type": "App Deadline Missed",
+        "frames": 1,
+        "meanFrameMs": 15.129271
+      },
+      {
+        "present_type": "Late Present",
+        "jank_type": "Buffer Stuffing",
+        "frames": 3,
+        "meanFrameMs": 9.963612
+      },
+      {
+        "present_type": "On-time Present",
+        "jank_type": "None",
+        "frames": 1176,
+        "meanFrameMs": 7.090884
+      }
+    ],
+    "lateness": [
+      {
+        "expectedMeanMs": 16.666666,
+        "actualMeanMs": 7.105,
+        "meanLatenessMs": -8.729999,
+        "frames": 1180
+      }
+    ],
+    "renderThread": [
+      {
+        "name": "RenderThread",
+        "onCpuSeconds": 3.778667
+      }
+    ]
+  }
+}

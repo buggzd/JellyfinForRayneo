@@ -1,0 +1,306 @@
+{
+  "media-baseline_hevc_4k60.json": {
+    "label": "baseline_hevc_4k60",
+    "plan": {
+      "method": "DirectPlay",
+      "transcoding": false,
+      "container": "MP4",
+      "video": "HEVC",
+      "audio": "AAC",
+      "width": 3840,
+      "height": 2160,
+      "mediaInfo": {
+        "size": 1105206578,
+        "bitrate": 3540527,
+        "videoBitrate": 3313478,
+        "frameRate": 60.000015,
+        "profile": "Main 10",
+        "bitDepth": 10,
+        "pixelFormat": "yuv420p10le",
+        "videoRange": "SDR",
+        "colorSpace": "bt709",
+        "audioChannels": 2,
+        "audioSampleRate": 44100,
+        "audioBitrate": 191999
+      },
+      "subtitleBurnedIn": false,
+      "subtitleStreamIndex": -1
+    },
+    "videoCount": 1,
+    "video": {
+      "width": 3840,
+      "height": 2160,
+      "paused": false,
+      "time": 5.720912,
+      "duration": 2497.269688,
+      "readyState": 4,
+      "totalFrames": 344,
+      "droppedFrames": 0,
+      "srcScheme": "http"
+    },
+    "mediaProperties": [
+      {
+        "name": "kVideoDecoderName",
+        "value": "MediaCodecVideoDecoder"
+      },
+      {
+        "name": "kAudioTracks",
+        "value": "[{\"bytes per channel\":4,\"bytes per frame\":8,\"channel layout\":\"STEREO\",\"channels\":2,\"codec\":\"aac\",\"codec delay\":0,\"discard decoder delay\":true,\"encryption scheme\":\"Unencrypted\",\"has extra data\":true,\"profile\":\"unknown\",\"sample format\":\"Float 32-bit planar\",\"samples per second\":44100,\"seek preroll\":\"0us\"}]"
+      },
+      {
+        "name": "kResolution",
+        "value": "3840x2160"
+      },
+      {
+        "name": "kIsPlatformAudioDecoder",
+        "value": "false"
+      },
+      {
+        "name": "kAudioDecoderName",
+        "value": "FFmpegAudioDecoder"
+      },
+      {
+        "name": "kVideoTracks",
+        "value": "[{\"alpha mode\":\"is_opaque\",\"codec\":\"hevc\",\"coded size\":\"3840x2160\",\"color space\":{\"matrix\":\"BT709\",\"primaries\":\"BT709\",\"range\":\"LIMITED\",\"transfer\":\"BT709\"},\"encryption scheme\":\"Unencrypted\",\"has extra data\":true,\"hdr metadata\":{},\"natural size\":\"3840x2160\",\"orientation\":\"0\u00b0\",\"profile\":\"hevc main 10\",\"visible rect\":\"0,0 3840x2160\"}]"
+      },
+      {
+        "name": "kIsPlatformVideoDecoder",
+        "value": "true"
+      }
+    ],
+    "codecComponents": [
+      "c2.qti.hevc.decoder"
+    ],
+    "hardwareVideoResources": 1
+  },
+  "media-baseline_hls_mkv.json": {
+    "label": "baseline_hls_mkv",
+    "plan": {
+      "method": "Transcode",
+      "transcoding": true,
+      "container": "MKV",
+      "video": "HEVC",
+      "audio": "AAC",
+      "width": 1920,
+      "height": 1080,
+      "mediaInfo": {
+        "size": 258879169,
+        "bitrate": 1657018,
+        "videoBitrate": 1497519,
+        "frameRate": 23.976025,
+        "profile": "Main 10",
+        "bitDepth": 10,
+        "pixelFormat": "yuv420p10le",
+        "videoRange": "SDR",
+        "colorSpace": "bt709",
+        "audioChannels": 2,
+        "audioSampleRate": 48000,
+        "audioBitrate": 159499
+      },
+      "subtitleBurnedIn": false,
+      "subtitleStreamIndex": 2
+    },
+    "videoCount": 1,
+    "video": {
+      "width": 1920,
+      "height": 1080,
+      "paused": false,
+      "time": 4.408315,
+      "duration": 1382.9760000000015,
+      "readyState": 4,
+      "totalFrames": 108,
+      "droppedFrames": 1,
+      "srcScheme": "blob"
+    },
+    "mediaProperties": [
+      {
+        "name": "kAudioTracks",
+        "value": "[{\"bytes per channel\":2,\"bytes per frame\":4,\"channel layout\":\"STEREO\",\"channels\":2,\"codec\":\"aac\",\"codec delay\":0,\"discard decoder delay\":false,\"encryption scheme\":\"Unencrypted\",\"has extra data\":true,\"profile\":\"unknown\",\"sample format\":\"Signed 16-bit\",\"samples per second\":48000,\"seek preroll\":\"0us\"}]"
+      },
+      {
+        "name": "kVideoDecoderName",
+        "value": "MediaCodecVideoDecoder"
+      },
+      {
+        "name": "kAudioDecoderName",
+        "value": "FFmpegAudioDecoder"
+      },
+      {
+        "name": "kVideoTracks",
+        "value": "[{\"alpha mode\":\"is_opaque\",\"codec\":\"h264\",\"coded size\":\"1920x1080\",\"color space\":{\"matrix\":\"BT709\",\"primaries\":\"BT709\",\"range\":\"LIMITED\",\"transfer\":\"BT709\"},\"encryption scheme\":\"Unencrypted\",\"has extra data\":false,\"hdr metadata\":{},\"natural size\":\"1920x1080\",\"orientation\":\"0\u00b0\",\"profile\":\"h264 high\",\"visible rect\":\"0,0 1920x1080\"}]"
+      },
+      {
+        "name": "kAudioTracks",
+        "value": "[{\"bytes per channel\":2,\"bytes per frame\":4,\"channel layout\":\"STEREO\",\"channels\":2,\"codec\":\"aac\",\"codec delay\":0,\"discard decoder delay\":false,\"encryption scheme\":\"Unencrypted\",\"has extra data\":true,\"profile\":\"unknown\",\"sample format\":\"Signed 16-bit\",\"samples per second\":48000,\"seek preroll\":\"0us\"}]"
+      },
+      {
+        "name": "kResolution",
+        "value": "1920x1080"
+      },
+      {
+        "name": "kIsPlatformVideoDecoder",
+        "value": "true"
+      },
+      {
+        "name": "kIsPlatformAudioDecoder",
+        "value": "false"
+      }
+    ],
+    "codecComponents": [
+      "c2.qti.avc.decoder"
+    ],
+    "hardwareVideoResources": 1
+  },
+  "media-optimized_hevc_4k60.json": {
+    "label": "optimized_hevc_4k60",
+    "plan": {
+      "method": "DirectPlay",
+      "transcoding": false,
+      "container": "MP4",
+      "video": "HEVC",
+      "audio": "AAC",
+      "width": 3840,
+      "height": 2160,
+      "mediaInfo": {
+        "size": 1105206578,
+        "bitrate": 3540527,
+        "videoBitrate": 3313478,
+        "frameRate": 60.000015,
+        "profile": "Main 10",
+        "bitDepth": 10,
+        "pixelFormat": "yuv420p10le",
+        "videoRange": "SDR",
+        "colorSpace": "bt709",
+        "audioChannels": 2,
+        "audioSampleRate": 44100,
+        "audioBitrate": 191999
+      },
+      "subtitleBurnedIn": false,
+      "subtitleStreamIndex": -1
+    },
+    "videoCount": 1,
+    "video": {
+      "width": 3840,
+      "height": 2160,
+      "paused": false,
+      "time": 4.457127,
+      "duration": 2497.269688,
+      "readyState": 4,
+      "totalFrames": 268,
+      "droppedFrames": 0,
+      "srcScheme": "http"
+    },
+    "mediaProperties": [
+      {
+        "name": "kVideoDecoderName",
+        "value": "MediaCodecVideoDecoder"
+      },
+      {
+        "name": "kAudioTracks",
+        "value": "[{\"bytes per channel\":4,\"bytes per frame\":8,\"channel layout\":\"STEREO\",\"channels\":2,\"codec\":\"aac\",\"codec delay\":0,\"discard decoder delay\":true,\"encryption scheme\":\"Unencrypted\",\"has extra data\":true,\"profile\":\"unknown\",\"sample format\":\"Float 32-bit planar\",\"samples per second\":44100,\"seek preroll\":\"0us\"}]"
+      },
+      {
+        "name": "kResolution",
+        "value": "3840x2160"
+      },
+      {
+        "name": "kIsPlatformAudioDecoder",
+        "value": "false"
+      },
+      {
+        "name": "kAudioDecoderName",
+        "value": "FFmpegAudioDecoder"
+      },
+      {
+        "name": "kVideoTracks",
+        "value": "[{\"alpha mode\":\"is_opaque\",\"codec\":\"hevc\",\"coded size\":\"3840x2160\",\"color space\":{\"matrix\":\"BT709\",\"primaries\":\"BT709\",\"range\":\"LIMITED\",\"transfer\":\"BT709\"},\"encryption scheme\":\"Unencrypted\",\"has extra data\":true,\"hdr metadata\":{},\"natural size\":\"3840x2160\",\"orientation\":\"0\u00b0\",\"profile\":\"hevc main 10\",\"visible rect\":\"0,0 3840x2160\"}]"
+      },
+      {
+        "name": "kIsPlatformVideoDecoder",
+        "value": "true"
+      }
+    ],
+    "codecComponents": [
+      "c2.qti.hevc.decoder"
+    ],
+    "hardwareVideoResources": 1
+  },
+  "media-optimized_hls_mkv.json": {
+    "label": "optimized_hls_mkv",
+    "plan": {
+      "method": "Transcode",
+      "transcoding": true,
+      "container": "MKV",
+      "video": "HEVC",
+      "audio": "AAC",
+      "width": 1920,
+      "height": 1080,
+      "mediaInfo": {
+        "size": 258879169,
+        "bitrate": 1657018,
+        "videoBitrate": 1497519,
+        "frameRate": 23.976025,
+        "profile": "Main 10",
+        "bitDepth": 10,
+        "pixelFormat": "yuv420p10le",
+        "videoRange": "SDR",
+        "colorSpace": "bt709",
+        "audioChannels": 2,
+        "audioSampleRate": 48000,
+        "audioBitrate": 159499
+      },
+      "subtitleBurnedIn": false,
+      "subtitleStreamIndex": 2
+    },
+    "videoCount": 1,
+    "video": {
+      "width": 1920,
+      "height": 1080,
+      "paused": false,
+      "time": 4.487183,
+      "duration": 1382.9760000000015,
+      "readyState": 4,
+      "totalFrames": 110,
+      "droppedFrames": 1,
+      "srcScheme": "blob"
+    },
+    "mediaProperties": [
+      {
+        "name": "kAudioTracks",
+        "value": "[{\"bytes per channel\":2,\"bytes per frame\":4,\"channel layout\":\"STEREO\",\"channels\":2,\"codec\":\"aac\",\"codec delay\":0,\"discard decoder delay\":false,\"encryption scheme\":\"Unencrypted\",\"has extra data\":true,\"profile\":\"unknown\",\"sample format\":\"Signed 16-bit\",\"samples per second\":48000,\"seek preroll\":\"0us\"}]"
+      },
+      {
+        "name": "kVideoDecoderName",
+        "value": "MediaCodecVideoDecoder"
+      },
+      {
+        "name": "kAudioDecoderName",
+        "value": "FFmpegAudioDecoder"
+      },
+      {
+        "name": "kVideoTracks",
+        "value": "[{\"alpha mode\":\"is_opaque\",\"codec\":\"h264\",\"coded size\":\"1920x1080\",\"color space\":{\"matrix\":\"BT709\",\"primaries\":\"BT709\",\"range\":\"LIMITED\",\"transfer\":\"BT709\"},\"encryption scheme\":\"Unencrypted\",\"has extra data\":false,\"hdr metadata\":{},\"natural size\":\"1920x1080\",\"orientation\":\"0\u00b0\",\"profile\":\"h264 high\",\"visible rect\":\"0,0 1920x1080\"}]"
+      },
+      {
+        "name": "kAudioTracks",
+        "value": "[{\"bytes per channel\":2,\"bytes per frame\":4,\"channel layout\":\"STEREO\",\"channels\":2,\"codec\":\"aac\",\"codec delay\":0,\"discard decoder delay\":false,\"encryption scheme\":\"Unencrypted\",\"has extra data\":true,\"profile\":\"unknown\",\"sample format\":\"Signed 16-bit\",\"samples per second\":48000,\"seek preroll\":\"0us\"}]"
+      },
+      {
+        "name": "kResolution",
+        "value": "1920x1080"
+      },
+      {
+        "name": "kIsPlatformVideoDecoder",
+        "value": "true"
+      },
+      {
+        "name": "kIsPlatformAudioDecoder",
+        "value": "false"
+      }
+    ],
+    "codecComponents": [
+      "c2.qti.avc.decoder"
+    ],
+    "hardwareVideoResources": 1
+  }
+}

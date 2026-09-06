@@ -1,0 +1,111 @@
+{
+  "results": [
+    {
+      "label": "before",
+      "readyWaitMs": 30,
+      "state": {
+        "theme": "simpleUI",
+        "mode": "mirror_2d",
+        "applied": true,
+        "mediaReady": true,
+        "output": {
+          "modeWidth": 1920,
+          "modeHeight": 1080,
+          "viewWidth": 1920,
+          "viewHeight": 1080,
+          "refreshRate": 60.000003814697266,
+          "stereoReady": false
+        }
+      },
+      "dom": {
+        "theme": "simpleUI",
+        "home": true,
+        "videos": 0,
+        "width": 1440,
+        "height": 810,
+        "previousDocument": true
+      }
+    },
+    {
+      "label": "background_foreground",
+      "readyWaitMs": 40,
+      "state": {
+        "theme": "simpleUI",
+        "mode": "mirror_2d",
+        "applied": true,
+        "mediaReady": true,
+        "output": {
+          "modeWidth": 1920,
+          "modeHeight": 1080,
+          "viewWidth": 1920,
+          "viewHeight": 1080,
+          "refreshRate": 60.000003814697266,
+          "stereoReady": false
+        }
+      },
+      "dom": {
+        "theme": "simpleUI",
+        "home": true,
+        "videos": 0,
+        "width": 1440,
+        "height": 810,
+        "previousDocument": true
+      }
+    },
+    {
+      "label": "cold_launch",
+      "readyWaitMs": 875,
+      "state": {
+        "theme": "simpleUI",
+        "mode": "mirror_2d",
+        "applied": true,
+        "mediaReady": true,
+        "output": {
+          "modeWidth": 1920,
+          "modeHeight": 1080,
+          "viewWidth": 1920,
+          "viewHeight": 1080,
+          "refreshRate": 60.000003814697266,
+          "stereoReady": false
+        }
+      },
+      "dom": {
+        "theme": "simpleUI",
+        "home": true,
+        "videos": 0,
+        "width": 1440,
+        "height": 810,
+        "previousDocument": false
+      }
+    },
+    {
+      "label": "renderer_recovery",
+      "readyWaitMs": 54,
+      "state": {
+        "theme": "simpleUI",
+        "mode": "mirror_2d",
+        "applied": true,
+        "mediaReady": true,
+        "output": {
+          "modeWidth": 1920,
+          "modeHeight": 1080,
+          "viewWidth": 1920,
+          "viewHeight": 1080,
+          "refreshRate": 60.000003814697266,
+          "stereoReady": false
+        }
+      },
+      "dom": {
+        "theme": "simpleUI",
+        "home": true,
+        "videos": 0,
+        "width": 1440,
+        "height": 810,
+        "previousDocument": false
+      }
+    }
+  ],
+  "notRun": {
+    "activityRecreation": "Device denies WRITE_SECURE_SETTINGS; always_finish_activities was not changed."
+  }
+}

@@ -1,0 +1,736 @@
+{
+  "hidden-controls-validation.json": {
+    "visible": {
+      "opacity": "1",
+      "suspended": false,
+      "paused": false,
+      "bars": [
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 431.8000000000666
+        },
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 431.8000000000666
+        },
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 431.8000000000666
+        }
+      ]
+    },
+    "fading": {
+      "opacity": "0.00576753",
+      "suspended": false,
+      "paused": false,
+      "bars": [
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 3453.5000000000764
+        },
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 3453.5000000000764
+        },
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 3453.5000000000764
+        }
+      ]
+    },
+    "hidden": {
+      "opacity": "0",
+      "suspended": true,
+      "paused": false,
+      "bars": [
+        {
+          "name": "sound-bar",
+          "state": "paused",
+          "time": 3486.8000000000166
+        },
+        {
+          "name": "sound-bar",
+          "state": "paused",
+          "time": 3486.8000000000166
+        },
+        {
+          "name": "sound-bar",
+          "state": "paused",
+          "time": 3486.8000000000166
+        }
+      ]
+    },
+    "hiddenLater": {
+      "opacity": "0",
+      "suspended": true,
+      "paused": false,
+      "bars": [
+        {
+          "name": "sound-bar",
+          "state": "paused",
+          "time": 3486.8000000000166
+        },
+        {
+          "name": "sound-bar",
+          "state": "paused",
+          "time": 3486.8000000000166
+        },
+        {
+          "name": "sound-bar",
+          "state": "paused",
+          "time": 3486.8000000000166
+        }
+      ]
+    },
+    "revealed": {
+      "opacity": "0.9002",
+      "suspended": false,
+      "paused": false,
+      "bars": [
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 3636.3449999989825
+        },
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 3636.3449999989825
+        },
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 3636.3449999989825
+        }
+      ]
+    },
+    "interruptedExit": {
+      "opacity": "1",
+      "suspended": false,
+      "paused": false,
+      "bars": [
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 7239.278999998987
+        },
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 7239.278999998987
+        },
+        {
+          "name": "sound-bar",
+          "state": "running",
+          "time": 7239.278999998987
+        }
+      ]
+    },
+    "pausedVisible": {
+      "opacity": "1",
+      "suspended": false,
+      "paused": true,
+      "bars": [
+        {
+          "name": "sound-bar",
+          "state": "paused",
+          "time": 7255.978999999002
+        },
+        {
+          "name": "sound-bar",
+          "state": "paused",
+          "time": 7255.978999999002
+        },
+        {
+          "name": "sound-bar",
+          "state": "paused",
+          "time": 7255.978999999002
+        }
+      ]
+    },
+    "introVisible": {
+      "opacity": "1",
+      "suspended": false,
+      "animations": [
+        {
+          "state": "running",
+          "time": 1030.1780000041845
+        },
+        {
+          "state": "running",
+          "time": 1030.1780000041845
+        }
+      ]
+    },
+    "introFading": {
+      "opacity": "0.0864018",
+      "suspended": false,
+      "animations": [
+        {
+          "state": "running",
+          "time": 4550.674000004165
+        },
+        {
+          "state": "running",
+          "time": 4550.674000004165
+        }
+      ]
+    },
+    "introHidden": {
+      "opacity": "0",
+      "suspended": true,
+      "animations": [
+        {
+          "state": "paused",
+          "time": 5213.720000004173
+        },
+        {
+          "state": "paused",
+          "time": 5213.720000004173
+        }
+      ]
+    },
+    "pass": {
+      "visibleBarsRun": true,
+      "hiddenBarsPause": true,
+      "hiddenPhaseStops": true,
+      "revealResumes": true,
+      "interruptedExitKeepsRunning": true,
+      "videoPauseKeepsBarsPaused": true,
+      "introVisibleRuns": true,
+      "introFadesWhileRunning": true,
+      "introHiddenPauses": true,
+      "fadeKeepsBarsRunning": true
+    }
+  },
+  "ui-pixel-comparison.json": {
+    "2d-phone": {
+      "sameDimensions": true,
+      "meanAbsoluteChannelDifference": 0.0047963378176382665,
+      "exactlyEqualPixelsPercent": 99.31113602391629,
+      "withinOneLevelPixelsPercent": 99.9957399103139,
+      "scope": "phone crop excludes OS bars"
+    },
+    "2d-glasses": {
+      "sameDimensions": true,
+      "meanAbsoluteChannelDifference": 7.4439453125,
+      "exactlyEqualPixelsPercent": 73.37147955246913,
+      "withinOneLevelPixelsPercent": 75.90909529320987,
+      "scope": "full display, includes dynamic catalog content"
+    },
+    "sbs-phone": {
+      "sameDimensions": true,
+      "meanAbsoluteChannelDifference": 0.004249750871948181,
+      "exactlyEqualPixelsPercent": 99.39973841554558,
+      "withinOneLevelPixelsPercent": 99.99600149476832,
+      "scope": "phone crop excludes OS bars"
+    },
+    "sbs-glasses": {
+      "sameDimensions": true,
+      "meanAbsoluteChannelDifference": 6.588359455375515,
+      "exactlyEqualPixelsPercent": 75.86038773148148,
+      "withinOneLevelPixelsPercent": 78.11863425925925,
+      "scope": "full display, includes dynamic catalog content"
+    },
+    "2d-glasses-topbar": {
+      "crop": [
+        150,
+        0,
+        1920,
+        150
+      ],
+      "meanAbsoluteChannelDifference": 0.0005335844318895166,
+      "withinOneLevelPixelsPercent": 99.99359698681732
+    },
+    "limitations": "Glasses full-display content changed between runs; full-frame equality is not a visual acceptance assertion. Paused decorative loops used equal phase 600ms for the captures only."
+  },
+  "geometry-validation.json": {
+    "settingsCases": [
+      {
+        "requested": {
+          "depthLevel": 0,
+          "sizePercent": 90
+        },
+        "observed": {
+          "settings": {
+            "depthLevel": 0,
+            "sizePercent": 90
+          },
+          "output": {
+            "modeWidth": 3840,
+            "modeHeight": 1080,
+            "viewWidth": 3840,
+            "viewHeight": 1080,
+            "refreshRate": 60.000003814697266,
+            "stereoReady": true
+          },
+          "applied": true
+        },
+        "continuity": {
+          "sameDocument": true,
+          "sameVideo": true,
+          "sameSource": true,
+          "videos": 1,
+          "width": 1440,
+          "height": 810,
+          "requests": {
+            "plan": 4,
+            "started": 2,
+            "progress": 57,
+            "stopped": 1
+          }
+        }
+      },
+      {
+        "requested": {
+          "depthLevel": 1,
+          "sizePercent": 90
+        },
+        "observed": {
+          "settings": {
+            "depthLevel": 1,
+            "sizePercent": 90
+          },
+          "output": {
+            "modeWidth": 3840,
+            "modeHeight": 1080,
+            "viewWidth": 3840,
+            "viewHeight": 1080,
+            "refreshRate": 60.000003814697266,
+            "stereoReady": true
+          },
+          "applied": true
+        },
+        "continuity": {
+          "sameDocument": true,
+          "sameVideo": true,
+          "sameSource": true,
+          "videos": 1,
+          "width": 1440,
+          "height": 810,
+          "requests": {
+            "plan": 4,
+            "started": 2,
+            "progress": 57,
+            "stopped": 1
+          }
+        }
+      },
+      {
+        "requested": {
+          "depthLevel": 2,
+          "sizePercent": 90
+        },
+        "observed": {
+          "settings": {
+            "depthLevel": 2,
+            "sizePercent": 90
+          },
+          "output": {
+            "modeWidth": 3840,
+            "modeHeight": 1080,
+            "viewWidth": 3840,
+            "viewHeight": 1080,
+            "refreshRate": 60.000003814697266,
+            "stereoReady": true
+          },
+          "applied": true
+        },
+        "continuity": {
+          "sameDocument": true,
+          "sameVideo": true,
+          "sameSource": true,
+          "videos": 1,
+          "width": 1440,
+          "height": 810,
+          "requests": {
+            "plan": 4,
+            "started": 2,
+            "progress": 57,
+            "stopped": 1
+          }
+        }
+      },
+      {
+        "requested": {
+          "depthLevel": 3,
+          "sizePercent": 90
+        },
+        "observed": {
+          "settings": {
+            "depthLevel": 3,
+            "sizePercent": 90
+          },
+          "output": {
+            "modeWidth": 3840,
+            "modeHeight": 1080,
+            "viewWidth": 3840,
+            "viewHeight": 1080,
+            "refreshRate": 60.000003814697266,
+            "stereoReady": true
+          },
+          "applied": true
+        },
+        "continuity": {
+          "sameDocument": true,
+          "sameVideo": true,
+          "sameSource": true,
+          "videos": 1,
+          "width": 1440,
+          "height": 810,
+          "requests": {
+            "plan": 4,
+            "started": 2,
+            "progress": 57,
+            "stopped": 1
+          }
+        }
+      },
+      {
+        "requested": {
+          "depthLevel": 1,
+          "sizePercent": 80
+        },
+        "observed": {
+          "settings": {
+            "depthLevel": 1,
+            "sizePercent": 80
+          },
+          "output": {
+            "modeWidth": 3840,
+            "modeHeight": 1080,
+            "viewWidth": 3840,
+            "viewHeight": 1080,
+            "refreshRate": 60.000003814697266,
+            "stereoReady": true
+          },
+          "applied": true
+        },
+        "continuity": {
+          "sameDocument": true,
+          "sameVideo": true,
+          "sameSource": true,
+          "videos": 1,
+          "width": 1440,
+          "height": 810,
+          "requests": {
+            "plan": 4,
+            "started": 2,
+            "progress": 57,
+            "stopped": 1
+          }
+        }
+      },
+      {
+        "requested": {
+          "depthLevel": 1,
+          "sizePercent": 85
+        },
+        "observed": {
+          "settings": {
+            "depthLevel": 1,
+            "sizePercent": 85
+          },
+          "output": {
+            "modeWidth": 3840,
+            "modeHeight": 1080,
+            "viewWidth": 3840,
+            "viewHeight": 1080,
+            "refreshRate": 60.000003814697266,
+            "stereoReady": true
+          },
+          "applied": true
+        },
+        "continuity": {
+          "sameDocument": true,
+          "sameVideo": true,
+          "sameSource": true,
+          "videos": 1,
+          "width": 1440,
+          "height": 810,
+          "requests": {
+            "plan": 4,
+            "started": 2,
+            "progress": 57,
+            "stopped": 1
+          }
+        }
+      },
+      {
+        "requested": {
+          "depthLevel": 1,
+          "sizePercent": 90
+        },
+        "observed": {
+          "settings": {
+            "depthLevel": 1,
+            "sizePercent": 90
+          },
+          "output": {
+            "modeWidth": 3840,
+            "modeHeight": 1080,
+            "viewWidth": 3840,
+            "viewHeight": 1080,
+            "refreshRate": 60.000003814697266,
+            "stereoReady": true
+          },
+          "applied": true
+        },
+        "continuity": {
+          "sameDocument": true,
+          "sameVideo": true,
+          "sameSource": true,
+          "videos": 1,
+          "width": 1440,
+          "height": 810,
+          "requests": {
+            "plan": 4,
+            "started": 2,
+            "progress": 57,
+            "stopped": 1
+          }
+        }
+      },
+      {
+        "requested": {
+          "depthLevel": 1,
+          "sizePercent": 95
+        },
+        "observed": {
+          "settings": {
+            "depthLevel": 1,
+            "sizePercent": 95
+          },
+          "output": {
+            "modeWidth": 3840,
+            "modeHeight": 1080,
+            "viewWidth": 3840,
+            "viewHeight": 1080,
+            "refreshRate": 60.000003814697266,
+            "stereoReady": true
+          },
+          "applied": true
+        },
+        "continuity": {
+          "sameDocument": true,
+          "sameVideo": true,
+          "sameSource": true,
+          "videos": 1,
+          "width": 1440,
+          "height": 810,
+          "requests": {
+            "plan": 4,
+            "started": 2,
+            "progress": 57,
+            "stopped": 1
+          }
+        }
+      }
+    ],
+    "rapidThemeSwitch": {
+      "sameDocument": true,
+      "sameVideo": true,
+      "sameSource": true,
+      "videos": 1,
+      "theme": "liquid-glass",
+      "requestCountsBefore": {
+        "plan": 4,
+        "started": 2,
+        "progress": 57,
+        "stopped": 1
+      },
+      "requestCountsAfter": {
+        "plan": 4,
+        "started": 2,
+        "progress": 57,
+        "stopped": 1
+      }
+    }
+  },
+  "optimized-hevc-video-validation.json": {
+    "state": {
+      "mode": "stereo_screen",
+      "output": {
+        "modeWidth": 3840,
+        "modeHeight": 1080,
+        "viewWidth": 3840,
+        "viewHeight": 1080,
+        "refreshRate": 60.000003814697266,
+        "stereoReady": true
+      },
+      "settings": {
+        "depthLevel": 1,
+        "sizePercent": 95
+      }
+    },
+    "samples": [
+      {
+        "index": 0,
+        "mediaBefore": 100.404216,
+        "mediaAfter": 101.521892
+      },
+      {
+        "index": 1,
+        "mediaBefore": 102.15218,
+        "mediaAfter": 103.392012
+      },
+      {
+        "index": 2,
+        "mediaBefore": 103.915207,
+        "mediaAfter": 104.847249
+      }
+    ],
+    "codecComponents": [
+      "c2.qti.hevc.decoder"
+    ],
+    "allocatedHardwareVideoResources": 1,
+    "dom": {
+      "videos": 1,
+      "width": 1440,
+      "height": 810
+    },
+    "pixelComparisons": [
+      {
+        "index": 0,
+        "imageWidth": 3840,
+        "imageHeight": 1080,
+        "cropWidth": 1824,
+        "cropHeight": 1026,
+        "leftX": 52,
+        "rightX": 1964,
+        "topY": 27,
+        "leftRightMeanAbsoluteChannelDifference": 0.00037297801032796417,
+        "leftRightP99ChannelDifference": 0.0,
+        "exactlyEqualPixelPercent": 99.89505317875586,
+        "leftRgbStd": 37.468540507197844
+      },
+      {
+        "index": 1,
+        "imageWidth": 3840,
+        "imageHeight": 1080,
+        "cropWidth": 1824,
+        "cropHeight": 1026,
+        "leftX": 52,
+        "rightX": 1964,
+        "topY": 27,
+        "leftRightMeanAbsoluteChannelDifference": 0.00035926296410291486,
+        "leftRightP99ChannelDifference": 0.0,
+        "exactlyEqualPixelPercent": 99.89836616394788,
+        "leftRgbStd": 42.63582087411461,
+        "leftTemporalMeanAbsoluteChannelDifference": 41.706043098731236
+      },
+      {
+        "index": 2,
+        "imageWidth": 3840,
+        "imageHeight": 1080,
+        "cropWidth": 1824,
+        "cropHeight": 1026,
+        "leftX": 52,
+        "rightX": 1964,
+        "topY": 27,
+        "leftRightMeanAbsoluteChannelDifference": 0.0003808151795994209,
+        "leftRightP99ChannelDifference": 0.0,
+        "exactlyEqualPixelPercent": 99.89222111076913,
+        "leftRgbStd": 40.89991107346259,
+        "leftTemporalMeanAbsoluteChannelDifference": 38.14037616987563
+      }
+    ],
+    "scope": "Three software display captures during playback; aligned by actual depth 1 / size 95% geometry. Confirms sampled L/R content and motion, not optical comfort, eye order, audio or every-frame synchronization."
+  },
+  "optimized-hls-video-validation.json": {
+    "state": {
+      "mode": "stereo_screen",
+      "output": {
+        "modeWidth": 3840,
+        "modeHeight": 1080,
+        "viewWidth": 3840,
+        "viewHeight": 1080,
+        "refreshRate": 60.000003814697266,
+        "stereoReady": true
+      },
+      "settings": {
+        "depthLevel": 1,
+        "sizePercent": 95
+      }
+    },
+    "samples": [
+      {
+        "index": 0,
+        "mediaBefore": 91.421162,
+        "mediaAfter": 92.312233
+      },
+      {
+        "index": 1,
+        "mediaBefore": 92.820924,
+        "mediaAfter": 93.815444
+      },
+      {
+        "index": 2,
+        "mediaBefore": 94.399568,
+        "mediaAfter": 95.323032
+      }
+    ],
+    "codecComponents": [
+      "c2.qti.avc.decoder"
+    ],
+    "allocatedHardwareVideoResources": 1,
+    "dom": {
+      "videos": 1,
+      "width": 1440,
+      "height": 810
+    },
+    "pixelComparisons": [
+      {
+        "index": 0,
+        "imageWidth": 3840,
+        "imageHeight": 1080,
+        "cropWidth": 1824,
+        "cropHeight": 1026,
+        "leftX": 52,
+        "rightX": 1964,
+        "topY": 27,
+        "leftRightMeanAbsoluteChannelDifference": 0.0004826983801283586,
+        "leftRightP99ChannelDifference": 0.0,
+        "exactlyEqualPixelPercent": 99.86496913580247,
+        "leftRgbStd": 48.722700571548714
+      },
+      {
+        "index": 1,
+        "imageWidth": 3840,
+        "imageHeight": 1080,
+        "cropWidth": 1824,
+        "cropHeight": 1026,
+        "leftX": 52,
+        "rightX": 1964,
+        "topY": 27,
+        "leftRightMeanAbsoluteChannelDifference": 0.000492851076684564,
+        "leftRightP99ChannelDifference": 0.0,
+        "exactlyEqualPixelPercent": 99.86197676208064,
+        "leftRgbStd": 48.497550315945105,
+        "leftTemporalMeanAbsoluteChannelDifference": 5.243702300137934
+      },
+      {
+        "index": 2,
+        "imageWidth": 3840,
+        "imageHeight": 1080,
+        "cropWidth": 1824,
+        "cropHeight": 1026,
+        "leftX": 52,
+        "rightX": 1964,
+        "topY": 27,
+        "leftRightMeanAbsoluteChannelDifference": 0.000310102538672868,
+        "leftRightP99ChannelDifference": 0.0,
+        "exactlyEqualPixelPercent": 99.91268680961663,
+        "leftRgbStd": 71.03775958028098,
+        "leftTemporalMeanAbsoluteChannelDifference": 64.19265365126591
+      }
+    ],
+    "scope": "Three software display captures during playback; aligned by actual depth 1 / size 95% geometry. Confirms sampled L/R content and motion, not optical comfort, eye order, audio or every-frame synchronization."
+  }
+}

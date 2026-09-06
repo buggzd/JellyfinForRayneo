@@ -1,0 +1,208 @@
+{
+  "durationRequestedMs": 2500,
+  "eventCount": 454374,
+  "blurEvents": [
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 183,
+      "args": {
+        "sigmaX": 63,
+        "sigmaY": 63
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 28,
+      "args": {
+        "sigmaX": 3,
+        "sigmaY": 3
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 145,
+      "args": {
+        "sigmaX": 19,
+        "sigmaY": 19
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 21,
+      "args": {
+        "sigmaX": 3,
+        "sigmaY": 3
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 131,
+      "args": {
+        "sigmaX": 11,
+        "sigmaY": 11
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 21,
+      "args": {
+        "sigmaX": 3,
+        "sigmaY": 3
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 119,
+      "args": {
+        "sigmaX": 16,
+        "sigmaY": 16
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 16,
+      "args": {
+        "sigmaX": 3,
+        "sigmaY": 3
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 179,
+      "args": {
+        "sigmaX": 11,
+        "sigmaY": 11
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 50,
+      "args": {
+        "sigmaX": 3,
+        "sigmaY": 3
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 145,
+      "args": {
+        "sigmaX": 16,
+        "sigmaY": 16
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 20,
+      "args": {
+        "sigmaX": 3,
+        "sigmaY": 3
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 138,
+      "args": {
+        "sigmaX": 11,
+        "sigmaY": 11
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 22,
+      "args": {
+        "sigmaX": 3,
+        "sigmaY": 3
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 125,
+      "args": {
+        "sigmaX": 16,
+        "sigmaY": 16
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 18,
+      "args": {
+        "sigmaX": 3,
+        "sigmaY": 3
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 122,
+      "args": {
+        "sigmaX": 11,
+        "sigmaY": 11
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 17,
+      "args": {
+        "sigmaX": 3,
+        "sigmaY": 3
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 126,
+      "args": {
+        "sigmaX": 16,
+        "sigmaY": 16
+      }
+    },
+    {
+      "name": "GaussianBlur",
+      "cat": "disabled-by-default-skia.gpu",
+      "phase": "X",
+      "us": 19,
+      "args": {
+        "sigmaX": 3,
+        "sigmaY": 3
+      }
+    }
+  ],
+  "scope": "CDP trace outside benchmark windows; CPU trace spans are not GPU execution time; no DOM-to-shader attribution.",
+  "vulkanQueueSubmitEvents": 71
+}

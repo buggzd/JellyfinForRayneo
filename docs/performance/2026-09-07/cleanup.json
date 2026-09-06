@@ -1,0 +1,54 @@
+{
+  "state": {
+    "theme": "simpleUI",
+    "mode": "mirror_2d",
+    "applied": true,
+    "mediaReady": true,
+    "settings": {
+      "depthLevel": 1,
+      "sizePercent": 95
+    },
+    "output": {
+      "modeWidth": 1920,
+      "modeHeight": 1080,
+      "viewWidth": 1920,
+      "viewHeight": 1080,
+      "refreshRate": 60.000003814697266,
+      "stereoReady": false
+    }
+  },
+  "dom": {
+    "videos": 0,
+    "home": true,
+    "theme": "simpleUI",
+    "hasTestStorage": false
+  },
+  "hardwareVideoResources": 0,
+  "pipeline": "Skia (Vulkan)",
+  "sessions": {
+    "matching": 1,
+    "playing": 0,
+    "transcoding": 0
+  },
+  "userdata": [
+    {
+      "sample": "hevc_4k60",
+      "status": 200,
+      "restored": true,
+      "originalLastPlayedDateRestored": null
+    },
+    {
+      "sample": "hls_mkv",
+      "status": 200,
+      "restored": true,
+      "originalLastPlayedDateRestored": null
+    },
+    {
+      "sample": "subtitle_compatibility",
+      "status": 200,
+      "restored": true,
+      "originalLastPlayedDateRestored": null
+    }
+  ],
+  "alwaysFinishActivities": "null"
+}

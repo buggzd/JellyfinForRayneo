@@ -264,7 +264,9 @@ final class CompanionWebViewController
         destroyWebView();
         webView = new WebView(activity);
         webView.setBackgroundColor(surfaceColor);
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        // The window is already hardware accelerated. A forced View layer adds a
+        // full-size texture that must be updated whenever the WebView animates.
+        webView.setLayerType(View.LAYER_TYPE_NONE, null);
         webView.setSaveEnabled(false);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setVerticalScrollBarEnabled(false);

@@ -42,6 +42,7 @@ import {
 } from 'lucide-react'
 import type Hls from 'hls.js'
 import { applyUiTheme, normalizeUiTheme } from '../../SharedUI/theme.mjs'
+import { suspendHiddenAnimations } from '../../SharedUI/hiddenAnimations.mjs'
 import {
   type CSSProperties,
   type ReactNode,
@@ -1667,6 +1668,7 @@ function PlayerPage({
   onBack: () => void
 }) {
   const playerPageRef = useRef<HTMLDivElement>(null)
+  const bottomChromeRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const infoSourceRef = useRef<PlaybackInfoSource>({ plan: null, codecs: {} })
@@ -1689,6 +1691,7 @@ function PlayerPage({
   const [chrome, setChrome] = useState<PlayerChrome>('controls')
   const chromeRef = useRef<PlayerChrome>('controls')
   const controls = chrome === 'controls'
+  useLayoutEffect(() => suspendHiddenAnimations(bottomChromeRef.current, !controls), [controls])
   const [panel, setPanel] = useState<'audio' | 'subtitles' | null>(null)
   const [feedback, setFeedback] = useState<{ direction: 'backward' | 'forward'; id: number } | null>(null)
   const [volume, setVolume] = useState(100)
@@ -2450,7 +2453,7 @@ function PlayerPage({
         </div>
       )}
 
-      <div className={cx('player-chrome player-chrome--bottom', !controls && 'is-hidden')} inert={!controls} aria-hidden={!controls}>
+      <div ref={bottomChromeRef} className={cx('player-chrome player-chrome--bottom', !controls && 'is-hidden')} inert={!controls} aria-hidden={!controls}>
         {panel && controls && (
           <aside ref={trackPanelRef} className="track-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="track-panel-title">
             <header><div><small>PLAYBACK OPTIONS</small><h2 id="track-panel-title">{panel === 'audio' ? '选择音轨' : '选择字幕'}</h2></div><FocusButton className="track-panel__close" variant="round" label="关闭面板" onClick={() => closeTrackPanel()}><X size={20} /></FocusButton></header>

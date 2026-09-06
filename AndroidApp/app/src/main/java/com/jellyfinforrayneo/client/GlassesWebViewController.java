@@ -210,7 +210,7 @@ final class GlassesWebViewController
         // the eye Canvas transforms still determine the external output dimensions.
         webView = new WebView(context);
         webView.setBackgroundColor(Color.rgb(2, 7, 13));
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        webView.setLayerType(View.LAYER_TYPE_NONE, null);
         webView.setSaveEnabled(false);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setVerticalScrollBarEnabled(false);
@@ -326,7 +326,15 @@ final class GlassesWebViewController
         boolean stereo = displayState != null
                 && displayState.displayModeApplied
                 && DisplayModeStateMachine.STEREO_SCREEN.equals(displayState.activeMode);
-        webContainer.setStereo(!transitioning && stereo);
+        boolean drawStereo = !transitioning && stereo;
+        // Mirror uses WebView's normal hardware rendering. Stereo retains one
+        // texture so both eye draws sample the same completed WebView frame.
+        int layerType = drawStereo ? View.LAYER_TYPE_HARDWARE : View.LAYER_TYPE_NONE;
+        if (webView != null && webView.getLayerType() != layerType)
+        {
+            webView.setLayerType(layerType, null);
+        }
+        webContainer.setStereo(drawStereo);
         webContainer.setVisibility(transitioning ? View.INVISIBLE : View.VISIBLE);
         blackTransition.setVisibility(transitioning ? View.VISIBLE : View.GONE);
         if (transitioning)
@@ -519,19 +527,6 @@ final class GlassesWebViewController
         private StereoScreenGeometry geometry;
         private ValueAnimator settingsAnimator;
         private final Paint patternPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Runnable invalidator = new Runnable()
-        {
-            @Override
-            public void run()
-            {
-                if (!shouldAnimateFrames())
-                {
-                    return;
-                }
-                invalidate();
-                postOnAnimation(this);
-            }
-        };
 
         StereoMirrorLayout(Context context)
         {
@@ -553,7 +548,6 @@ final class GlassesWebViewController
             }
             requestLayout();
             invalidate();
-            updateInvalidator();
         }
 
         void setScreenSettings(StereoScreenSettings next)
@@ -567,7 +561,7 @@ final class GlassesWebViewController
                 settingsAnimator.cancel();
             }
             settings = next;
-            if (!shouldAnimateFrames() || !ValueAnimator.areAnimatorsEnabled())
+            if (!canAnimateSettings() || !ValueAnimator.areAnimatorsEnabled())
             {
                 finishSettingsAnimation();
                 return;
@@ -614,50 +608,27 @@ final class GlassesWebViewController
             invalidate();
         }
 
-        private boolean shouldAnimateFrames()
+        private boolean canAnimateSettings()
         {
             return stereo && isAttachedToWindow() && isShown() && getWindowVisibility() == View.VISIBLE;
         }
 
-        private void updateInvalidator()
+        @Override
+        public void onDescendantInvalidated(View child, View target)
         {
-            // View can deliver visibility callbacks while its superclass is being constructed.
-            if (invalidator == null)
+            super.onDescendantInvalidated(child, target);
+            if (stereo)
             {
-                return;
+                // WebView invalidates for video, CSS motion, DOM and scroll changes.
+                // Redraw both transformed copies together, and let unchanged frames
+                // sleep instead of scheduling a second, unconditional vsync loop.
+                invalidate();
             }
-            removeCallbacks(invalidator);
-            if (shouldAnimateFrames())
-            {
-                postOnAnimation(invalidator);
-            }
-        }
-
-        @Override
-        protected void onVisibilityChanged(View changedView, int visibility)
-        {
-            super.onVisibilityChanged(changedView, visibility);
-            updateInvalidator();
-        }
-
-        @Override
-        protected void onWindowVisibilityChanged(int visibility)
-        {
-            super.onWindowVisibilityChanged(visibility);
-            updateInvalidator();
-        }
-
-        @Override
-        protected void onAttachedToWindow()
-        {
-            super.onAttachedToWindow();
-            updateInvalidator();
         }
 
         @Override
         protected void onDetachedFromWindow()
         {
-            removeCallbacks(invalidator);
             finishSettingsAnimation();
             super.onDetachedFromWindow();
         }
