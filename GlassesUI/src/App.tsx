@@ -47,6 +47,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -278,7 +279,7 @@ function movePlayerFocus(direction: Direction) {
   const controlIndex = controlButtons.indexOf(current)
 
   if (direction === 'down' && current === progress) {
-    focusSpatialElement(document.querySelector<HTMLElement>('.player-play') ?? controlButtons[0])
+    focusSpatialElement(document.querySelector<HTMLElement>('.player-play:not([disabled])') ?? controlButtons[0])
     return true
   }
 
@@ -1616,6 +1617,7 @@ function parseWebVtt(source: string) {
 const jellyfinTicksPerSecond = 10_000_000
 
 type PlayerStatus = 'preparing' | 'buffering' | 'playing' | 'paused' | 'ended' | 'error'
+type PlayerChrome = 'controls' | 'hidden' | 'topbar'
 
 function PlayerPage({
   item,
@@ -1640,6 +1642,7 @@ function PlayerPage({
   onPlayItem: (item: MediaItem, fromStart?: boolean) => void
   onBack: () => void
 }) {
+  const playerPageRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const planRef = useRef<PlaybackPlan | null>(null)
@@ -1658,7 +1661,9 @@ function PlayerPage({
   const [error, setError] = useState('')
   const [current, setCurrent] = useState(startPositionTicks / jellyfinTicksPerSecond)
   const [total, setTotal] = useState((item.runtimeTicks ?? 0) / jellyfinTicksPerSecond)
-  const [controls, setControls] = useState(true)
+  const [chrome, setChrome] = useState<PlayerChrome>('controls')
+  const chromeRef = useRef<PlayerChrome>('controls')
+  const controls = chrome === 'controls'
   const [panel, setPanel] = useState<'audio' | 'subtitles' | null>(null)
   const [feedback, setFeedback] = useState<{ direction: 'backward' | 'forward'; id: number } | null>(null)
   const [volume, setVolume] = useState(100)
@@ -1675,6 +1680,11 @@ function PlayerPage({
   const trackPanelRestoreFrame = useRef<number | null>(null)
   const feedbackId = useRef(0)
   const playing = status === 'playing' || status === 'buffering'
+
+  const updateChrome = useCallback((next: PlayerChrome) => {
+    chromeRef.current = next
+    setChrome(next)
+  }, [])
 
   const updateStatus = useCallback((nextStatus: PlayerStatus) => {
     statusRef.current = nextStatus
@@ -1786,9 +1796,9 @@ function PlayerPage({
       setPlan(null)
       setError(reason instanceof Error ? reason.message : '无法准备 Jellyfin 播放。')
       updateStatus('error')
-      setControls(true)
+      updateChrome('controls')
     }
-  }, [item, preparePlayback, updateStatus])
+  }, [item, preparePlayback, updateChrome, updateStatus])
 
   useEffect(() => {
     startedPlans.current.clear()
@@ -1817,15 +1827,15 @@ function PlayerPage({
       setPlan(fallback)
       updateStatus('buffering')
       setError('')
-      setControls(true)
+      updateChrome('controls')
       return
     }
 
     stopPlan(active, true)
     setError(message || '媒体流无法播放，请返回后重试。')
     updateStatus('error')
-    setControls(true)
-  }, [positionTicks, stopPlan, updateStatus])
+    updateChrome('controls')
+  }, [positionTicks, stopPlan, updateChrome, updateStatus])
 
   useEffect(() => {
     const video = videoRef.current
@@ -1918,9 +1928,9 @@ function PlayerPage({
     void video.play().catch(() => {
       desiredPlaying.current = false
       updateStatus('paused')
-      setControls(true)
+      updateChrome('controls')
     })
-  }, [applyInitialSeek, updateStatus])
+  }, [applyInitialSeek, updateChrome, updateStatus])
 
   const togglePlayback = useCallback(() => {
     const video = videoRef.current
@@ -1947,16 +1957,15 @@ function PlayerPage({
     if (hideTimer.current) window.clearTimeout(hideTimer.current)
     if (status === 'playing' && !panel) {
       hideTimer.current = window.setTimeout(() => {
-        focusSpatialElement(document.querySelector<HTMLElement>('.player-progress__bar'))
-        setControls(false)
+        updateChrome('hidden')
       }, 3200)
     }
-  }, [panel, status])
+  }, [panel, status, updateChrome])
 
   const reveal = useCallback(() => {
-    setControls(true)
+    updateChrome('controls')
     scheduleHide()
-  }, [scheduleHide])
+  }, [scheduleHide, updateChrome])
 
   const seek = useCallback((seconds: number, showControls = true) => {
     const video = videoRef.current
@@ -2001,7 +2010,7 @@ function PlayerPage({
     if (trackPanelFocusFrame.current) window.cancelAnimationFrame(trackPanelFocusFrame.current)
     if (trackPanelRestoreFrame.current) window.cancelAnimationFrame(trackPanelRestoreFrame.current)
     setPanel(null)
-    setControls(true)
+    updateChrome('controls')
 
     if (!restoreFocus) return
     trackPanelRestoreFrame.current = window.requestAnimationFrame(() => {
@@ -2011,7 +2020,7 @@ function PlayerPage({
       focusSpatialElement(target)
       trackPanelRestoreFrame.current = null
     })
-  }, [])
+  }, [updateChrome])
 
   const toggleTrackPanel = useCallback((kind: 'audio' | 'subtitles') => {
     if (panel === kind) {
@@ -2022,8 +2031,8 @@ function PlayerPage({
     if (trackPanelRestoreFrame.current) window.cancelAnimationFrame(trackPanelRestoreFrame.current)
     trackPanelReturnFocus.current = document.querySelector<HTMLElement>(`.player-track-trigger--${kind}`)
     setPanel(kind)
-    setControls(true)
-  }, [closeTrackPanel, panel])
+    updateChrome('controls')
+  }, [closeTrackPanel, panel, updateChrome])
 
   const moveTrackPanelFocus = useCallback((direction: Direction) => {
     const root = trackPanelRef.current
@@ -2078,12 +2087,16 @@ function PlayerPage({
     }
   }, [controls, focusTrackPanelTarget, panel])
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      focusSpatialElement(document.querySelector<HTMLElement>('.player-controls [data-autofocus="true"]'))
-    }, 140)
-    return () => window.clearTimeout(timer)
-  }, [])
+  useLayoutEffect(() => {
+    if (chrome === 'hidden') {
+      clearSpatialFocus()
+      playerPageRef.current?.focus({ preventScroll: true })
+      return
+    }
+    focusSpatialElement(playerPageRef.current?.querySelector<HTMLElement>(
+      chrome === 'topbar' ? '.player-back' : '.player-progress__bar',
+    ))
+  }, [chrome])
 
   useEffect(() => {
     scheduleHide()
@@ -2153,18 +2166,16 @@ function PlayerPage({
         }
       }
 
+      const phase = chromeRef.current
       if (key === 'left' || key === 'right') {
+        if (phase === 'hidden') return seek(key === 'left' ? -10 : 10, false)
+        if (phase === 'topbar') return
         const active = currentSpatialFocus()
         const progressFocused = active instanceof HTMLElement
           && active.matches('.player-progress__bar')
 
         if (progressFocused) {
-          return seek(key === 'left' ? -10 : 10, controls)
-        }
-
-        if (!controls) {
-          focusSpatialElement(document.querySelector<HTMLElement>('.player-progress__bar'))
-          return seek(key === 'left' ? -10 : 10, false)
+          return seek(key === 'left' ? -10 : 10)
         }
 
         reveal()
@@ -2172,26 +2183,37 @@ function PlayerPage({
         return
       }
       if (key === 'down') {
-        const wasHidden = !controls
+        const active = currentSpatialFocus()
         reveal()
-        window.setTimeout(() => {
-          if (wasHidden) {
-            focusSpatialElement(document.querySelector<HTMLElement>('.player-progress__bar'))
-          } else {
-            if (!movePlayerFocus('down')) moveFocus('down')
-          }
-        }, 40)
+        // A newly revealed control bar receives focus after its inert state clears.
+        if (phase !== 'controls') return
+        if (active?.matches('.player-back')) {
+          focusSpatialElement(document.querySelector<HTMLElement>('.player-progress__bar'))
+        } else if (!movePlayerFocus('down')) moveFocus('down')
         return
       }
       if (key === 'up') {
-        if (!controls) return
+        if (phase === 'hidden') {
+          updateChrome('topbar')
+          scheduleHide()
+          return
+        }
+        if (phase === 'topbar') {
+          scheduleHide()
+          return
+        }
+        if (currentSpatialFocus()?.matches('.player-progress__bar')) {
+          if (hideTimer.current) window.clearTimeout(hideTimer.current)
+          updateChrome('hidden')
+          return
+        }
         reveal()
         if (!movePlayerFocus('up')) moveFocus('up')
         return
       }
       if (key === 'enter') {
         const active = currentSpatialFocus()
-        if (controls && active) {
+        if (phase !== 'hidden' && active) {
           active.click()
         } else {
           togglePlayback()
@@ -2205,7 +2227,7 @@ function PlayerPage({
     }
     window.addEventListener('lucent-player-key', listener)
     return () => window.removeEventListener('lucent-player-key', listener)
-  }, [closeTrackPanel, controls, moveTrackPanelFocus, onBack, panel, reveal, seek, togglePlayback])
+  }, [closeTrackPanel, moveTrackPanelFocus, onBack, panel, reveal, scheduleHide, seek, togglePlayback, updateChrome])
 
   useEffect(() => {
     const listener = (event: Event) => {
@@ -2257,18 +2279,18 @@ function PlayerPage({
     const active = planRef.current
     if (!video || video.ended || statusRef.current === 'preparing' || statusRef.current === 'error') return
     updateStatus('paused')
-    setControls(true)
+    updateChrome('controls')
     if (active && startedPlans.current.has(planKey(active))) {
       void reportPlaybackProgress(active, true, positionTicks()).catch(() => undefined)
     }
-  }, [planKey, positionTicks, reportPlaybackProgress, updateStatus])
+  }, [planKey, positionTicks, reportPlaybackProgress, updateChrome, updateStatus])
 
   const handleEnded = useCallback(() => {
     desiredPlaying.current = false
     updateStatus('ended')
-    setControls(true)
+    updateChrome('controls')
     stopPlan(planRef.current)
-  }, [stopPlan, updateStatus])
+  }, [stopPlan, updateChrome, updateStatus])
 
   const progress = total > 0 ? Math.min(100, Math.max(0, current / total * 100)) : 0
   const subtitleText = useMemo(() => subtitleCues
@@ -2296,7 +2318,7 @@ function PlayerPage({
   }[status]
 
   return (
-    <div className="player-page page-enter" onMouseMove={reveal} onClick={reveal}>
+    <div ref={playerPageRef} tabIndex={-1} className="player-page page-enter" onMouseMove={reveal} onClick={reveal}>
       <video
         ref={videoRef}
         className={cx('player-video', !hasVideoFrame && 'player-video--pending')}
@@ -2323,9 +2345,9 @@ function PlayerPage({
         {(item.imageUrl ?? item.backdropUrl ?? item.coverUrl) && <img src={item.imageUrl ?? item.backdropUrl ?? item.coverUrl} alt="" decoding="async" draggable={false} onError={(event) => { event.currentTarget.style.display = 'none' }} />}
       </div>}
 
-      <div className={cx('player-chrome', !controls && 'is-hidden')}>
+      <div className={cx('player-chrome', chrome === 'hidden' && 'is-hidden')} inert={chrome === 'hidden'} aria-hidden={chrome === 'hidden'}>
         <header className="player-topbar">
-          <FocusButton variant="round" label="退出播放器" onClick={onBack}><ArrowLeft size={22} /></FocusButton>
+          <FocusButton className="player-back" variant="round" label="退出播放器" onClick={onBack}><ArrowLeft size={22} /></FocusButton>
           <div className="player-title"><small>正在播放 · {episodeLabel}</small><strong>{item.title} <span>·</span> {titleDetail}</strong></div>
           {plan && <div className="player-direct"><span /> {playbackMethod} <i /> {formatLabel}</div>}
         </header>
@@ -2390,7 +2412,7 @@ function PlayerPage({
         </div>
       )}
 
-      <div className={cx('player-chrome player-chrome--bottom', !controls && 'is-hidden')}>
+      <div className={cx('player-chrome player-chrome--bottom', !controls && 'is-hidden')} inert={!controls} aria-hidden={!controls}>
         {panel && controls && (
           <aside ref={trackPanelRef} className="track-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="track-panel-title">
             <header><div><small>PLAYBACK OPTIONS</small><h2 id="track-panel-title">{panel === 'audio' ? '选择音轨' : '选择字幕'}</h2></div><FocusButton className="track-panel__close" variant="round" label="关闭面板" onClick={() => closeTrackPanel()}><X size={20} /></FocusButton></header>
@@ -2415,21 +2437,21 @@ function PlayerPage({
           </div>
           <div className="player-control-row">
             <div className="player-control-group">
+              <FocusButton variant="round" disabled={!previousItem} label="上一集" onClick={() => previousItem && onPlayItem(previousItem, true)}><SkipBack size={21} /></FocusButton>
               <FocusButton variant="round" label="后退十秒" onClick={() => seek(-10)}><RotateCcw size={22} /></FocusButton>
               <FocusButton variant="round" disabled={status === 'preparing'} className="player-play" autoFocusTarget label={playing ? '暂停' : status === 'ended' ? '重新播放' : '播放'} onClick={() => { togglePlayback(); reveal() }}>{playing ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" />}</FocusButton>
               <FocusButton variant="round" label="前进十秒" onClick={() => seek(10)}><FastForward size={22} /></FocusButton>
+              <FocusButton variant="round" disabled={!nextItem} label="下一集" onClick={() => nextItem && onPlayItem(nextItem, true)}><SkipForward size={21} /></FocusButton>
             </div>
             <div className="player-now"><span className={cx('playing-bars', !playing && 'is-paused')}><i /><i /><i /></span><div><small>{statusLabel}</small><strong>{titleDetail}</strong></div></div>
             <div className="player-control-group player-control-group--right">
-              <FocusButton variant="round" disabled={!previousItem} label="上一集" onClick={() => previousItem && onPlayItem(previousItem, true)}><SkipBack size={21} /></FocusButton>
-              <FocusButton variant="round" disabled={!nextItem} label="下一集" onClick={() => nextItem && onPlayItem(nextItem, true)}><SkipForward size={21} /></FocusButton>
               <FocusButton className="player-track-trigger--audio" variant="round" label="音轨" disabled={!audioTracks.length || status === 'preparing'} active={panel === 'audio'} onClick={() => toggleTrackPanel('audio')}><AudioLines size={21} /></FocusButton>
               <FocusButton className="player-track-trigger--subtitles" variant="round" label="字幕" disabled={!subtitleTracks.length || status === 'preparing'} active={panel === 'subtitles'} onClick={() => toggleTrackPanel('subtitles')}><Captions size={21} /></FocusButton>
             </div>
           </div>
           <div className="player-hints" aria-label="手机触控板手势">
             <span><MoveHorizontal size={17} aria-hidden="true" /><b>左右滑动</b> 进度条上快退 / 快进 10 秒</span>
-            <span><MoveVertical size={17} aria-hidden="true" /><b>上下滑动</b> 切换控制区</span>
+            <span><MoveVertical size={17} aria-hidden="true" /><b>上下滑动</b> 进度条上滑收起 · 再上滑返回按钮</span>
             <span><Pointer size={17} aria-hidden="true" /><b>单击</b> 确认 / 播放暂停</span>
             <span><RotateCcw size={17} aria-hidden="true" /><b>双击</b> {panel ? '关闭选项' : '返回详情'}</span>
           </div>
