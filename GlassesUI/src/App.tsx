@@ -18,8 +18,12 @@ import {
   LoaderCircle,
   LogOut,
   MonitorPlay,
+  Move,
+  MoveHorizontal,
+  MoveVertical,
   Pause,
   Play,
+  Pointer,
   RefreshCw,
   Rewind,
   RotateCcw,
@@ -442,30 +446,49 @@ function AmbientBackground({
   imageUrl,
   dim = 0.45,
   homeCover = false,
-  homeShelfPreview = false,
-  imageVisible = true,
+  preview = false,
 }: {
   tone: number
   imageUrl?: string
   dim?: number
   homeCover?: boolean
-  homeShelfPreview?: boolean
-  imageVisible?: boolean
+  preview?: boolean
 }) {
   const fallbackImage = new URL(
     tone % 3 === 1 ? './assets/monochrome-flow.png' : './assets/crystal-flow.png',
     document.baseURI,
   ).href
+  const [artwork, setArtwork] = useState({ current: '', previous: '' })
+  useEffect(() => {
+    // Keep the current cover until its replacement loads; ignore late focus requests.
+    let cancelled = false
+    const image = new Image()
+    image.decoding = 'async'
+    image.onload = () => {
+      if (cancelled) return
+      setArtwork((current) => current.current === image.src
+        ? current : { current: image.src, previous: current.current })
+    }
+    image.onerror = () => {
+      if (!cancelled && image.src !== fallbackImage) image.src = fallbackImage
+    }
+    image.src = imageUrl ?? fallbackImage
+    return () => { cancelled = true }
+  }, [fallbackImage, imageUrl])
   const style = {
     '--tone': imageUrl ? '0deg' : `${tone * 31}deg`,
     '--drift-x': `${42 + (tone % 5) * 8}%`,
     '--dim': dim,
-    backgroundImage: `url(${imageUrl ?? fallbackImage})`,
   } as CSSProperties
 
   return (
-    <div className={cx('ambient', homeCover && 'ambient--home-cover', homeShelfPreview && 'ambient--home-shelf')} aria-hidden="true">
-      {imageVisible && <div className="ambient__image" style={style} />}
+    <div className={cx('ambient', homeCover && 'ambient--home-cover', preview && 'ambient--preview')} style={style} aria-hidden="true">
+      <div className="ambient__artwork">
+        {artwork.previous && <div key={artwork.previous} className="ambient__image ambient__image--previous" style={{ backgroundImage: `url(${JSON.stringify(artwork.previous)})` }} />}
+        {artwork.current && <div key={artwork.current} className="ambient__image"
+          style={{ backgroundImage: `url(${JSON.stringify(artwork.current)})` }}
+          onAnimationEnd={() => setArtwork((current) => ({ ...current, previous: '' }))} />}
+      </div>
       <div className={`ambient__spectrum ambient__spectrum--${tone % 4}`} />
       <div className="ambient__veil" />
       <div className="ambient__grain" />
@@ -1219,7 +1242,7 @@ function SearchPage({
                 <DeleteIcon size={18} />
               </button>
             </div>
-            <footer><span><kbd>↓</kbd> 进入封面结果</span><span><kbd>↑</kbd> 返回字母带</span></footer>
+            <footer><span>下滑进入封面结果</span><span>上滑返回字母带</span></footer>
           </section>
 
           <section className="series-search-results" aria-label="剧集搜索结果">
@@ -1313,7 +1336,6 @@ function DetailPage({
   const [expanded, setExpanded] = useState(false)
   const [infoTab, setInfoTab] = useState<'credits' | 'media'>('credits')
   const [detailSection, setDetailSection] = useState<'episodes' | 'similar' | 'clips' | 'details'>('episodes')
-  const [episodePreview, setEpisodePreview] = useState<MediaItem | null>(null)
   const detailPageRef = useRef<HTMLDivElement>(null)
   const appliedEpisodeHint = useRef('')
 
@@ -1326,10 +1348,6 @@ function DetailPage({
     if (!detail || loading || episodes.length || detailSection !== 'episodes') return
     setDetailSection(similar.length ? 'similar' : 'details')
   }, [detail, detailSection, episodes.length, loading, similar.length])
-
-  useEffect(() => {
-    setEpisodePreview(null)
-  }, [detail?.selectedSeasonId, resolvedItem.id])
 
   const hintedEpisode = initialEpisodeNumber
     ? episodes.find((episode) => episode.indexNumber === initialEpisodeNumber)
@@ -1348,10 +1366,6 @@ function DetailPage({
   const premiere = resolvedItem.dateCreated
     ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long' }).format(new Date(resolvedItem.dateCreated))
     : '未提供'
-  const episodePreviewUrl = detailSection === 'episodes'
-    ? episodePreview?.imageUrl ?? episodePreview?.backdropUrl
-    : undefined
-
   const toggleFavorite = async () => {
     if (actionBusy) return
     setActionBusy('favorite')
@@ -1376,7 +1390,6 @@ function DetailPage({
 
   const restoreSeriesBackdropOutsideEpisodes = (target: EventTarget | null) => {
     if (target instanceof Element && target.closest('.episode-card')) return
-    setEpisodePreview(null)
     onPreview(resolvedItem)
   }
 
@@ -1442,7 +1455,7 @@ function DetailPage({
               </div>
             )}
             <div className="detail-actions">
-              <FocusButton variant="primary" autoFocusTarget={!initialEpisodeNumber} disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">ENTER</span>} onClick={() => playTarget && onPlay(playTarget)}>{hintedEpisode ? `${hintedEpisode.progress ? '继续' : '播放'}第 ${initialEpisodeNumber} 集` : playTarget?.progress ? '继续播放' : '立即播放'}</FocusButton>
+              <FocusButton variant="primary" autoFocusTarget={!initialEpisodeNumber} disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">单击</span>} onClick={() => playTarget && onPlay(playTarget)}>{hintedEpisode ? `${hintedEpisode.progress ? '继续' : '播放'}第 ${initialEpisodeNumber} 集` : playTarget?.progress ? '继续播放' : '立即播放'}</FocusButton>
               <FocusButton variant="glass" disabled={!playTarget || loading} icon={<RotateCcw size={20} />} onClick={() => playTarget && onPlay(playTarget, true)}>从头播放</FocusButton>
               {extras[0] && <FocusButton variant="round" label="播放预告片" onClick={() => onPlay(extras[0], true)}><MonitorPlay size={20} /></FocusButton>}
               <FocusButton variant="round" className="detail-state-action" disabled={Boolean(actionBusy)} busy={actionBusy === 'favorite'} active={favorite} label={actionBusy === 'favorite' ? '正在更新收藏' : favorite ? '取消收藏' : '收藏'} onClick={() => { void toggleFavorite() }}>{actionBusy === 'favorite' ? <LoaderCircle className="is-spinning" size={20} /> : <Heart size={20} fill={favorite ? 'currentColor' : 'none'} />}</FocusButton>
@@ -1461,23 +1474,18 @@ function DetailPage({
           <FocusButton variant="ghost" active={detailSection === 'details'} onClick={() => setDetailSection('details')}>详细信息</FocusButton>
         </nav>
 
-        <div className={cx('detail-tab-stage', episodePreviewUrl && 'has-episode-preview')}>
-          <div
-            className="detail-tab-stage__episode-background"
-            style={{ backgroundImage: episodePreviewUrl ? `url(${JSON.stringify(episodePreviewUrl)})` : undefined }}
-            aria-hidden="true"
-          />
+        <div className="detail-tab-stage">
           {detailSection === 'episodes' && (
             <section className="episode-section detail-tab-panel">
               <header className="section-heading">
                 <div><small>EPISODES</small><h2>剧集与章节{!loading && <span className="section-count">{episodes.length}</span>}</h2></div>
                 <div className="season-switcher">
-                  {detail?.seasons.map((season) => <FocusButton key={season.id} variant="chip" disabled={loading} busy={loading} active={detail.selectedSeasonId === season.id} onClick={() => { setEpisodePreview(null); onPreview(resolvedItem); onSelectSeason(season.id) }}>{season.original || season.title}</FocusButton>)}
+                  {detail?.seasons.map((season) => <FocusButton key={season.id} variant="chip" disabled={loading} busy={loading} active={detail.selectedSeasonId === season.id} onClick={() => { onPreview(resolvedItem); onSelectSeason(season.id) }}>{season.original || season.title}</FocusButton>)}
                 </div>
               </header>
               {loading ? <LoadingCards label="正在读取剧集…" rail /> : <div className="episode-rail">
                 {episodes.map((episode, index) => (
-                    <button key={episode.id} type="button" data-focusable="true" data-autofocus={initialEpisodeNumber === episode.indexNumber ? 'true' : undefined} data-episode-number={episode.indexNumber} className="episode-card" onClick={() => onPlay(episode)} onFocus={() => setEpisodePreview(episode)}>
+                    <button key={episode.id} type="button" data-focusable="true" data-autofocus={initialEpisodeNumber === episode.indexNumber ? 'true' : undefined} data-episode-number={episode.indexNumber} className="episode-card" onClick={() => onPlay(episode)} onFocus={() => onPreview(episode)}>
                       <ArtFrame item={episode} wide>
                         <span className="episode-card__number">{String(episode.indexNumber ?? index + 1).padStart(2, '0')}</span>
                         <span className="episode-card__play"><Play size={19} fill="currentColor" /></span>
@@ -1645,6 +1653,8 @@ function PlayerPage({
   const currentRef = useRef(startPositionTicks / jellyfinTicksPerSecond)
   const [plan, setPlan] = useState<PlaybackPlan | null>(null)
   const [status, setStatus] = useState<PlayerStatus>('preparing')
+  const [hasVideoFrame, setHasVideoFrame] = useState(false)
+  const backdropMounted = usePresence(!hasVideoFrame)
   const [error, setError] = useState('')
   const [current, setCurrent] = useState(startPositionTicks / jellyfinTicksPerSecond)
   const [total, setTotal] = useState((item.runtimeTicks ?? 0) / jellyfinTicksPerSecond)
@@ -1754,6 +1764,7 @@ function PlayerPage({
     fallbackUsed.current = false
     seekAppliedKey.current = ''
     updateStatus('preparing')
+    setHasVideoFrame(false)
     hlsRef.current?.destroy()
     hlsRef.current = null
     videoRef.current?.pause()
@@ -1820,6 +1831,7 @@ function PlayerPage({
     const video = videoRef.current
     if (!video || !plan) return
 
+    setHasVideoFrame(false)
     video.pause()
     video.removeAttribute('src')
     video.load()
@@ -1896,8 +1908,13 @@ function PlayerPage({
 
   const attemptPlay = useCallback(() => {
     const video = videoRef.current
-    if (!video || !desiredPlaying.current) return
+    if (!video || statusRef.current === 'preparing' || statusRef.current === 'error') return
     applyInitialSeek()
+    // A paused track change still finishes loading without starting playback.
+    if (!desiredPlaying.current) {
+      updateStatus('paused')
+      return
+    }
     void video.play().catch(() => {
       desiredPlaying.current = false
       updateStatus('paused')
@@ -2222,6 +2239,7 @@ function PlayerPage({
 
   const handlePlaying = useCallback(() => {
     const active = planRef.current
+    setHasVideoFrame(true)
     updateStatus('playing')
     setError('')
     if (active) {
@@ -2272,16 +2290,25 @@ function PlayerPage({
   ].filter(Boolean).join(' · ')
   const audioTracks = plan?.audioTracks ?? []
   const subtitleTracks = plan?.subtitleTracks ?? []
+  const statusLabel = {
+    preparing: '正在加载', buffering: '缓冲中', playing: '正在播放',
+    paused: '已暂停', ended: '播放结束', error: '播放中断',
+  }[status]
 
   return (
     <div className="player-page page-enter" onMouseMove={reveal} onClick={reveal}>
       <video
         ref={videoRef}
-        className="player-video"
+        className={cx('player-video', !hasVideoFrame && 'player-video--pending')}
         crossOrigin="anonymous"
+        controls={false}
         playsInline
         preload="auto"
         onLoadedMetadata={applyInitialSeek}
+        onLoadedData={(event) => {
+          if (statusRef.current !== 'preparing' && statusRef.current !== 'error'
+            && event.currentTarget.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) setHasVideoFrame(true)
+        }}
         onCanPlay={attemptPlay}
         onPlaying={handlePlaying}
         onPause={handlePause}
@@ -2291,6 +2318,10 @@ function PlayerPage({
         onEnded={handleEnded}
         onError={() => failPlayback('浏览器无法解码当前 Jellyfin 媒体流。')}
       />
+
+      {backdropMounted && <div className={cx('player-backdrop', hasVideoFrame && 'is-leaving')} aria-hidden="true">
+        {(item.imageUrl ?? item.backdropUrl ?? item.coverUrl) && <img src={item.imageUrl ?? item.backdropUrl ?? item.coverUrl} alt="" decoding="async" draggable={false} onError={(event) => { event.currentTarget.style.display = 'none' }} />}
+      </div>}
 
       <div className={cx('player-chrome', !controls && 'is-hidden')}>
         <header className="player-topbar">
@@ -2303,8 +2334,8 @@ function PlayerPage({
       {(status === 'preparing' || status === 'buffering') && (
         <div className="player-state" role="status">
           <LoaderCircle className="is-spinning" size={34} />
-          <strong>{status === 'preparing' ? '正在准备 Jellyfin 媒体流' : '正在缓冲'}</strong>
-          <small>{status === 'preparing' ? '分析设备能力、音轨与字幕' : playbackMethod}</small>
+          <strong>{hasVideoFrame ? '正在缓冲' : '正在加载视频'}</strong>
+          <small>{episodeLabel} · {item.original || item.title}</small>
         </div>
       )}
 
@@ -2379,7 +2410,7 @@ function PlayerPage({
         <section className="player-controls glass-panel">
           <div className="player-progress" style={{ '--played': `${progress}%` } as CSSProperties}>
             <span className="player-progress__time">{formatTime(current)}</span>
-            <button type="button" data-focusable="true" aria-label="播放进度，左右键快退或快进十秒，确认键播放或暂停" className="player-progress__bar" onClick={() => { togglePlayback(); reveal() }}><i><b /></i></button>
+            <button type="button" data-focusable="true" aria-label="播放进度，左右滑动快退或快进十秒，单击播放或暂停" className="player-progress__bar" onClick={() => { togglePlayback(); reveal() }}><i><b /></i></button>
             <span className="player-progress__time">{formatTime(total)}</span>
           </div>
           <div className="player-control-row">
@@ -2388,7 +2419,7 @@ function PlayerPage({
               <FocusButton variant="round" disabled={status === 'preparing'} className="player-play" autoFocusTarget label={playing ? '暂停' : status === 'ended' ? '重新播放' : '播放'} onClick={() => { togglePlayback(); reveal() }}>{playing ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" />}</FocusButton>
               <FocusButton variant="round" label="前进十秒" onClick={() => seek(10)}><FastForward size={22} /></FocusButton>
             </div>
-            <div className="player-now"><span className={cx('playing-bars', !playing && 'is-paused')}><i /><i /><i /></span><div><small>{status === 'ended' ? 'PLAYBACK ENDED' : playing ? 'NOW PLAYING' : 'PAUSED'}</small><strong>{titleDetail}</strong></div></div>
+            <div className="player-now"><span className={cx('playing-bars', !playing && 'is-paused')}><i /><i /><i /></span><div><small>{statusLabel}</small><strong>{titleDetail}</strong></div></div>
             <div className="player-control-group player-control-group--right">
               <FocusButton variant="round" disabled={!previousItem} label="上一集" onClick={() => previousItem && onPlayItem(previousItem, true)}><SkipBack size={21} /></FocusButton>
               <FocusButton variant="round" disabled={!nextItem} label="下一集" onClick={() => nextItem && onPlayItem(nextItem, true)}><SkipForward size={21} /></FocusButton>
@@ -2396,7 +2427,12 @@ function PlayerPage({
               <FocusButton className="player-track-trigger--subtitles" variant="round" label="字幕" disabled={!subtitleTracks.length || status === 'preparing'} active={panel === 'subtitles'} onClick={() => toggleTrackPanel('subtitles')}><Captions size={21} /></FocusButton>
             </div>
           </div>
-          <div className="player-hints"><span><kbd>←</kbd><kbd>→</kbd> 进度焦点快退 / 快进 10 秒</span><span><kbd>↓</kbd> 显示 / 进入控制栏</span><span><kbd>ENTER</kbd> 确认</span><span><kbd>ESC</kbd> 返回详情</span></div>
+          <div className="player-hints" aria-label="手机触控板手势">
+            <span><MoveHorizontal size={17} aria-hidden="true" /><b>左右滑动</b> 进度条上快退 / 快进 10 秒</span>
+            <span><MoveVertical size={17} aria-hidden="true" /><b>上下滑动</b> 切换控制区</span>
+            <span><Pointer size={17} aria-hidden="true" /><b>单击</b> 确认 / 播放暂停</span>
+            <span><RotateCcw size={17} aria-hidden="true" /><b>双击</b> {panel ? '关闭选项' : '返回详情'}</span>
+          </div>
         </section>
       </div>
       <div className={cx('screen-subtitle', !subtitleText && 'is-hidden')} aria-live="off">{subtitleText}</div>
@@ -2407,9 +2443,9 @@ function PlayerPage({
 function RemoteHint({ dark = false }: { dark?: boolean }) {
   return (
     <div className={cx('remote-hint', dark && 'remote-hint--dark')}>
-      <span><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> / WASD 移动</span>
-      <span><kbd>ENTER</kbd> 确认</span>
-      <span><kbd>ESC</kbd> 返回</span>
+      <span><Move size={16} aria-hidden="true" /> 滑动移动</span>
+      <span><Pointer size={16} aria-hidden="true" /> 单击确认</span>
+      <span><RotateCcw size={16} aria-hidden="true" /> 双击返回</span>
       {import.meta.env.DEV && <span className="remote-hint__demo">1–5 页面预览</span>}
     </div>
   )
@@ -2790,6 +2826,9 @@ export default function App() {
       const tutorialReturnTarget = restoreTutorialFocus.current
         ? document.querySelector<HTMLElement>('.tutorial-launch') : null
       restoreTutorialFocus.current = false
+      // An early gesture/click already chose a card; do not pull focus back to the hero.
+      const active = document.activeElement
+      if (!tutorialReturnTarget && active instanceof HTMLElement && active.matches(focusableSelector)) return
       const target = tutorialReturnTarget ?? document.querySelector<HTMLElement>('[data-autofocus="true"]') ?? visibleFocusables()[0]
       focusSpatialElement(target)
     }, 180)
@@ -2917,11 +2956,12 @@ export default function App() {
           tone={page === 'home' ? homeBackgroundItem.art : backdropItem.art}
           imageUrl={page === 'home'
             ? homeBackgroundItem.coverUrl ?? homeBackgroundItem.imageUrl ?? homeBackgroundItem.backdropUrl
-            : backdropItem.backdropUrl}
-          dim={page === 'home' ? homeShelfPreview ? 0.32 : 0.94 : page === 'detail' ? 0.48 : 0.42}
+            : page === 'detail'
+              ? backdropItem.imageUrl ?? backdropItem.coverUrl ?? backdropItem.backdropUrl
+              : backdropItem.backdropUrl}
+          dim={page === 'home' ? homeShelfPreview ? 0.55 : 0.94 : page === 'detail' ? 0.55 : 0.42}
           homeCover={page === 'home' && !homeShelfPreview}
-          homeShelfPreview={homeShelfPreview}
-          imageVisible={page !== 'detail'}
+          preview={homeShelfPreview || page === 'detail'}
         />
       )}
       {pageNode}
