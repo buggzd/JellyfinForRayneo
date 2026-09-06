@@ -330,6 +330,17 @@ at 3840×2160 and 120 Mbps; H.264/VP8 are limited to 8-bit and HEVC/VP9/AV1 to
 24 Mbps, two-channel H.264/AAC HLS fallback. `hls.js` handles transport and MSE
 demuxing; Chromium still selects the actual Android decoder.
 
+The glasses player's optional video-information overlay reads the existing
+playback plan, HTML video dimensions/quality/buffered ranges, and the current
+HLS rendition and demuxed codecs. It distinguishes output parameters from the
+original media and samples once per second only while enabled and the document
+is visible. It adds no server polling, native bridge method, player, or report
+stream. Changing sources invalidates previous samples; changing episodes keeps
+the toggle within that playback visit, while leaving playback or switching
+accounts clears it. Hardware codec enumeration describes capability only:
+WebView exposes no public API for the active hardware/software decoder, so the
+overlay explicitly reports automatic selection and unreported actual status.
+
 ## Verification
 
 Desktop verification covers TypeScript, both production bundles, JVM tests,

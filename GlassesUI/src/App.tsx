@@ -64,6 +64,8 @@ import type {
 } from './jellyfin'
 import { postNativeMessage } from './runtime'
 import RemoteTutorial from './RemoteTutorial'
+import VideoInfoOverlay from './VideoInfoOverlay'
+import type { PlaybackInfoSource } from './playbackInfo'
 import { hasSeenRemoteTutorial, rememberRemoteTutorial, type TutorialOutcome } from './tutorialState'
 import { LoadingCards, Toast, usePresence, type FeedbackTone, type ToastMessage } from './feedback'
 import {
@@ -1622,6 +1624,8 @@ type PlayerChrome = 'controls' | 'hidden' | 'topbar'
 function PlayerPage({
   item,
   startPositionTicks,
+  infoVisible,
+  onToggleInfo,
   previousItem,
   nextItem,
   preparePlayback,
@@ -1633,6 +1637,8 @@ function PlayerPage({
 }: {
   item: MediaItem
   startPositionTicks: number
+  infoVisible: boolean
+  onToggleInfo: () => void
   previousItem?: MediaItem
   nextItem?: MediaItem
   preparePlayback: (item: MediaItem, positionTicks: number, selection?: PlaybackSelection) => Promise<PlaybackPlan>
@@ -1645,6 +1651,7 @@ function PlayerPage({
   const playerPageRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const hlsRef = useRef<Hls | null>(null)
+  const infoSourceRef = useRef<PlaybackInfoSource>({ plan: null, codecs: {} })
   const planRef = useRef<PlaybackPlan | null>(null)
   const statusRef = useRef<PlayerStatus>('preparing')
   const prepareGeneration = useRef(0)
@@ -1777,6 +1784,7 @@ function PlayerPage({
     setHasVideoFrame(false)
     hlsRef.current?.destroy()
     hlsRef.current = null
+    infoSourceRef.current = { plan: null, codecs: {} }
     videoRef.current?.pause()
     setPanel(null)
     setError('')
@@ -1847,6 +1855,7 @@ function PlayerPage({
     video.load()
     hlsRef.current?.destroy()
     hlsRef.current = null
+    infoSourceRef.current = { plan, codecs: {} }
     seekAppliedKey.current = ''
     const hlsMedia = plan.transcoding || /\.m3u8(?:$|\?)/i.test(plan.url)
 
@@ -1868,6 +1877,15 @@ function PlayerPage({
           hlsRef.current = hls
           hls.on(Hls.Events.MEDIA_ATTACHED, () => {
             if (isCurrentSource()) hls.loadSource(plan.url)
+          })
+          hls.on(Hls.Events.BUFFER_CODECS, (_event, tracks) => {
+            if (!isCurrentSource()) return
+            // Demuxed codecs remain available when a media playlist omits CODECS.
+            infoSourceRef.current.codecs = {
+              ...infoSourceRef.current.codecs,
+              ...(tracks.video?.codec ? { videoCodec: tracks.video.codec } : {}),
+              ...(tracks.audio?.codec ? { audioCodec: tracks.audio.codec } : {}),
+            }
           })
           hls.on(Hls.Events.ERROR, (_event, data) => {
             if (!isCurrentSource() || !data.fatal) return
@@ -2349,9 +2367,11 @@ function PlayerPage({
         <header className="player-topbar">
           <FocusButton className="player-back" variant="round" label="退出播放器" onClick={onBack}><ArrowLeft size={22} /></FocusButton>
           <div className="player-title"><small>正在播放 · {episodeLabel}</small><strong>{item.title} <span>·</span> {titleDetail}</strong></div>
-          {plan && <div className="player-direct"><span /> {playbackMethod} <i /> {formatLabel}</div>}
+          {plan && <div className="player-direct"><span /> {playbackMethod} <i /> {plan.transcoding ? '源格式 ' : ''}{formatLabel}</div>}
         </header>
       </div>
+
+      <VideoInfoOverlay visible={infoVisible} plan={status === 'preparing' ? null : plan} failed={status === 'error'} videoRef={videoRef} hlsRef={hlsRef} sourceRef={infoSourceRef} />
 
       {(status === 'preparing' || status === 'buffering') && (
         <div className="player-state" role="status">
@@ -2447,6 +2467,7 @@ function PlayerPage({
             <div className="player-control-group player-control-group--right">
               <FocusButton className="player-track-trigger--audio" variant="round" label="音轨" disabled={!audioTracks.length || status === 'preparing'} active={panel === 'audio'} onClick={() => toggleTrackPanel('audio')}><AudioLines size={21} /></FocusButton>
               <FocusButton className="player-track-trigger--subtitles" variant="round" label="字幕" disabled={!subtitleTracks.length || status === 'preparing'} active={panel === 'subtitles'} onClick={() => toggleTrackPanel('subtitles')}><Captions size={21} /></FocusButton>
+              <FocusButton className="player-info-trigger" variant="round" label="视频信息" active={infoVisible} onClick={() => { onToggleInfo(); reveal() }}><Info size={21} /></FocusButton>
             </div>
           </div>
           <div className="player-hints" aria-label="手机触控板手势">
@@ -2539,6 +2560,10 @@ export default function App() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailError, setDetailError] = useState('')
   const [playback, setPlayback] = useState<PlaybackRequest | null>(null)
+  const [videoInfoVisible, setVideoInfoVisible] = useState(false)
+  useEffect(() => {
+    if (page !== 'player' || jellyfin.status !== 'ready') setVideoInfoVisible(false)
+  }, [page, jellyfin.status])
   const [toast, setToast] = useState<ToastMessage | null>(null)
   const toastTimer = useRef<number | null>(null)
   const detailGeneration = useRef(0)
@@ -2559,6 +2584,7 @@ export default function App() {
     setDetail(null)
     setDetailError('')
     setPlayback(null)
+    setVideoInfoVisible(false)
     setBrowseEntry(null)
     setToast(null)
     setSearchQuery('')
@@ -2976,7 +3002,7 @@ export default function App() {
       key: 0,
     }
     const episodeIndex = detail?.episodes.findIndex((episode) => episode.id === request.item.id) ?? -1
-    return <PlayerPage key={request.key} item={request.item} startPositionTicks={request.startPositionTicks} previousItem={episodeIndex > 0 ? detail?.episodes[episodeIndex - 1] : undefined} nextItem={episodeIndex >= 0 ? detail?.episodes[episodeIndex + 1] : undefined} preparePlayback={jellyfin.preparePlayback} reportPlaybackStarted={jellyfin.reportPlaybackStarted} reportPlaybackProgress={jellyfin.reportPlaybackProgress} reportPlaybackStopped={jellyfin.reportPlaybackStopped} onPlayItem={playItem} onBack={goBack} />
+    return <PlayerPage key={request.key} item={request.item} startPositionTicks={request.startPositionTicks} infoVisible={videoInfoVisible} onToggleInfo={() => setVideoInfoVisible((visible) => !visible)} previousItem={episodeIndex > 0 ? detail?.episodes[episodeIndex - 1] : undefined} nextItem={episodeIndex >= 0 ? detail?.episodes[episodeIndex + 1] : undefined} preparePlayback={jellyfin.preparePlayback} reportPlaybackStarted={jellyfin.reportPlaybackStarted} reportPlaybackProgress={jellyfin.reportPlaybackProgress} reportPlaybackStopped={jellyfin.reportPlaybackStopped} onPlayItem={playItem} onBack={goBack} />
   })()
 
   return (

@@ -21,6 +21,11 @@ type JellyfinMediaStream = {
   Width?: number
   Height?: number
   BitRate?: number
+  AverageFrameRate?: number
+  RealFrameRate?: number
+  VideoRangeType?: string
+  ColorSpace?: string
+  SampleRate?: number
   Channels?: number
   Language?: string
   IsDefault?: boolean
@@ -39,6 +44,7 @@ type JellyfinMediaSource = {
   Path?: string
   Container?: string
   Bitrate?: number
+  Size?: number
   RunTimeTicks?: number
   MediaStreams?: JellyfinMediaStream[]
   SupportsTranscoding?: boolean
@@ -150,6 +156,20 @@ export type PlaybackPlan = PlaybackEndpoint & {
   audioCodec: string
   width?: number
   height?: number
+  mediaInfo: {
+    size?: number
+    bitrate?: number
+    videoBitrate?: number
+    frameRate?: number
+    profile?: string
+    bitDepth?: number
+    pixelFormat?: string
+    videoRange?: string
+    colorSpace?: string
+    audioChannels?: number
+    audioSampleRate?: number
+    audioBitrate?: number
+  }
   audioTracks: PlaybackTrack[]
   subtitleTracks: PlaybackTrack[]
   audioStreamIndex?: number
@@ -1190,6 +1210,20 @@ export class JellyfinClient {
       audioCodec: audioCodec.toLocaleUpperCase(),
       width: video?.Width,
       height: video?.Height,
+      mediaInfo: {
+        size: source.Size,
+        bitrate: source.Bitrate,
+        videoBitrate: video?.BitRate,
+        frameRate: video?.AverageFrameRate || video?.RealFrameRate,
+        profile: video?.Profile,
+        bitDepth: inferredVideoBitDepth(video),
+        pixelFormat: video?.PixelFormat,
+        videoRange: video?.VideoRangeType,
+        colorSpace: video?.ColorSpace,
+        audioChannels: selectedAudio?.Channels,
+        audioSampleRate: selectedAudio?.SampleRate,
+        audioBitrate: selectedAudio?.BitRate,
+      },
       audioTracks,
       subtitleTracks,
       audioStreamIndex,
