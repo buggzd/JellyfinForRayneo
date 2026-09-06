@@ -1,0 +1,46 @@
+{
+  "sourceParents": [
+    "ce3a551",
+    "b541793"
+  ],
+  "scope": "Post-merge UI/mode smoke check; 48-record performance comparison remains the earlier ce3a551 APK.",
+  "home": {
+    "width": 1440,
+    "height": 810,
+    "cards": 58,
+    "theme": "liquid-glass",
+    "loops": [
+      "status-pulse",
+      "scroll-cue"
+    ],
+    "heroHeight": "132vh"
+  },
+  "details": {
+    "visible": true,
+    "poster": true,
+    "width": 712.796875,
+    "height": 810,
+    "videos": 0
+  },
+  "staticSbs": {
+    "cpuOneCorePercent": 0.29443517518892925,
+    "wholeDeviceGpuBusyPercent": 10.562566066922447,
+    "appDrawnFrames": 0,
+    "seconds": 10.189
+  },
+  "finalState": {
+    "theme": "simpleUI",
+    "mode": "mirror_2d",
+    "applied": true,
+    "mediaReady": true,
+    "settings": {
+      "depthLevel": 1,
+      "sizePercent": 95
+    }
+  },
+  "finalDom": {
+    "home": true,
+    "videos": 0
+  },
+  "apkSha256": "b75799526246d53c921fe77b54cacf2df8d3de2222541140feba433c44b79778"
+}
