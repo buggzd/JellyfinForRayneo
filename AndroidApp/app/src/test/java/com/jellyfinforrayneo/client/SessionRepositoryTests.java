@@ -251,6 +251,44 @@ public final class SessionRepositoryTests
     }
 
     @Test
+    public void subtitleSize_SurvivesRecreationAndLogoutWithoutChangingOtherPreferences()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        repository.save(validSession(), true);
+        repository.setUiTheme(UiTheme.SIMPLE);
+        String accountId = repository.getActiveId();
+        for (String size : new String[]{"small", "normal", "large", "extra-large"})
+        {
+            repository.setSubtitleSize(size);
+            assertEquals(size, new SessionRepository(store).getSubtitleSize());
+            assertEquals(accountId, repository.getActiveId());
+            assertNotNull(repository.getSession());
+            assertEquals(UiTheme.SIMPLE, repository.getUiTheme());
+        }
+        repository.clear();
+        assertEquals("extra-large", new SessionRepository(store).getSubtitleSize());
+        repository.setSubtitleSize(SubtitleSize.DEFAULT);
+        assertEquals("normal", new SessionRepository(store).getSubtitleSize());
+    }
+
+    @Test
+    public void subtitleSize_InvalidEditsCannotReplacePreferenceAndCorruptStorageUsesNormal()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        assertEquals("normal", repository.getSubtitleSize());
+        repository.setSubtitleSize("large");
+        for (String invalid : new String[]{null, "", "Large", " large", "large ", "125", "simpleUI", new String(new char[65536])})
+        {
+            repository.setSubtitleSize(invalid);
+            assertEquals("large", repository.getSubtitleSize());
+        }
+        store.putString(SessionRepository.KEY_SUBTITLE_SIZE, "unknown");
+        assertEquals("normal", repository.getSubtitleSize());
+    }
+
+    @Test
     public void missingOrCorruptStereoPreference_UsesConservativeDefault()
     {
         FakeStore store = new FakeStore();

@@ -63,6 +63,7 @@ const companionState = {
   uiTheme: readUiTheme(),
   touchpadBackground: touchpadBackgroundChoice || (readUiTheme() === 'simpleUI' ? 'black' : 'texture'),
   companionGlassTransparency: readGlassTransparency(),
+  subtitleSize: readSubtitleSize(),
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
   displayModeTransitioning: false,
@@ -141,6 +142,26 @@ function readGlassTransparency() {
     const value = window.localStorage.getItem('jellyfin-rayneo-preview-glass-transparency')
     return validGlassTransparency(value) ? Number(value) : 88
   } catch { return 88 }
+}
+
+function readSubtitleSize() {
+  try {
+    const value = window.localStorage.getItem('jellyfin-rayneo-preview-subtitle-size')
+    return ['small', 'normal', 'large', 'extra-large'].includes(value) ? value : 'normal'
+  } catch { return 'normal' }
+}
+
+function setAppearancePreference(kind, value) {
+  const theme = kind === 'uiTheme'
+  if (theme ? value !== 'liquid-glass' && value !== 'simpleUI'
+    : !['small', 'normal', 'large', 'extra-large'].includes(value)) return
+  companionState[kind] = value
+  if (theme) companionState.touchpadBackground = touchpadBackgroundChoice || (value === 'simpleUI' ? 'black' : 'texture')
+  try {
+    window.localStorage.setItem(theme ? 'jellyfin-rayneo-preview-theme' : 'jellyfin-rayneo-preview-subtitle-size', value)
+  } catch { /* The preview still works without storage. */ }
+  publishCompanionState()
+  publishGlassesBootstrap()
 }
 
 function boundedText(value, maximumLength) {
@@ -250,6 +271,7 @@ function publishGlassesBootstrap() {
     source: 'android',
     displayMode: companionState.displayMode,
     uiTheme: companionState.uiTheme,
+    subtitleSize: companionState.subtitleSize,
     glassesConnected: true,
     catalogGeneration,
     session,
@@ -675,14 +697,10 @@ function handleCompanionCall(payload) {
       selectDisplayMode(args[0])
       break
     case 'selectUiTheme':
-      if (args[0] !== 'liquid-glass' && args[0] !== 'simpleUI') break
-      companionState.uiTheme = args[0]
-      companionState.touchpadBackground = touchpadBackgroundChoice || (args[0] === 'simpleUI' ? 'black' : 'texture')
-      try {
-        window.localStorage.setItem('jellyfin-rayneo-preview-theme', args[0])
-      } catch { /* Keep the in-memory preference when browser storage is unavailable. */ }
-      publishCompanionState()
-      publishGlassesBootstrap()
+      setAppearancePreference('uiTheme', args[0])
+      break
+    case 'selectSubtitleSize':
+      setAppearancePreference('subtitleSize', args[0])
       break
     case 'selectTouchpadBackground':
       if (args[0] !== 'texture' && args[0] !== 'black') break
@@ -817,7 +835,14 @@ function handleSearchState(message) {
 
 function handleGlassesMessage(payload) {
   if (!payload || typeof payload !== 'object') return
+  try {
+    if (JSON.stringify(payload).length > 8192) return
+  } catch { return }
   const type = boundedText(payload.type, 32).toLowerCase()
+  if (type === 'set_ui_theme' || type === 'set_subtitle_size') {
+    setAppearancePreference(type === 'set_ui_theme' ? 'uiTheme' : 'subtitleSize', payload.value)
+    return
+  }
   if (type === 'runtime_state') {
     handleRuntimeState(payload)
     return

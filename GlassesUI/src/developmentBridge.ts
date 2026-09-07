@@ -19,6 +19,8 @@ const glassesMessageTypes = new Set([
   'playback_state',
   'runtime_state',
   'search_state',
+  'set_ui_theme',
+  'set_subtitle_size',
 ])
 
 type BridgeMessage = {
@@ -33,6 +35,7 @@ const initialBootstrap = {
   source: 'android',
   displayMode: 'mirror_2d',
   uiTheme: 'liquid-glass',
+  subtitleSize: 'normal',
   glassesConnected: true,
   catalogGeneration: 0,
   session: null,

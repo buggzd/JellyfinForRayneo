@@ -93,6 +93,9 @@ final class CompanionWebViewController
         void openProjectPage(String page);
 
         @android.webkit.JavascriptInterface
+        void selectSubtitleSize(String size);
+
+        @android.webkit.JavascriptInterface
         void setStereoScreen(String payload);
 
         @android.webkit.JavascriptInterface

@@ -25,6 +25,7 @@ final class SessionRepository
     static final String KEY_TOUCHPAD_BACKGROUND = "touchpad_background";
     static final String KEY_COMPANION_BACKGROUND_LAYOUT = "companion_background_layout";
     static final String KEY_COMPANION_GLASS_TRANSPARENCY = "companion_glass_transparency";
+    static final String KEY_SUBTITLE_SIZE = "subtitle_size";
 
     interface Store
     {
@@ -398,6 +399,19 @@ final class SessionRepository
         if (layout != null)
         {
             store.putString(KEY_COMPANION_BACKGROUND_LAYOUT, layout.toJson().toString());
+        }
+    }
+
+    String getSubtitleSize()
+    {
+        return SubtitleSize.normalize(store.getString(KEY_SUBTITLE_SIZE, SubtitleSize.DEFAULT));
+    }
+
+    void setSubtitleSize(String size)
+    {
+        if (SubtitleSize.isValid(size))
+        {
+            store.putString(KEY_SUBTITLE_SIZE, size);
         }
     }
 

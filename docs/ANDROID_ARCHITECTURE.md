@@ -24,9 +24,9 @@ MainActivity
                 └── one GlassesUI WebView
 ```
 
-The phone owns discovery, credentials, Quick Connect, settings, and the
+The phone owns discovery, credentials, Quick Connect, account/display settings, and the
 touchpad with a selectable textured or OLED-black background. The glasses own catalog browsing, details, HTML video/HLS
-playback, subtitles, and Jellyfin playback reports. A visible glasses frame
+playback, subtitles, appearance settings, and Jellyfin playback reports. A visible glasses frame
 already implies a phone connection, so `GlassesUI` has no waiting-for-phone
 screen.
 
@@ -111,6 +111,7 @@ length-limited, and whitelisted before use.
 | `setCompanionBackgroundLayout` | Save bounded crop/transparency metadata for the current image revision from settings; publish phone state only |
 | `setCompanionGlassTransparency` | Save an integer 0–100 glass transparency from settings, independently of wallpaper; publish phone state only |
 | `openProjectPage` | Open only the fixed public project, issue list or guide page in the system browser |
+| `selectSubtitleSize` | Persist exactly `small`, `normal`, `large`, or `extra-large` and publish it to both surfaces |
 | `setStereoScreen` | Save a bounded flat-screen disparity/size preference without switching hardware mode |
 | `setStereoTestPattern` | Enable/disable the temporary L/R reference overlay while stereo is applied |
 | `remoteCommand`, `searchText`, `previewHaptic` | Bounded touchpad input and the active Series-search query |
@@ -143,7 +144,9 @@ keeps a glasses-side failure visible so field testing does not require ADB.
 | `postMessage` | Send validated runtime/playback/session events to Android |
 
 Accepted glasses messages are `manage_login`, `logout`, `unauthorized`,
-`runtime_state`, `playback_state`, and `search_state`. The whole message and
+`runtime_state`, `playback_state`, `search_state`, `set_ui_theme`, and
+`set_subtitle_size`. Appearance messages accept only an exact whitelisted string
+in `value`, with no coercion, trimming, or arbitrary style payload. The whole message and
 every individual field have fixed limits. `search_state` carries only
 `active`/`inactive` plus the bounded ASCII query; leaving search, logout, a lost
 glasses WebView, or an unauthorized restore clears the phone input and hides
@@ -198,6 +201,21 @@ dual-UI harness may save only the appearance choice under a preview-specific key
 `SharedUI` supplies the exact enum normalization and simpleUI rendering rules;
 both Gradle frontend tasks include that directory in their build inputs.
 See [UI themes](UI_THEMES.md) for the visual design and verification boundary.
+
+The glasses side navigation includes Settings, with the same theme choices and
+a live subtitle-size preview. Both surfaces can edit the device-wide
+`subtitle_size` preference in `SessionRepository`; missing/corrupt values use
+`normal`, and invalid edits leave the saved value unchanged. The four sizes are
+small (80%), normal (100%), large (125%), and extra-large (150%) of the existing
+responsive text size. The phone's reset-preferences action restores normal.
+Native acknowledgement updates both selections without changing the catalog
+generation, client, video element, playback plan, or reporting lifecycle.
+
+Size choices are available only on the Settings pages; the player uses the saved
+size without adding font controls to its playback or subtitle menus.
+Sizing applies to local text subtitles; burned-in/bitmap subtitles already in
+the video cannot be resized by this preference. Logout preserves both appearance
+preferences, and standalone previews persist only their dedicated preference keys.
 
 Phone wallpaper is a separate private JPEG owned by `CompanionBackground`, not
 a session or glasses preference. A system single-image picker grants temporary
@@ -486,6 +504,7 @@ minimum device regression set for any device-facing change.
 | Phone settings | Import/replace/cancel/reset wallpaper, malformed/oversized files, rotated photos, all crop ratios, zoom/position/opacity extremes, drag, save/cancel/Back, stale revision, cold launch, renderer recovery, theme changes, About links and installed version | Failed imports/cancelled edits retain the image and layout; saved crop restores; clear resets layout; only Liquid phone pages render it; wallpaper edits preserve glasses/video; source metadata stays private; links open fixed public pages outside the WebView; version matches the APK |
 | Remote background | Both themes, texture/black selection, cold launch, gestures, search/IME, playback panels and returning to settings | Choice persists without changing session/video; blank black regions and system-bar backgrounds measure RGB 0,0,0 in a lossless screenshot; no glow/texture/overscroll scrim; controls remain visible |
 | Liquid glass transparency | Default/custom wallpaper, 0/88/100%, mixed dark/light photos, expanded settings, scrolling navigation, rapid edits, reload, theme switches, reset and account changes | Card/nav fill follows the saved value without fading text; local text color accounts for stacked glass; the solid touch key covers the navigation rim; reset restores 88 and glasses/video/black remote remain unchanged |
+| Glasses settings and subtitle size | Enter/exit glasses Settings, both themes and four sizes, phone/glasses edits, paused/direct/HLS playback, text versus burned-in subtitles, cold launch/logout/reset in 2D and SBS | One focus returns to Settings; both surfaces acknowledge the same saved preference; playback uses the chosen text size with no font controls in player menus, duplicate video or reporting |
 | Remote tutorial | First ready catalog, skip/relaunch, six phone gestures, wrong/rapid input, pause/resume/exit, sidebar replay, logout, 2D/SBS switch and renderer recovery | Each real gesture advances once; exactly one focus stays inside practice/dialog; completion or skipping is remembered; no media playback or background navigation; SVG motion and text remain readable in both eyes |
 | Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, text and bitmap subtitle | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |
 | Single-instance invariants | Mirror and stereo during representative playback | One glasses WebView, one HTML `<video>`, one audio stream, and one Jellyfin reporting stream remain active |

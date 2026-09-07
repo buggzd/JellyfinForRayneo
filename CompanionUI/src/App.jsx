@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { applyUiTheme, normalizeUiTheme, readPreviewTheme, savePreviewTheme } from '../../SharedUI/theme.mjs'
 import { suspendHiddenAnimations } from '../../SharedUI/hiddenAnimations.mjs'
+import { SUBTITLE_SIZES, isSubtitleSize, normalizeSubtitleSize, readPreviewSubtitleSize, savePreviewSubtitleSize } from '../../SharedUI/subtitles.mjs'
 import { Toast, usePresence } from './feedback'
 import { usePhoneBackground } from './phoneBackground'
 import BackgroundEditor, { BackgroundArtwork } from './BackgroundEditor'
@@ -202,6 +203,9 @@ function App() {
     ? normalizeGlassTransparency(parseNativePayload(callNative('getState'))?.companionGlassTransparency)
     : readPreviewGlassTransparency())
   const pendingGlassTransparency = useRef(null)
+  const [subtitleSize, setSubtitleSize] = useState(() => isNative
+    ? normalizeSubtitleSize(parseNativePayload(callNative('getState'))?.subtitleSize)
+    : readPreviewSubtitleSize())
   useLayoutEffect(() => { applyUiTheme(uiTheme) }, [uiTheme])
   const [session, setSession] = useStoredState('jellyfin-rayneo-session', null, !isNative)
   const [demoAccounts, setDemoAccounts] = useState(() => {
@@ -347,6 +351,7 @@ function App() {
         pendingGlassTransparency.current = null
         setGlassTransparency(nextTransparency)
       }
+      setSubtitleSize(normalizeSubtitleSize(next.subtitleSize))
       setDisplayMode(next.displayMode === 'stereo_screen' ? 'stereo' : 'mirror')
       // Ignore an older acknowledgement while the latest slider/button edit is still in flight.
       if (validStereoScreen(next.stereoScreen)
@@ -567,6 +572,15 @@ function App() {
     } else savePreviewGlassTransparency(value)
   }
 
+  const changeSubtitleSize = (size) => {
+    if (!isSubtitleSize(size)) return
+    if (isNative) callNative('selectSubtitleSize', size)
+    else {
+      setSubtitleSize(size)
+      savePreviewSubtitleSize(size)
+    }
+  }
+
   const changeStereoScreen = (patch) => {
     const next = { ...stereoScreenRef.current, ...patch }
     if (!validStereoScreen(next) || sameStereoScreen(next, stereoScreenRef.current)) return
@@ -600,6 +614,7 @@ function App() {
     changeUiTheme('liquid-glass')
     changeTouchpadBackground('texture')
     changeGlassTransparency(DEFAULT_GLASS_TRANSPARENCY)
+    changeSubtitleSize('normal')
     changeStereoTestPattern(false)
     changeStereoScreen(DEFAULT_STEREO_SCREEN)
     changeDisplayMode('mirror')
@@ -736,6 +751,8 @@ function App() {
               onGlassTransparencyChange={changeGlassTransparency}
               touchpadBackground={touchpadBackground}
               onTouchpadBackgroundChange={changeTouchpadBackground}
+              subtitleSize={subtitleSize}
+              onSubtitleSizeChange={changeSubtitleSize}
               session={session}
               server={selectedServer}
               displayMode={displayMode}
@@ -1428,6 +1445,8 @@ function SettingsScreen({
   onGlassTransparencyChange,
   touchpadBackground,
   onTouchpadBackgroundChange,
+  subtitleSize,
+  onSubtitleSizeChange,
   session,
   server,
   displayMode,
@@ -1492,6 +1511,16 @@ function SettingsScreen({
           <span className="setting-row__copy" data-wallpaper-text="glass"><strong>轻触震动</strong><small>触控板手势完成时的短促反馈</small></span>
           <Toggle checked={haptics} />
         </button>
+      </SettingsGroup>
+
+      <SettingsGroup title="字幕大小">
+        <div className="settings-mode-wrap">
+          <div className="stereo-depth-options" role="group" aria-label="字幕大小">
+            {SUBTITLE_SIZES.map(option => <button key={option.value} type="button" data-liquid-surface="" data-wallpaper-text="glass"
+              aria-pressed={subtitleSize === option.value} onClick={() => onSubtitleSizeChange(option.value)}>{option.label}</button>)}
+          </div>
+          <p className="stereo-help" data-wallpaper-text="glass">与眼镜同步，自动保存。适用于文字字幕，已固定在画面里的字幕不受影响。</p>
+        </div>
       </SettingsGroup>
 
       <SettingsGroup title="眼镜显示">

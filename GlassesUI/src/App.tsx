@@ -29,6 +29,7 @@ import {
   RotateCcw,
   Search,
   Server,
+  Settings2,
   SkipBack,
   SkipForward,
   Sparkles,
@@ -41,7 +42,7 @@ import {
   X,
 } from 'lucide-react'
 import type Hls from 'hls.js'
-import { applyUiTheme, normalizeUiTheme } from '../../SharedUI/theme.mjs'
+import { applyUiTheme, normalizeUiTheme, type UiTheme } from '../../SharedUI/theme.mjs'
 import { suspendHiddenAnimations } from '../../SharedUI/hiddenAnimations.mjs'
 import {
   type CSSProperties,
@@ -64,7 +65,9 @@ import type {
   PlaybackPlan,
   PlaybackSelection,
 } from './jellyfin'
-import { postNativeMessage } from './runtime'
+import { postNativeMessage, requestUiPreference } from './runtime'
+import { normalizeSubtitleSize, subtitleFontSize, type SubtitleSize } from '../../SharedUI/subtitles.mjs'
+import GlassesSettings from './GlassesSettings'
 import RemoteTutorial from './RemoteTutorial'
 import VideoInfoOverlay from './VideoInfoOverlay'
 import type { PlaybackInfoSource } from './playbackInfo'
@@ -82,7 +85,7 @@ import {
   type SeriesIndexStatus,
 } from './useJellyfin'
 
-type Page = 'home' | 'browse' | 'favorites' | 'search' | 'detail' | 'player' | 'tutorial'
+type Page = 'home' | 'browse' | 'favorites' | 'search' | 'detail' | 'player' | 'tutorial' | 'settings'
 type Direction = 'up' | 'down' | 'left' | 'right'
 type HomeFocusRegion = 'hero' | 'shelves'
 type PlaybackRequest = {
@@ -576,7 +579,7 @@ function MediaIndicators({ item }: { item: MediaItem }) {
 }
 
 type HeaderProps = {
-  active: 'home' | 'browse' | 'favorites' | 'search' | 'none'
+  active: 'home' | 'browse' | 'favorites' | 'search' | 'settings' | 'none'
   onNavigate: (page: Page) => void
   onRefresh: () => void
   onExit: () => void
@@ -611,6 +614,7 @@ function PageHeader({ active, onNavigate, onRefresh, onExit, serverName, userNam
           <FocusButton className="side-navigation__item" variant="ghost" icon={<Search size={22} />} active={active === 'search'} onClick={() => onNavigate('search')}>搜索</FocusButton>
           <FocusButton className="side-navigation__item" variant="ghost" icon={<Grid3X3 size={22} />} active={active === 'browse'} onClick={() => onNavigate('browse')}>媒体库</FocusButton>
           <FocusButton className="side-navigation__item" variant="ghost" icon={<Heart size={22} />} active={active === 'favorites'} onClick={() => onNavigate('favorites')}>我的收藏</FocusButton>
+          <FocusButton className="side-navigation__item settings-launch" variant="ghost" icon={<Settings2 size={22} />} active={active === 'settings'} onClick={() => onNavigate('settings')}>设置</FocusButton>
         </nav>
 
         <div className="header-spacer" />
@@ -1640,6 +1644,7 @@ type PlayerChrome = 'controls' | 'hidden' | 'topbar'
 
 function PlayerPage({
   simpleUi,
+  subtitleSize,
   item,
   startPositionTicks,
   infoVisible,
@@ -1654,6 +1659,7 @@ function PlayerPage({
   onBack,
 }: {
   simpleUi: boolean
+  subtitleSize: SubtitleSize
   item: MediaItem
   startPositionTicks: number
   infoVisible: boolean
@@ -2499,7 +2505,7 @@ function PlayerPage({
           </div>
         </section>
       </div>
-      <div className={cx('screen-subtitle', !subtitleText && 'is-hidden')} aria-live="off">{subtitleText}</div>
+      <div className={cx('screen-subtitle', !subtitleText && 'is-hidden')} style={{ fontSize: subtitleFontSize(subtitleSize) }} aria-live="off">{subtitleText}</div>
     </div>
   )
 }
@@ -2563,10 +2569,12 @@ export default function App() {
   const jellyfin = useJellyfin()
   const uiTheme = normalizeUiTheme(jellyfin.runtime?.uiTheme ?? document.documentElement.dataset.uiTheme)
   const simpleUi = uiTheme === 'simpleUI'
+  const subtitleSize = normalizeSubtitleSize(jellyfin.runtime?.subtitleSize)
   useLayoutEffect(() => { applyUiTheme(uiTheme) }, [uiTheme])
   const [page, setPage] = useState<Page>('home')
   const [tutorialSeen, setTutorialSeen] = useState(hasSeenRemoteTutorial)
   const restoreTutorialFocus = useRef(false)
+  const restoreSettingsFocus = useRef(false)
   const tutorialActive = jellyfin.status === 'ready' && Boolean(jellyfin.snapshot)
     && (page === 'tutorial' || (page === 'home' && !tutorialSeen))
   const [history, setHistory] = useState<Page[]>([])
@@ -2805,6 +2813,17 @@ export default function App() {
     toastTimer.current = window.setTimeout(() => setToast(null), tone === 'error' ? 4000 : 2400)
   }, [])
 
+  const changeUiTheme = (value: UiTheme) => {
+    if (!requestUiPreference({ type: 'set_ui_theme', value }, jellyfin.runtime)) showToast('设置未能保存，请重试', 'error')
+  }
+  const changeSubtitleSize = (value: SubtitleSize) => {
+    if (!requestUiPreference({ type: 'set_subtitle_size', value }, jellyfin.runtime)) showToast('设置未能保存，请重试', 'error')
+  }
+  const closeSettings = useCallback(() => {
+    restoreSettingsFocus.current = true
+    goBack()
+  }, [goBack])
+
   const refreshLibrary = useCallback(() => {
     void jellyfin.refresh().then((succeeded) => {
       showToast(succeeded ? '媒体库已刷新' : '刷新失败，请检查 Jellyfin 服务器', succeeded ? 'success' : 'error')
@@ -2906,8 +2925,10 @@ export default function App() {
     if (page === 'player' || tutorialActive) return
     const timer = window.setTimeout(() => {
       const tutorialReturnTarget = restoreTutorialFocus.current
-        ? document.querySelector<HTMLElement>('.tutorial-launch') : null
+        ? document.querySelector<HTMLElement>('.tutorial-launch')
+        : restoreSettingsFocus.current ? document.querySelector<HTMLElement>('.settings-launch') : null
       restoreTutorialFocus.current = false
+      restoreSettingsFocus.current = false
       // An early gesture/click already chose a card; do not pull focus back to the hero.
       const active = document.activeElement
       if (!tutorialReturnTarget && active instanceof HTMLElement && active.matches(focusableSelector)) return
@@ -2928,6 +2949,8 @@ export default function App() {
         event.preventDefault()
         if (page === 'player') {
           window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: 'back' }))
+        } else if (page === 'settings') {
+          closeSettings()
         } else if (page === 'search') {
           const active = currentSpatialFocus()
           const searchPage = active?.closest<HTMLElement>('.series-search-page')
@@ -2987,7 +3010,7 @@ export default function App() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [goBack, navigateDirect, page, searchQuery, tutorialActive])
+  }, [closeSettings, goBack, navigateDirect, page, searchQuery, tutorialActive])
 
   useEffect(() => () => {
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
@@ -3010,6 +3033,14 @@ export default function App() {
   const homeBackgroundItem = homeShelfPreview ? backdropItem : snapshot.featured
 
   const pageNode = (() => {
+    if (page === 'settings') return <div className="settings-page page-enter">
+      <PageHeader active="settings" serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={navigateFromMenu} onRefresh={refreshLibrary} onExit={manageLogin} />
+      <main className="glasses-settings-page">
+        <FocusButton variant="ghost" icon={<ArrowLeft size={21} />} onClick={closeSettings}>返回</FocusButton>
+        <GlassesSettings theme={uiTheme} subtitleSize={subtitleSize} onThemeChange={changeUiTheme} onSubtitleSizeChange={changeSubtitleSize} />
+      </main>
+      <RemoteHint />
+    </div>
     if (page === 'home') return <HomePage featured={snapshot.featured} shelves={snapshot.shelves} focusRegion={homeFocusRegion} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onFocusRegionChange={setHomeFocusRegion} onRefresh={refreshLibrary} onExit={manageLogin} />
     if (page === 'browse' || page === 'favorites') {
       return <BrowsePage key={`${page}:${page === 'browse' ? browseEntry?.id ?? 'root' : 'root'}`} mode={page === 'browse' ? 'library' : 'favorites'} items={snapshot.libraries} favorites={snapshot.favorites} initialFolder={page === 'browse' ? browseEntry : null} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} onResetLibrary={() => setBrowseEntry(null)} />
@@ -3029,12 +3060,12 @@ export default function App() {
       key: 0,
     }
     const episodeIndex = detail?.episodes.findIndex((episode) => episode.id === request.item.id) ?? -1
-    return <PlayerPage key={request.key} simpleUi={simpleUi} item={request.item} startPositionTicks={request.startPositionTicks} infoVisible={videoInfoVisible} onToggleInfo={() => setVideoInfoVisible((visible) => !visible)} previousItem={episodeIndex > 0 ? detail?.episodes[episodeIndex - 1] : undefined} nextItem={episodeIndex >= 0 ? detail?.episodes[episodeIndex + 1] : undefined} preparePlayback={jellyfin.preparePlayback} reportPlaybackStarted={jellyfin.reportPlaybackStarted} reportPlaybackProgress={jellyfin.reportPlaybackProgress} reportPlaybackStopped={jellyfin.reportPlaybackStopped} onPlayItem={playItem} onBack={goBack} />
+    return <PlayerPage key={request.key} simpleUi={simpleUi} subtitleSize={subtitleSize} item={request.item} startPositionTicks={request.startPositionTicks} infoVisible={videoInfoVisible} onToggleInfo={() => setVideoInfoVisible((visible) => !visible)} previousItem={episodeIndex > 0 ? detail?.episodes[episodeIndex - 1] : undefined} nextItem={episodeIndex >= 0 ? detail?.episodes[episodeIndex + 1] : undefined} preparePlayback={jellyfin.preparePlayback} reportPlaybackStarted={jellyfin.reportPlaybackStarted} reportPlaybackProgress={jellyfin.reportPlaybackProgress} reportPlaybackStopped={jellyfin.reportPlaybackStopped} onPlayItem={playItem} onBack={goBack} />
   })()
 
   return (
     <div className={cx('app', `app--${page}`)}>
-      {page !== 'player' && (!simpleUi || (page === 'home' && homeFocusRegion === 'hero')) && (
+      {page !== 'player' && page !== 'settings' && (!simpleUi || (page === 'home' && homeFocusRegion === 'hero')) && (
         <AmbientBackground
           simpleUi={simpleUi}
           tone={page === 'home' ? homeBackgroundItem.art : backdropItem.art}

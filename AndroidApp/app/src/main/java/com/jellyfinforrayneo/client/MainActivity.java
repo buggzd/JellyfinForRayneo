@@ -536,6 +536,12 @@ public final class MainActivity extends Activity
         }
         switch (incoming.type)
         {
+            case SET_UI_THEME:
+                applyUiThemePreference(incoming.preferenceValue);
+                break;
+            case SET_SUBTITLE_SIZE:
+                applySubtitleSizePreference(incoming.preferenceValue);
+                break;
             case MANAGE_LOGIN:
                 companionWebView.openScreen(sessions.hasSession() ? "settings" : "connect");
                 break;
@@ -626,6 +632,29 @@ public final class MainActivity extends Activity
         }
     }
 
+    private void applyUiThemePreference(String theme)
+    {
+        if (destroyed || !UiTheme.isValid(theme))
+        {
+            return;
+        }
+        sessions.setUiTheme(theme);
+        updatePhoneSurface();
+        glassesPresentation.refreshBootstrap();
+        pushCompanionState();
+    }
+
+    private void applySubtitleSizePreference(String size)
+    {
+        if (destroyed || !SubtitleSize.isValid(size))
+        {
+            return;
+        }
+        sessions.setSubtitleSize(size);
+        glassesPresentation.refreshBootstrap();
+        pushCompanionState();
+    }
+
     private JSONObject buildGlassesBootstrap()
     {
         JSONObject result = new JSONObject();
@@ -639,6 +668,7 @@ public final class MainActivity extends Activity
             result.put("glassesConnected", displayState.connected);
             result.put("catalogGeneration", glassesCatalogGeneration);
             result.put("uiTheme", sessions == null ? UiTheme.DEFAULT : sessions.getUiTheme());
+            result.put("subtitleSize", sessions == null ? SubtitleSize.DEFAULT : sessions.getSubtitleSize());
             SessionPayload session = sessions == null ? null : sessions.getSession();
             result.put("session", session == null ? JSONObject.NULL : session.toJsonObject());
         }
@@ -700,6 +730,7 @@ public final class MainActivity extends Activity
             result.put("stereoScreen", sessions.getStereoScreenSettings().toJson());
             result.put("uiTheme", sessions.getUiTheme());
             result.put("touchpadBackground", sessions.getTouchpadBackground());
+            result.put("subtitleSize", sessions.getSubtitleSize());
             result.put("stereoOutput", glassesPresentation == null
                     ? DisplayOutputGeometry.EMPTY.toJson() : glassesPresentation.getOutputGeometry().toJson());
             result.put("stereoTestPattern", glassesPresentation != null
@@ -1547,16 +1578,17 @@ public final class MainActivity extends Activity
             {
                 return;
             }
-            runOnUiThread(() ->
+            runOnUiThread(() -> applyUiThemePreference(theme));
+        }
+
+        @JavascriptInterface
+        public void selectSubtitleSize(String size)
+        {
+            if (!SubtitleSize.isValid(size))
             {
-                if (!destroyed)
-                {
-                    sessions.setUiTheme(theme);
-                    updatePhoneSurface();
-                    glassesPresentation.refreshBootstrap();
-                    pushCompanionState();
-                }
-            });
+                return;
+            }
+            runOnUiThread(() -> applySubtitleSizePreference(size));
         }
 
         @JavascriptInterface

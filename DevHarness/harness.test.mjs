@@ -7,11 +7,12 @@ import test from 'node:test'
 const source = await readFile(new URL('./harness.js', import.meta.url), 'utf8')
 const settle = () => new Promise(resolve => setImmediate(resolve))
 
-async function harness(storedTheme = null, storedBackground = null, storedTransparency = null) {
+async function harness(storedTheme = null, storedBackground = null, storedTransparency = null, storedSubtitleSize = null) {
   const storage = new Map([
     ['jellyfin-rayneo-preview-theme', storedTheme],
     ['jellyfin-rayneo-preview-touchpad-background', storedBackground],
     ['jellyfin-rayneo-preview-glass-transparency', storedTransparency],
+    ['jellyfin-rayneo-preview-subtitle-size', storedSubtitleSize],
   ])
   const messages = []
   const elements = new Map()
@@ -56,6 +57,40 @@ async function harness(storedTheme = null, storedBackground = null, storedTransp
 const account = (serverUrl = 'https://home.example.test', userId = 'first-user') => ({
   serverUrl, serverName: 'Demo library', serverVersion: '10.10', serverId: serverUrl,
   accessToken: 'test-token-do-not-publish-to-phone', userId, userName: userId, deviceId: 'demo-device',
+})
+
+test('glasses and phone appearance edits share persistent values without restarting playback', async () => {
+  const app = await harness('simpleUI', null, '23', 'large')
+  app.call('applySession', account())
+  app.call('handlePlaybackState', { state: 'playing', itemId: 'demo', positionTicks: 100000000 })
+  const generation = app.generation()
+  const playback = app.state().playback
+  const session = app.bootstrap().session
+  assert.equal(app.bootstrap().subtitleSize, 'large')
+  assert.equal(app.state().touchpadBackground, 'black')
+  app.call('handleGlassesMessage', { type: 'set_ui_theme', value: 'liquid-glass' })
+  assert.equal(app.state().touchpadBackground, 'texture')
+  app.command('selectTouchpadBackground', 'black')
+  app.call('handleGlassesMessage', { type: 'set_ui_theme', value: 'simpleUI' })
+  app.call('handleGlassesMessage', { type: 'set_ui_theme', value: 'liquid-glass' })
+  assert.equal(app.state().touchpadBackground, 'black')
+  assert.equal(app.state().companionGlassTransparency, 23)
+  app.call('handleGlassesMessage', { type: 'set_subtitle_size', value: 'extra-large' })
+  assert.equal(app.state().uiTheme, 'liquid-glass')
+  assert.equal(app.state().subtitleSize, 'extra-large')
+  assert.equal(app.bootstrap().subtitleSize, 'extra-large')
+  for (const value of [null, {}, 125, '', 'normal ', 'LARGE', 'x'.repeat(8193)]) {
+    app.call('handleGlassesMessage', { type: 'set_subtitle_size', value })
+    app.command('selectSubtitleSize', value)
+    assert.equal(app.bootstrap().subtitleSize, 'extra-large')
+  }
+  app.command('selectSubtitleSize', 'small')
+  assert.equal(app.bootstrap().subtitleSize, 'small')
+  assert.equal(app.generation(), generation)
+  assert.deepEqual(app.state().playback, playback)
+  assert.deepEqual(app.bootstrap().session, session)
+  app.command('clearSession')
+  assert.equal(app.bootstrap().subtitleSize, 'small')
 })
 
 test('theme selection reaches both surfaces without interrupting playback or changing the catalog generation', async () => {

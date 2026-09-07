@@ -39,6 +39,7 @@ const initialState = {
   uiTheme: 'liquid-glass',
   touchpadBackground: 'texture',
   companionGlassTransparency: 88,
+  subtitleSize: 'normal',
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
   displayModeTransitioning: false,
@@ -157,6 +158,9 @@ export function installDevelopmentBridge() {
     },
     setCompanionGlassTransparency: (value) => {
       if (typeof value === 'string' && value.length <= 3 && /^(0|[1-9][0-9]?|100)$/.test(value) && String(Number(value)) === value) call('setCompanionGlassTransparency', [value])
+    },
+    selectSubtitleSize: (size) => {
+      if (['small', 'normal', 'large', 'extra-large'].includes(size)) call('selectSubtitleSize', [size])
     },
     copyQuickConnectCode: () => {
       const code = boundedText(state.quickConnectCode, 32)
