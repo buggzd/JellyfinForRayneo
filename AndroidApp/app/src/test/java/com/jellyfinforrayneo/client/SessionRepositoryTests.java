@@ -202,6 +202,38 @@ public final class SessionRepositoryTests
     }
 
     @Test
+    public void glassTransparency_PersistsWithoutWallpaperAndPreservesSessionAndOtherPreferences()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        repository.save(validSession(), true);
+        repository.setTouchpadBackground("black");
+        String id = repository.getActiveId();
+        assertEquals(88, repository.getCompanionGlassTransparency());
+        repository.setCompanionGlassTransparency(70);
+        assertEquals(id, repository.getActiveId());
+        assertNotNull(repository.getSession());
+        assertEquals("black", repository.getTouchpadBackground());
+        assertEquals(70, new SessionRepository(store).getCompanionGlassTransparency());
+        repository.setUiTheme(UiTheme.SIMPLE);
+        repository.clear();
+        assertEquals(70, new SessionRepository(store).getCompanionGlassTransparency());
+        repository.setCompanionBackgroundLayout(CompanionBackgroundLayout.DEFAULT);
+        assertEquals(70, repository.getCompanionGlassTransparency());
+        repository.setCompanionGlassTransparency(-1);
+        repository.setCompanionGlassTransparency(101);
+        assertEquals(70, repository.getCompanionGlassTransparency());
+        repository.setCompanionGlassTransparency(0);
+        assertEquals(0, new SessionRepository(store).getCompanionGlassTransparency());
+        repository.setCompanionGlassTransparency(100);
+        assertEquals(100, new SessionRepository(store).getCompanionGlassTransparency());
+        repository.setCompanionGlassTransparency(CompanionSettingsPolicy.DEFAULT_GLASS_TRANSPARENCY);
+        assertEquals(88, new SessionRepository(store).getCompanionGlassTransparency());
+        store.putString(SessionRepository.KEY_COMPANION_GLASS_TRANSPARENCY, "corrupt");
+        assertEquals(88, repository.getCompanionGlassTransparency());
+    }
+
+    @Test
     public void backgroundLayout_SurvivesRecreationThemeSwitchAndLogout()
     {
         FakeStore store = new FakeStore();

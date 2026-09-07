@@ -87,6 +87,9 @@ final class CompanionWebViewController
         void setCompanionBackgroundLayout(String revision, String payload);
 
         @android.webkit.JavascriptInterface
+        void setCompanionGlassTransparency(String value);
+
+        @android.webkit.JavascriptInterface
         void openProjectPage(String page);
 
         @android.webkit.JavascriptInterface

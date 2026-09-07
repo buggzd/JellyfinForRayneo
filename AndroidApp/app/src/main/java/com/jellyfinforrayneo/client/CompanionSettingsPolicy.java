@@ -8,6 +8,7 @@ final class CompanionSettingsPolicy
 {
     static final int MAX_IMAGE_BYTES = 20 * 1024 * 1024;
     static final int MAX_IMAGE_EDGE = 1600;
+    static final int DEFAULT_GLASS_TRANSPARENCY = 88;
     static final String BACKGROUND_URL = "https://appassets.androidplatform.net/CompanionUI/phone-background.jpg?v=";
     private static final String PROJECT_URL = "https://github.com/buggzd/JellyfinForRayneo";
 
@@ -18,6 +19,15 @@ final class CompanionSettingsPolicy
     static boolean isTouchpadBackground(String value)
     {
         return "texture".equals(value) || "black".equals(value);
+    }
+
+    static Integer parseGlassTransparency(String value)
+    {
+        if (value == null || value.length() > 3 || !value.matches("(?:0|[1-9][0-9]?|100)"))
+        {
+            return null;
+        }
+        return Integer.parseInt(value);
     }
 
     static String touchpadBackground(String value, String theme)

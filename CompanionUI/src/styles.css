@@ -1576,8 +1576,10 @@ button[aria-busy="true"] { opacity: .85; }
 :root[data-ui-theme="liquid-glass"] .bottom-nav button.is-active > span { background: rgba(203,240,249,.18); }
 :root[data-ui-theme="liquid-glass"] .bottom-nav button.is-active small { position: relative; font-weight: 800; }
 :root[data-ui-theme="liquid-glass"] .bottom-nav button.is-active small::after { content: ''; position: absolute; bottom: -5px; left: 50%; width: 13px; height: 2px; border-radius: 2px; background: currentColor; transform: translateX(-50%); }
-:root[data-ui-theme="liquid-glass"] .bottom-nav .nav-primary > span { background: linear-gradient(145deg, rgba(240,253,255,.34), rgba(177,230,242,.12)); box-shadow: 0 5px 13px rgba(23,81,100,.12), inset 0 1px 0 rgba(255,255,255,.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-:root[data-ui-theme="liquid-glass"] .bottom-nav .nav-primary > span i { background: currentColor; box-shadow: 0 0 0 5px rgba(255,255,255,.16); }
+/* Raise the opaque touch key above the navigation rim (::after is at z-index 5). */
+:root[data-ui-theme="liquid-glass"] .bottom-nav .nav-primary { position: relative; z-index: 6; }
+:root[data-ui-theme="liquid-glass"] .bottom-nav .nav-primary > span { background: linear-gradient(145deg, #e3faff, #74cce1); border-color: #eafcff; box-shadow: 0 6px 14px rgba(15,67,88,.25), inset 0 1px 0 #fff, inset 0 -2px 0 #62b7ce; backdrop-filter: none; -webkit-backdrop-filter: none; }
+:root[data-ui-theme="liquid-glass"] .bottom-nav .nav-primary > span i { background: #075575; box-shadow: 0 0 0 5px rgba(255,255,255,.48), 0 1px 3px rgba(9,81,105,.18); }
 
 .settings-header { margin-bottom: 21px; }
 .settings-header h1 { font-size: 24px; }

@@ -663,6 +663,7 @@ public final class MainActivity extends Activity
             result.put("companionBackground", companionBackground == null ? "" : companionBackground.getUrl());
             result.put("companionBackgroundBusy", companionBackground != null && companionBackground.isBusy());
             result.put("companionBackgroundLayout", sessions.getCompanionBackgroundLayout().toJson());
+            result.put("companionGlassTransparency", sessions.getCompanionGlassTransparency());
             result.put("message", message);
             result.put("isError", error);
             result.put("serverUrl", session == null ? selectedServerUrl : session.getServerUrl());
@@ -1279,6 +1280,24 @@ public final class MainActivity extends Activity
                         && (CompanionSettingsPolicy.BACKGROUND_URL + revision).equals(companionBackground.getUrl()))
                 {
                     sessions.setCompanionBackgroundLayout(layout);
+                    pushCompanionState();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void setCompanionGlassTransparency(String value)
+        {
+            Integer transparency = CompanionSettingsPolicy.parseGlassTransparency(value);
+            if (transparency == null)
+            {
+                return;
+            }
+            runOnUiThread(() ->
+            {
+                if (!destroyed && "settings".equals(webScreen))
+                {
+                    sessions.setCompanionGlassTransparency(transparency);
                     pushCompanionState();
                 }
             });

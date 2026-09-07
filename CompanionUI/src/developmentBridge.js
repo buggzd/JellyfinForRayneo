@@ -38,6 +38,7 @@ const initialState = {
   displayMode: 'mirror_2d',
   uiTheme: 'liquid-glass',
   touchpadBackground: 'texture',
+  companionGlassTransparency: 88,
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
   displayModeTransitioning: false,
@@ -153,6 +154,9 @@ export function installDevelopmentBridge() {
     },
     selectTouchpadBackground: (background) => {
       if (background === 'texture' || background === 'black') call('selectTouchpadBackground', [background])
+    },
+    setCompanionGlassTransparency: (value) => {
+      if (typeof value === 'string' && value.length <= 3 && /^(0|[1-9][0-9]?|100)$/.test(value) && String(Number(value)) === value) call('setCompanionGlassTransparency', [value])
     },
     copyQuickConnectCode: () => {
       const code = boundedText(state.quickConnectCode, 32)

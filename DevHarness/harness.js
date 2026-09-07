@@ -62,6 +62,7 @@ const companionState = {
   displayMode: 'mirror_2d',
   uiTheme: readUiTheme(),
   touchpadBackground: touchpadBackgroundChoice || (readUiTheme() === 'simpleUI' ? 'black' : 'texture'),
+  companionGlassTransparency: readGlassTransparency(),
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
   displayModeTransitioning: false,
@@ -129,6 +130,17 @@ function readTouchpadBackground() {
     const value = window.localStorage.getItem('jellyfin-rayneo-preview-touchpad-background')
     return value === 'texture' || value === 'black' ? value : null
   } catch { return null }
+}
+
+function validGlassTransparency(value) {
+  return typeof value === 'string' && value.length <= 3 && /^(0|[1-9][0-9]?|100)$/.test(value) && String(Number(value)) === value
+}
+
+function readGlassTransparency() {
+  try {
+    const value = window.localStorage.getItem('jellyfin-rayneo-preview-glass-transparency')
+    return validGlassTransparency(value) ? Number(value) : 88
+  } catch { return 88 }
 }
 
 function boundedText(value, maximumLength) {
@@ -679,6 +691,14 @@ function handleCompanionCall(payload) {
       try {
         window.localStorage.setItem('jellyfin-rayneo-preview-touchpad-background', args[0])
       } catch { /* Retain the selection in memory if storage is unavailable. */ }
+      publishCompanionState()
+      break
+    case 'setCompanionGlassTransparency':
+      if (phoneScreen !== 'settings' || !validGlassTransparency(args[0])) break
+      companionState.companionGlassTransparency = Number(args[0])
+      try {
+        window.localStorage.setItem('jellyfin-rayneo-preview-glass-transparency', args[0])
+      } catch { /* Retain the appearance in memory if storage is unavailable. */ }
       publishCompanionState()
       break
     case 'openQuickConnectAuthorization': {

@@ -15,7 +15,7 @@ export function BackgroundArtwork({ background, layout = background.layout, scre
   )
 }
 
-export default function BackgroundEditor({ background, screenAspect }) {
+export default function BackgroundEditor({ background, screenAspect, glassTransparency }) {
   const dialogRef = useRef(null)
   const dragRef = useRef(null)
   const previewRef = useRef(null)
@@ -25,7 +25,7 @@ export default function BackgroundEditor({ background, screenAspect }) {
   const [error, setError] = useState('')
   const image = background.dimensions
   const crop = image && backgroundCrop(image.width, image.height, draft, screenAspect)
-  useWallpaperContrast(previewRef, background, draft, screenAspect, view === 'preview')
+  useWallpaperContrast(previewRef, background, draft, screenAspect, view === 'preview', undefined, glassTransparency)
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -104,9 +104,9 @@ export default function BackgroundEditor({ background, screenAspect }) {
             ) : (
               <div className="background-interface-preview" aria-hidden="true">
                 <span data-wallpaper-text="">09:41</span><strong data-wallpaper-text="">我的设备</strong>
-                <div className="background-interface-preview__device"><img src={`${import.meta.env.BASE_URL}art/rayneo-air-3s.webp`} alt="" /><b data-wallpaper-text="glass">RayNeo Air 3S</b></div>
+                <div className="background-interface-preview__device" data-liquid-surface=""><img src={`${import.meta.env.BASE_URL}art/rayneo-air-3s.webp`} alt="" /><b data-wallpaper-text="glass">RayNeo Air 3S</b></div>
                 <div className="background-interface-preview__remote">进入触控板</div>
-                <div className="background-interface-preview__server"><span data-wallpaper-text="glass">Jellyfin 媒体库</span></div>
+                <div className="background-interface-preview__server" data-liquid-surface=""><span data-wallpaper-text="glass">Jellyfin 媒体库</span></div>
               </div>
             )}
           </div>
@@ -125,7 +125,7 @@ export default function BackgroundEditor({ background, screenAspect }) {
           </div>
           <p className="background-text-help">{draft.textColor === 'auto'
             ? background.dimensions && !background.samples ? '暂时无法自动识别，可手动选择浅色或深色。' : '根据文字所在区域的明暗自动调整，裁切和透明度也会一起考虑。'
-            : `背景文字固定为${draft.textColor === 'light' ? '浅色' : '深色'}，可切回自动配色。`} 面板内保持清晰配色。</p>
+            : `背景文字固定为${draft.textColor === 'light' ? '浅色' : '深色'}，可切回自动配色。`} 玻璃卡片内的文字也会同步调整。</p>
           <div className="background-editor__label" id="background-ratio-label"><strong>裁切比例</strong><small>保留导入图片，可再次调整</small></div>
           <div className="background-ratios" role="group" aria-labelledby="background-ratio-label">
             {BACKGROUND_RATIOS.map(({ value, label }) => (
