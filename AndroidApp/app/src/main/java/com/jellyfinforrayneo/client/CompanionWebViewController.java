@@ -74,6 +74,9 @@ final class CompanionWebViewController
         void selectUiTheme(String theme);
 
         @android.webkit.JavascriptInterface
+        void selectSubtitleSize(String size);
+
+        @android.webkit.JavascriptInterface
         void setStereoScreen(String payload);
 
         @android.webkit.JavascriptInterface

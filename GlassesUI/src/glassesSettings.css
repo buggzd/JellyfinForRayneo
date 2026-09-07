@@ -1,0 +1,67 @@
+.settings-page { position: relative; min-height: 100vh; }
+.settings-page .remote-hint { position: absolute; }
+.glasses-settings-page { min-height: 100vh; padding: 34px var(--safe-x) 90px var(--content-left); }
+.glasses-settings-heading { margin: 28px 0 30px; }
+.glasses-settings-heading > small { color: #a4c3cf; font-size: 12px; letter-spacing: .2em; }
+.glasses-settings-heading h1 { margin: 10px 0; font-size: clamp(32px, 3vw, 46px); font-weight: 450; }
+.glasses-settings-heading > p { margin: 0; color: #b4c4cc; font-size: 17px; }
+.glasses-settings-grid { display: grid; grid-template-columns: 1fr 1fr; align-items: stretch; gap: 24px; }
+.glasses-setting { min-width: 0; padding: 26px; border-radius: 24px; }
+.glasses-setting > header { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+.glasses-setting h2 { margin: 0 0 7px; font-size: 23px; font-weight: 500; }
+.glasses-setting header p { margin: 0; color: #b4c4cc; font-size: 15px; }
+.glasses-theme-options { display: flex; flex-direction: column; gap: 16px; }
+.glasses-theme-option {
+  position: relative; display: flex; align-items: center; gap: 16px; min-height: 108px; width: 100%;
+  padding: 14px; color: inherit; text-align: left; border: 1px solid #b5dff02b;
+  border-radius: 16px; background: #a9d3e508; cursor: pointer;
+}
+.glasses-theme-option.is-active { border-color: #bee6ef88; background: #b4edff14; }
+.glasses-theme-copy { flex: 1; min-width: 0; }
+.glasses-theme-copy strong { display: block; font-size: 20px; font-weight: 500; }
+.glasses-theme-copy small { display: block; margin-top: 8px; color: #b4c4cc; font-size: 14px; }
+.glasses-theme-check { flex-shrink: 0; opacity: 0; }
+.glasses-theme-option.is-active .glasses-theme-check { opacity: 1; }
+.glasses-theme-sample { display: grid; flex-shrink: 0; grid-template-columns: repeat(3, 1fr); gap: 5px; width: 88px; height: 74px; padding: 9px; border-radius: 10px; overflow: hidden; }
+.glasses-theme-sample i { grid-column: 1 / -1; border-radius: 4px; }
+.glasses-theme-sample b { border-radius: 3px; }
+.glasses-theme-sample--liquid-glass { background: linear-gradient(140deg, #243c5a, #162532); }
+.glasses-theme-sample--liquid-glass i { background: linear-gradient(110deg, #b2e9ed88, #8e91c566); }
+.glasses-theme-sample--liquid-glass b { background: #c3edff44; border: 1px solid #d9f2ff44; }
+.glasses-theme-sample--simpleUI { background: #141714; }
+.glasses-theme-sample--simpleUI i { background: #65735b; }
+.glasses-theme-sample--simpleUI b { background: #374030; }
+.subtitle-preview { position: relative; display: flex; min-height: 170px; padding: 30px 12px 12px; align-items: center; justify-content: center; border-radius: 16px; background: #060b0f; }
+.subtitle-preview > span { position: absolute; top: 12px; left: 16px; font-size: 12px; color: #a8bac3; }
+.subtitle-preview p { margin: 0; color: #fff; text-align: center; line-height: 1.45; overflow-wrap: anywhere; }
+.subtitle-size-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.subtitle-size-option {
+  display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 48px; padding: 8px 6px;
+  border: 1px solid #b5dff038; border-radius: 12px; background: #a9d3e508; color: inherit; font-size: 17px; cursor: pointer;
+}
+.subtitle-size-option > svg { display: none; flex-shrink: 0; }
+.subtitle-size-option.is-active { background: #c6e8ee; border-color: #c6e8ee; color: #122128; }
+.subtitle-size-option.is-active > svg { display: block; }
+.glasses-theme-option:is(:focus-visible, [data-spatial-focus="true"]),
+.subtitle-size-option:is(:focus-visible, [data-spatial-focus="true"]) { outline: 2px solid #e7f8ff; outline-offset: 4px; }
+.subtitle-size-note { margin: 16px 0 0; color: #adbdc5; font-size: 14px; line-height: 1.7; }
+:root[data-ui-theme="simpleUI"] .glasses-setting { background: #232920; border: 1px solid #374030; }
+:root[data-ui-theme="simpleUI"] .glasses-theme-option { background: #1b2119; border-color: #46513e; }
+:root[data-ui-theme="simpleUI"] .glasses-theme-option.is-active { background: #33402c; border-color: #c4cfb9; }
+:root[data-ui-theme="simpleUI"] .subtitle-size-option { background: #232920; border-color: #627056; }
+:root[data-ui-theme="simpleUI"] .subtitle-size-option.is-active { background: #d5ddc6; color: #20291d; }
+:root[data-ui-theme="simpleUI"] .subtitle-preview { background: #141714; }
+:root[data-ui-theme="simpleUI"] :is(.glasses-settings-heading > small, .glasses-settings-heading > p, .glasses-theme-copy small, .glasses-setting header p, .subtitle-size-note) { color: #bfc5b7; }
+@media (max-width: 1180px) {
+  .glasses-settings-page { padding-top: 24px; }
+  .glasses-settings-heading { margin: 20px 0; }
+  .glasses-settings-grid { gap: 18px; }
+  .glasses-setting { padding: 20px; }
+  .glasses-theme-option { gap: 12px; padding: 12px; }
+  .glasses-theme-sample { width: 64px; }
+  .glasses-theme-copy strong { font-size: 18px; }
+  .glasses-theme-copy small { font-size: 12px; }
+  .subtitle-size-option { font-size: 15px; gap: 4px; }
+  .subtitle-size-options { gap: 7px; }
+}
+@media (max-width: 850px) { .glasses-settings-grid { grid-template-columns: 1fr; } }

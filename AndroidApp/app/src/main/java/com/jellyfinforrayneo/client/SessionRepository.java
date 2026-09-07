@@ -22,6 +22,7 @@ final class SessionRepository
     static final String KEY_DISPLAY_MODE = "display_mode";
     static final String KEY_STEREO_SCREEN = "stereo_screen_settings";
     static final String KEY_UI_THEME = "ui_theme";
+    static final String KEY_SUBTITLE_SIZE = "subtitle_size";
 
     interface Store
     {
@@ -352,6 +353,19 @@ final class SessionRepository
         if (UiTheme.isValid(theme))
         {
             store.putString(KEY_UI_THEME, theme);
+        }
+    }
+
+    String getSubtitleSize()
+    {
+        return SubtitleSize.normalize(store.getString(KEY_SUBTITLE_SIZE, SubtitleSize.DEFAULT));
+    }
+
+    void setSubtitleSize(String size)
+    {
+        if (SubtitleSize.isValid(size))
+        {
+            store.putString(KEY_SUBTITLE_SIZE, size);
         }
     }
 

@@ -109,6 +109,38 @@ public final class GlassesMessageTests
         assertEquals(3, message.catalogGeneration);
     }
 
+    @Test
+    public void appearanceMessages_AcceptOnlyExactPreferenceValues() throws Exception
+    {
+        for (String theme : new String[]{"liquid-glass", "simpleUI"})
+        {
+            GlassesMessage message = GlassesMessage.parse(new JSONObject()
+                    .put("type", "set_ui_theme").put("value", theme).toString());
+            assertNotNull(message);
+            assertEquals(GlassesMessage.Type.SET_UI_THEME, message.type);
+            assertEquals(theme, message.preferenceValue);
+        }
+        for (String size : new String[]{"small", "normal", "large", "extra-large"})
+        {
+            GlassesMessage message = GlassesMessage.parse(new JSONObject()
+                    .put("type", "set_subtitle_size").put("value", size).toString());
+            assertNotNull(message);
+            assertEquals(GlassesMessage.Type.SET_SUBTITLE_SIZE, message.type);
+            assertEquals(size, message.preferenceValue);
+        }
+        for (String type : new String[]{"set_ui_theme", "set_subtitle_size"})
+        {
+            assertNull(GlassesMessage.parse(new JSONObject().put("type", type).toString()));
+            for (Object invalid : new Object[]{JSONObject.NULL, true, 125, new JSONObject(), "", " LARGE", "simpleui", "large ", repeat('x', 8193)})
+            {
+                assertNull(GlassesMessage.parse(new JSONObject()
+                        .put("type", type).put("value", invalid).toString()));
+            }
+        }
+        assertNull(GlassesMessage.parse("{\"type\":\"set_ui_theme\",\"value\":\"large\"}"));
+        assertNull(GlassesMessage.parse("{\"type\":\"set_subtitle_size\",\"value\":\"simpleUI\"}"));
+    }
+
     private static String repeat(char value, int count)
     {
         StringBuilder result = new StringBuilder(count);

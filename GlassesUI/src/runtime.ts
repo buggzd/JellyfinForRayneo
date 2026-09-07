@@ -1,4 +1,5 @@
-import { normalizeUiTheme, readPreviewTheme, type UiTheme } from '../../SharedUI/theme.mjs'
+import { normalizeUiTheme, readPreviewTheme, savePreviewTheme, type UiTheme } from '../../SharedUI/theme.mjs'
+import { isSubtitleSize, normalizeSubtitleSize, readPreviewSubtitleSize, savePreviewSubtitleSize, type SubtitleSize } from '../../SharedUI/subtitles.mjs'
 
 export type JellyfinSession = {
   serverUrl: string
@@ -15,6 +16,7 @@ export type RuntimeBootstrap = {
   source: 'android' | 'development' | 'browser'
   displayMode: string
   uiTheme: UiTheme
+  subtitleSize: SubtitleSize
   glassesConnected: boolean
   catalogGeneration: number
   session: JellyfinSession | null
@@ -99,6 +101,7 @@ function parseBootstrap(value: string | RuntimeBootstrap | unknown): RuntimeBoot
       source: source.source === 'android' ? 'android' : 'browser',
       displayMode: text(source.displayMode) || 'Mirror2D',
       uiTheme: normalizeUiTheme(source.uiTheme),
+      subtitleSize: normalizeSubtitleSize(source.subtitleSize),
       glassesConnected: source.glassesConnected !== false,
       catalogGeneration: boundedGeneration(source.catalogGeneration),
       session: normalizeSession(source.session),
@@ -111,6 +114,10 @@ function parseBootstrap(value: string | RuntimeBootstrap | unknown): RuntimeBoot
 function publishNativeBootstrap(value: string | RuntimeBootstrap) {
   const bootstrap = parseBootstrap(value)
   if (!bootstrap) return
+  publishBootstrap(bootstrap)
+}
+
+function publishBootstrap(bootstrap: RuntimeBootstrap) {
   const signature = JSON.stringify(bootstrap)
   if (signature === latestNativeBootstrapSignature) return
   latestNativeBootstrap = bootstrap
@@ -182,6 +189,7 @@ async function developmentBootstrap(): Promise<RuntimeBootstrap> {
       source: 'development',
       displayMode: 'Mirror2D',
       uiTheme: readPreviewTheme(),
+      subtitleSize: readPreviewSubtitleSize(),
       glassesConnected: true,
       catalogGeneration: 0,
       session: {
@@ -200,6 +208,7 @@ async function developmentBootstrap(): Promise<RuntimeBootstrap> {
       source: 'development',
       displayMode: 'Mirror2D',
       uiTheme: readPreviewTheme(),
+      subtitleSize: readPreviewSubtitleSize(),
       glassesConnected: true,
       catalogGeneration: 0,
       session: null,
@@ -233,6 +242,7 @@ export async function discoverRuntime(): Promise<RuntimeBootstrap> {
       source: 'android',
       displayMode: 'Mirror2D',
       uiTheme: 'liquid-glass',
+      subtitleSize: 'normal',
       glassesConnected: true,
       catalogGeneration: 0,
       session: null,
@@ -245,6 +255,7 @@ export async function discoverRuntime(): Promise<RuntimeBootstrap> {
     source: 'browser',
     displayMode: 'Mirror2D',
     uiTheme: readPreviewTheme(),
+    subtitleSize: readPreviewSubtitleSize(),
     glassesConnected: true,
     catalogGeneration: 0,
     session: null,
@@ -298,4 +309,26 @@ export function postNativeMessage(message: Record<string, unknown>) {
   } catch {
     return false
   }
+}
+
+type UiPreferenceMessage =
+  | { type: 'set_ui_theme'; value: UiTheme }
+  | { type: 'set_subtitle_size'; value: SubtitleSize }
+
+export function requestUiPreference(message: UiPreferenceMessage, runtime: RuntimeBootstrap | null) {
+  const themeChange = message.type === 'set_ui_theme'
+  if (themeChange
+    ? message.value !== 'liquid-glass' && message.value !== 'simpleUI'
+    : message.type !== 'set_subtitle_size' || !isSubtitleSize(message.value)) return false
+  if (window.RayNeoGlasses) return postNativeMessage(message)
+  const current = latestNativeBootstrap ?? runtime
+  if (!current) return false
+  if (themeChange) {
+    savePreviewTheme(message.value)
+    publishBootstrap({ ...current, uiTheme: message.value })
+  } else {
+    savePreviewSubtitleSize(message.value)
+    publishBootstrap({ ...current, subtitleSize: message.value })
+  }
+  return true
 }

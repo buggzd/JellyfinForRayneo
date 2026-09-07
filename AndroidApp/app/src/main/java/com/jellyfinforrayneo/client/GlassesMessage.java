@@ -17,7 +17,9 @@ final class GlassesMessage
         UNAUTHORIZED,
         PLAYBACK_STATE,
         RUNTIME_STATE,
-        SEARCH_STATE
+        SEARCH_STATE,
+        SET_UI_THEME,
+        SET_SUBTITLE_SIZE
     }
 
     final Type type;
@@ -28,6 +30,7 @@ final class GlassesMessage
     final String subtitle;
     final String playMethod;
     final String query;
+    final String preferenceValue;
     final long positionTicks;
     final long durationTicks;
     final int catalogGeneration;
@@ -41,6 +44,7 @@ final class GlassesMessage
             String subtitle,
             String playMethod,
             String query,
+            String preferenceValue,
             long positionTicks,
             long durationTicks,
             int catalogGeneration)
@@ -53,6 +57,7 @@ final class GlassesMessage
         this.subtitle = subtitle;
         this.playMethod = playMethod;
         this.query = query;
+        this.preferenceValue = preferenceValue;
         this.positionTicks = positionTicks;
         this.durationTicks = durationTicks;
         this.catalogGeneration = catalogGeneration;
@@ -71,6 +76,21 @@ final class GlassesMessage
             if (type == null)
             {
                 return null;
+            }
+            String preferenceValue = "";
+            if (type == Type.SET_UI_THEME || type == Type.SET_SUBTITLE_SIZE)
+            {
+                Object value = source.opt("value");
+                if (!(value instanceof String))
+                {
+                    return null;
+                }
+                preferenceValue = (String) value;
+                if (type == Type.SET_UI_THEME
+                        ? !UiTheme.isValid(preferenceValue) : !SubtitleSize.isValid(preferenceValue))
+                {
+                    return null;
+                }
             }
             String state = text(source, "state", 32).toLowerCase(Locale.US);
             if (type == Type.PLAYBACK_STATE && !isPlaybackState(state))
@@ -118,6 +138,7 @@ final class GlassesMessage
                     text(source, "subtitle", 240),
                     playMethod(source),
                     query,
+                    preferenceValue,
                     boundedLong(source, "positionTicks"),
                     boundedLong(source, "durationTicks"),
                     catalogGeneration);
@@ -144,6 +165,10 @@ final class GlassesMessage
                 return Type.RUNTIME_STATE;
             case "search_state":
                 return Type.SEARCH_STATE;
+            case "set_ui_theme":
+                return Type.SET_UI_THEME;
+            case "set_subtitle_size":
+                return Type.SET_SUBTITLE_SIZE;
             default:
                 return null;
         }

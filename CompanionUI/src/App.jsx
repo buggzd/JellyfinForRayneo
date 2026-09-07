@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { applyUiTheme, normalizeUiTheme, readPreviewTheme, savePreviewTheme } from '../../SharedUI/theme.mjs'
+import { SUBTITLE_SIZES, isSubtitleSize, normalizeSubtitleSize, readPreviewSubtitleSize, savePreviewSubtitleSize } from '../../SharedUI/subtitles.mjs'
 import { Toast, usePresence } from './feedback'
 import {
   ArrowLeft,
@@ -177,6 +178,9 @@ function App() {
     ? normalizeUiTheme(parseNativePayload(callNative('getState'))?.uiTheme)
     : readPreviewTheme())
   const simpleUi = uiTheme === 'simpleUI'
+  const [subtitleSize, setSubtitleSize] = useState(() => isNative
+    ? normalizeSubtitleSize(parseNativePayload(callNative('getState'))?.subtitleSize)
+    : readPreviewSubtitleSize())
   useLayoutEffect(() => { applyUiTheme(uiTheme) }, [uiTheme])
   const [session, setSession] = useStoredState('jellyfin-rayneo-session', null, !isNative)
   const [demoAccounts, setDemoAccounts] = useState(() => {
@@ -303,6 +307,7 @@ function App() {
 
       setNativeState(next)
       setUiTheme(normalizeUiTheme(next.uiTheme))
+      setSubtitleSize(normalizeSubtitleSize(next.subtitleSize))
       setDisplayMode(next.displayMode === 'stereo_screen' ? 'stereo' : 'mirror')
       // Ignore an older acknowledgement while the latest slider/button edit is still in flight.
       if (validStereoScreen(next.stereoScreen)
@@ -501,6 +506,15 @@ function App() {
     }
   }
 
+  const changeSubtitleSize = (size) => {
+    if (!isSubtitleSize(size)) return
+    if (isNative) callNative('selectSubtitleSize', size)
+    else {
+      setSubtitleSize(size)
+      savePreviewSubtitleSize(size)
+    }
+  }
+
   const changeStereoScreen = (patch) => {
     const next = { ...stereoScreenRef.current, ...patch }
     if (!validStereoScreen(next) || sameStereoScreen(next, stereoScreenRef.current)) return
@@ -531,6 +545,7 @@ function App() {
 
   const resetPreferences = () => {
     changeUiTheme('liquid-glass')
+    changeSubtitleSize('normal')
     changeStereoTestPattern(false)
     changeStereoScreen(DEFAULT_STEREO_SCREEN)
     changeDisplayMode('mirror')
@@ -661,6 +676,8 @@ function App() {
             <SettingsScreen
               uiTheme={uiTheme}
               onUiThemeChange={changeUiTheme}
+              subtitleSize={subtitleSize}
+              onSubtitleSizeChange={changeSubtitleSize}
               session={session}
               server={selectedServer}
               displayMode={displayMode}
@@ -1336,6 +1353,8 @@ function ThemeSelector({ value, onChange }) {
 function SettingsScreen({
   uiTheme,
   onUiThemeChange,
+  subtitleSize,
+  onSubtitleSizeChange,
   session,
   server,
   displayMode,
@@ -1393,6 +1412,16 @@ function SettingsScreen({
 
       <SettingsGroup title="界面风格">
         <ThemeSelector value={uiTheme} onChange={onUiThemeChange} />
+      </SettingsGroup>
+
+      <SettingsGroup title="字幕大小">
+        <div className="settings-mode-wrap">
+          <div className="stereo-depth-options" role="group" aria-label="字幕大小">
+            {SUBTITLE_SIZES.map(option => <button key={option.value} type="button"
+              aria-pressed={subtitleSize === option.value} onClick={() => onSubtitleSizeChange(option.value)}>{option.label}</button>)}
+          </div>
+          <p className="stereo-help">与眼镜同步，自动保存。适用于文字字幕，已固定在画面里的字幕不受影响。</p>
+        </div>
       </SettingsGroup>
 
       <SettingsGroup title="显示">

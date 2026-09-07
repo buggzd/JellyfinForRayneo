@@ -24,9 +24,9 @@ MainActivity
                 └── one GlassesUI WebView
 ```
 
-The phone owns discovery, credentials, Quick Connect, settings, and the
+The phone owns discovery, credentials, Quick Connect, account/display settings, and the
 OLED-black touchpad. The glasses own catalog browsing, details, HTML video/HLS
-playback, subtitles, and Jellyfin playback reports. A visible glasses frame
+playback, subtitles, appearance settings, and Jellyfin playback reports. A visible glasses frame
 already implies a phone connection, so `GlassesUI` has no waiting-for-phone
 screen.
 
@@ -106,6 +106,7 @@ length-limited, and whitelisted before use.
 | `shareDiagnostics` | Open Android's share sheet with a redacted diagnostic report |
 | `selectDisplayMode` | Save and request 2D/3D mode |
 | `selectUiTheme` | Persist exactly `liquid-glass` or `simpleUI` and publish it to both surfaces |
+| `selectSubtitleSize` | Persist exactly `small`, `normal`, `large`, or `extra-large` and publish it to both surfaces |
 | `setStereoScreen` | Save a bounded flat-screen disparity/size preference without switching hardware mode |
 | `setStereoTestPattern` | Enable/disable the temporary L/R reference overlay while stereo is applied |
 | `remoteCommand`, `searchText`, `previewHaptic` | Bounded touchpad input and the active Series-search query |
@@ -138,7 +139,9 @@ keeps a glasses-side failure visible so field testing does not require ADB.
 | `postMessage` | Send validated runtime/playback/session events to Android |
 
 Accepted glasses messages are `manage_login`, `logout`, `unauthorized`,
-`runtime_state`, `playback_state`, and `search_state`. The whole message and
+`runtime_state`, `playback_state`, `search_state`, `set_ui_theme`, and
+`set_subtitle_size`. Appearance messages accept only an exact whitelisted string
+in `value`, with no coercion, trimming, or arbitrary style payload. The whole message and
 every individual field have fixed limits. `search_state` carries only
 `active`/`inactive` plus the bounded ASCII query; leaving search, logout, a lost
 glasses WebView, or an unauthorized restore clears the phone input and hides
@@ -193,6 +196,21 @@ dual-UI harness may save only the appearance choice under a preview-specific key
 `SharedUI` supplies the exact enum normalization and simpleUI rendering rules;
 both Gradle frontend tasks include that directory in their build inputs.
 See [UI themes](UI_THEMES.md) for the visual design and verification boundary.
+
+The glasses side navigation includes Settings, with the same theme choices and
+a live subtitle-size preview. Both surfaces can edit the device-wide
+`subtitle_size` preference in `SessionRepository`; missing/corrupt values use
+`normal`, and invalid edits leave the saved value unchanged. The four sizes are
+small (80%), normal (100%), large (125%), and extra-large (150%) of the existing
+responsive text size. The phone's reset-preferences action restores normal.
+Native acknowledgement updates both selections without changing the catalog
+generation, client, video element, playback plan, or reporting lifecycle.
+
+Size choices are available only on the Settings pages; the player uses the saved
+size without adding font controls to its playback or subtitle menus.
+Sizing applies to local text subtitles; burned-in/bitmap subtitles already in
+the video cannot be resized by this preference. Logout preserves both appearance
+preferences, and standalone previews persist only their dedicated preference keys.
 
 ## RayNeo display state
 
@@ -389,6 +407,7 @@ minimum device regression set for any device-facing change.
 | Stereo video composition | Moving frame-number video with DOM controls and text subtitles in both modes, while changing depth/size | Both eyes receive the same frame, video/subtitles/DOM receive identical transforms, no frozen video, duplicate sound/reporting, clipped edge or cross-eye leakage |
 | Browse and focus | Home, search, filters, folders, details, long lists, dialogs, remote back | Exactly one visible spatial focus target exists and overlays prevent background input |
 | UI themes | Default install, saved simpleUI cold launch, rapid switches during browse/direct play/HLS/tutorial in both 2D and SBS, disconnect/reconnect, renderer recovery, logout, reset preferences | Both surfaces and phone system bars agree; focus, document, video, audio and reporting remain single-instance; theme survives logout/recovery and reset restores liquid-glass; simpleUI has no decorative loops or blur |
+| Glasses settings and subtitle size | Enter/exit glasses Settings, both themes and four sizes, phone/glasses edits, paused/direct/HLS playback, text versus burned-in subtitles, cold launch/logout/reset in 2D and SBS | One focus returns to Settings; both surfaces acknowledge the same saved preference; playback uses the chosen text size with no font controls in player menus, duplicate video or reporting |
 | Remote tutorial | First ready catalog, skip/relaunch, six phone gestures, wrong/rapid input, pause/resume/exit, sidebar replay, logout, 2D/SBS switch and renderer recovery | Each real gesture advances once; exactly one focus stays inside practice/dialog; completion or skipping is remembered; no media playback or background navigation; SVG motion and text remain readable in both eyes |
 | Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, text and bitmap subtitle | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |
 | Single-instance invariants | Mirror and stereo during representative playback | One glasses WebView, one HTML `<video>`, one audio stream, and one Jellyfin reporting stream remain active |
