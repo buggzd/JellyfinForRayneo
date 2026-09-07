@@ -1545,9 +1545,11 @@ button[aria-busy="true"] { opacity: .85; }
   padding: 6px 14px;
   border-radius: 25px 19px 25px 19px;
   background:
-    radial-gradient(ellipse at 50% 42%, rgba(245,251,252,.88), rgba(255,255,255,.45));
-  backdrop-filter: blur(30px) saturate(1.12);
-  -webkit-backdrop-filter: blur(30px) saturate(1.12);
+    linear-gradient(135deg, rgba(255,255,255,.20), rgba(242,252,255,.06));
+  border-color: rgba(255,255,255,.65);
+  box-shadow: 0 8px 24px rgba(22,53,69,.1), inset 0 1px 0 rgba(255,255,255,.78), inset 0 -1px 0 rgba(90,153,173,.12);
+  backdrop-filter: blur(8px) saturate(1.08);
+  -webkit-backdrop-filter: blur(8px) saturate(1.08);
 }
 
 .bottom-nav button {
@@ -1558,7 +1560,7 @@ button[aria-busy="true"] { opacity: .85; }
   gap: 3px;
   padding: 0;
   border: 0;
-  color: #8299a4;
+  color: #506575;
   background: transparent;
   cursor: pointer;
 }
@@ -1570,6 +1572,12 @@ button[aria-busy="true"] { opacity: .85; }
 .bottom-nav .nav-primary { color: #326f85; }
 .bottom-nav .nav-primary > span { position: relative; width: 42px; height: 42px; margin-top: -21px; border: 1px solid rgba(255,255,255,.7); border-radius: 17px 14px 17px 14px; background: linear-gradient(145deg, #cff5fb, #6bc8df); box-shadow: 0 8px 19px rgba(23,127,163,.21), inset 0 1px 0 rgba(255,255,255,.75); }
 .bottom-nav .nav-primary > span i { width: 5px; height: 5px; border-radius: 50%; background: #0a6f95; box-shadow: 0 0 0 5px rgba(255,255,255,.32), 0 0 10px rgba(13,120,158,.35); }
+
+:root[data-ui-theme="liquid-glass"] .bottom-nav button.is-active > span { background: rgba(203,240,249,.18); }
+:root[data-ui-theme="liquid-glass"] .bottom-nav button.is-active small { position: relative; font-weight: 800; }
+:root[data-ui-theme="liquid-glass"] .bottom-nav button.is-active small::after { content: ''; position: absolute; bottom: -5px; left: 50%; width: 13px; height: 2px; border-radius: 2px; background: currentColor; transform: translateX(-50%); }
+:root[data-ui-theme="liquid-glass"] .bottom-nav .nav-primary > span { background: linear-gradient(145deg, rgba(240,253,255,.34), rgba(177,230,242,.12)); box-shadow: 0 5px 13px rgba(23,81,100,.12), inset 0 1px 0 rgba(255,255,255,.78); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+:root[data-ui-theme="liquid-glass"] .bottom-nav .nav-primary > span i { background: currentColor; box-shadow: 0 0 0 5px rgba(255,255,255,.16); }
 
 .settings-header { margin-bottom: 21px; }
 .settings-header h1 { font-size: 24px; }

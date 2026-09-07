@@ -21,6 +21,21 @@ function textRegions(element, viewport) {
   return regions
 }
 
+function navigationRegions(element, viewport, regions) {
+  const nav = element.closest('.bottom-nav')
+  return regions.map((region) => {
+    const x = viewport.x + (region.x + region.width / 2) * viewport.width
+    const y = viewport.y + (region.y + region.height / 2) * viewport.height
+    const underneath = document.elementsFromPoint(x, y).find((node) => !nav.contains(node))
+    // Scrolling content can sit between the fixed wallpaper and clear navigation.
+    // These are the light surfaces defined in wallpaperContrast.css.
+    const panel = underneath?.closest('.settings-group__body, .settings-account, .account-server-card, .accounts-empty, .server-card, .restore-card, .field, .quick-code, .manual-card, .scan-empty, .saved-accounts-link')
+    const clearCard = underneath?.closest('.device-hero, .connection-card')
+    const behind = panel ? 0.92 : clearCard ? 0.12 : 0
+    return { ...region, surface: 1 - (1 - 0.12) * (1 - behind) }
+  })
+}
+
 export function useWallpaperContrast(rootRef, background, layout, screenAspect, enabled, viewportSelector) {
   const { transparency, ratio, zoom, x, y, textColor } = layout
   useEffect(() => {
@@ -36,8 +51,9 @@ export function useWallpaperContrast(rootRef, background, layout, screenAspect, 
       for (const element of root.querySelectorAll('[data-wallpaper-text]')) {
         // The editor has its own crop and scope; the saved wallpaper must not override it.
         if (element.closest('[data-wallpaper-scope]') !== root) continue
-        const regions = textRegions(element, viewport)
+        let regions = textRegions(element, viewport)
         if (!regions.length) continue
+        if (element.dataset.wallpaperText === 'navigation') regions = navigationRegions(element, viewport, regions)
         const appearance = wallpaperTextAppearance(background.samples, { transparency, ratio, zoom, x, y, textColor }, screenAspect,
           regions, element.dataset.wallpaperText === 'glass' ? 0.12 : 0, element.dataset.textTone)
         if (element.dataset.textTone !== appearance.tone) element.dataset.textTone = appearance.tone

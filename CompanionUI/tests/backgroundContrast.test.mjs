@@ -60,3 +60,11 @@ test('near the crossover, small brightness changes do not flip the previous text
   assert.equal(wallpaperTextAppearance(gray, layout, 1, whole, 0, 'dark').tone, 'dark')
   assert.equal(wallpaperTextAppearance(gray, layout, 1, whole, 0, 'light').tone, 'light')
 })
+
+test('clear navigation uses dark text when a light content panel scrolls underneath', () => {
+  const black = raster(() => [0, 0, 0])
+  assert.equal(wallpaperTextAppearance(black, layout, 1, whole, 0.12).tone, 'light')
+  const abovePanel = whole.map((region) => ({ ...region, surface: 1 - (1 - 0.12) * (1 - 0.92) }))
+  assert.equal(wallpaperTextAppearance(black, layout, 1, abovePanel, 0.12).tone, 'dark')
+  assert.equal(wallpaperTextAppearance(black, { ...layout, textColor: 'light' }, 1, abovePanel).support, true)
+})

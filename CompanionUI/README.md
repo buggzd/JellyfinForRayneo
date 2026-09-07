@@ -64,9 +64,14 @@ Automatic text color samples the imported image once into a raster with a maximu
 the final centered crop and composed opacity to compare light/dark contrast; scroll,
 layout and appearance changes schedule a coalesced update. Close scores preserve
 the previous tone, and mixed regions receive stronger text edging. There is no
-idle sampling loop. Opaque form/navigation surfaces keep their own legible palette;
+idle sampling loop. Opaque form surfaces keep their own legible palette;
 simpleUI and the remote do not run wallpaper analysis. Older five-field crop records
 preserve their crop and default to automatic text.
+
+Liquid navigation uses a clear glass fill and 8px backdrop blur. Its labels/icons
+share wallpaper text preferences; automatic color also considers light content
+panels that scroll under the fixed bar. A short current-page marker remains visible
+independently of the chosen color. simpleUI retains its opaque navigation surface.
 
 Remote background is a separate Settings choice: `texture` or `black`, valid in
 both themes. Until explicitly selected, Liquid defaults to texture and simpleUI

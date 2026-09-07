@@ -50,11 +50,12 @@ export function wallpaperTextAppearance(samples, layout, aspect, regions, surfac
   const dark = []
   const opacity = 1 - layout.transparency / 100
   for (const region of regions) {
+    const fill = region.surface ?? surface
     for (let row = 0; row < 3; row += 1) for (let column = 0; column < 7; column += 1) {
       const x = clamp(Math.floor((crop.x + (region.x + region.width * (column + 0.5) / 7) * crop.width) / width * samples.width), 0, samples.width - 1)
       const y = clamp(Math.floor((crop.y + (region.y + region.height * (row + 0.5) / 3) * crop.height) / height * samples.height), 0, samples.height - 1)
       const offset = (y * samples.width + x) * 4
-      const rgb = BASE.map((base, channel) => (samples.data[offset + channel] * opacity + base * (1 - opacity)) * (1 - surface) + 255 * surface)
+      const rgb = BASE.map((base, channel) => (samples.data[offset + channel] * opacity + base * (1 - opacity)) * (1 - fill) + 255 * fill)
       const value = luminance(rgb)
       light.push(contrastRatio(INK_LUMINANCE.light, value))
       dark.push(contrastRatio(INK_LUMINANCE.dark, value))

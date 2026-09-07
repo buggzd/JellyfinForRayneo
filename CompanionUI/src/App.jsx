@@ -1710,15 +1710,15 @@ function Toggle({ checked }) {
 function BottomNav({ active, onHome, onTouchpad, onSettings }) {
   return (
     <nav className="bottom-nav glass-panel" aria-label="手机导航">
-      <button aria-current={active === 'home' ? 'page' : undefined} className={active === 'home' ? 'is-active' : ''} onClick={onHome}>
+      <button data-wallpaper-text="navigation" aria-current={active === 'home' ? 'page' : undefined} className={active === 'home' ? 'is-active' : ''} onClick={onHome}>
         <span><Glasses size={20} /></span>
         <small>设备</small>
       </button>
-      <button className="nav-primary" onClick={onTouchpad}>
+      <button data-wallpaper-text="navigation" className="nav-primary" onClick={onTouchpad}>
         <span><i /></span>
         <small>触控</small>
       </button>
-      <button aria-current={active === 'settings' ? 'page' : undefined} className={active === 'settings' ? 'is-active' : ''} onClick={onSettings}>
+      <button data-wallpaper-text="navigation" aria-current={active === 'settings' ? 'page' : undefined} className={active === 'settings' ? 'is-active' : ''} onClick={onSettings}>
         <span><Settings2 size={20} /></span>
         <small>设置</small>
       </button>
