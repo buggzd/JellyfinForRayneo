@@ -49,6 +49,7 @@ public final class MainActivity extends Activity
     private JellyfinAuthenticationService authentication;
     private JellyfinDiscoveryService discovery;
     private RemoteCommandRouter remoteCommands;
+    private VolumeKeyController volumeKeys;
     private RayNeoDisplayController rayNeoDisplay;
     private GlassesPresentationController glassesPresentation;
     private CompanionWebViewController companionWebView;
@@ -89,6 +90,35 @@ public final class MainActivity extends Activity
         restoreSessionState();
 
         remoteCommands = new RemoteCommandRouter();
+        AudioManager mediaAudio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (mediaAudio != null)
+        {
+            volumeKeys = new VolumeKeyController(
+                    new VolumeKeyController.AudioOutput()
+                    {
+                        @Override
+                        public void adjust(int direction)
+                        {
+                            mediaAudio.adjustStreamVolume(
+                                    AudioManager.STREAM_MUSIC,
+                                    direction,
+                                    AudioManager.FLAG_SHOW_UI);
+                        }
+
+                        @Override
+                        public int getCurrentVolume()
+                        {
+                            return mediaAudio.getStreamVolume(AudioManager.STREAM_MUSIC);
+                        }
+
+                        @Override
+                        public int getMaximumVolume()
+                        {
+                            return mediaAudio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                        }
+                    },
+                    percentage -> remoteCommands.submitVolume(percentage));
+        }
         rayNeoDisplay = new RayNeoDisplayController(
                 this,
                 sessions.getDisplayMode(),
@@ -340,22 +370,23 @@ public final class MainActivity extends Activity
     @Override
     public boolean dispatchKeyEvent(KeyEvent event)
     {
-        if (event != null && event.getAction() == KeyEvent.ACTION_DOWN)
+        if (event != null)
         {
-            String command = commandForKey(event.getKeyCode());
-            if (command != null && remoteCommands.submit(command))
+            int volumeDirection = VolumeKeyController.directionForKey(event.getKeyCode());
+            if (volumeKeys != null && volumeKeys.handle(volumeDirection, event.getAction()))
             {
                 return true;
             }
+            if (event.getAction() == KeyEvent.ACTION_DOWN)
+            {
+                String command = commandForKey(event.getKeyCode());
+                if (command != null && remoteCommands.submit(command))
+                {
+                    return true;
+                }
+            }
         }
-
-        boolean volumeKey = event != null && isVolumeKey(event.getKeyCode());
-        boolean handled = super.dispatchKeyEvent(event);
-        if (volumeKey && event.getAction() == KeyEvent.ACTION_DOWN)
-        {
-            getWindow().getDecorView().post(this::publishVolume);
-        }
-        return handled;
+        return super.dispatchKeyEvent(event);
     }
 
     private void restoreSessionState()
@@ -813,21 +844,6 @@ public final class MainActivity extends Activity
         getWindow().getDecorView().setSystemUiVisibility(flags);
     }
 
-    private void publishVolume()
-    {
-        AudioManager audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        if (audio == null)
-        {
-            return;
-        }
-        int maximum = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-        int current = audio.getStreamVolume(AudioManager.STREAM_MUSIC);
-        int percentage = maximum <= 0
-                ? 0
-                : Math.round(Math.max(0, Math.min(current, maximum)) * 100f / maximum);
-        remoteCommands.submitVolume(percentage);
-    }
-
     private void copyQuickConnectCode()
     {
         if (quickConnectCode.isEmpty())
@@ -1190,13 +1206,6 @@ public final class MainActivity extends Activity
             default:
                 return null;
         }
-    }
-
-    private static boolean isVolumeKey(int keyCode)
-    {
-        return keyCode == KeyEvent.KEYCODE_VOLUME_UP
-                || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
-                || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE;
     }
 
     private static String bounded(String value, int maximumLength)

@@ -164,6 +164,13 @@ back to `document.body`, and bubble from an element target. `GlassesUI` owns the
 single `data-spatial-focus="true"` marker. While video is active, the player
 scope prevents underlying pages from receiving input.
 
+Phone hardware volume keys are consumed by `MainActivity` and mapped directly
+to one `AudioManager.STREAM_MUSIC` raise/lower/toggle adjustment per key-down.
+The resulting stream value is published immediately after that exact adjustment;
+the matching key-up is consumed without another change. The application does
+not queue a directionless volume read behind Android's default key dispatch, so
+a rapid down-to-up or up-to-down reversal cannot publish the preceding direction.
+
 The remote tutorial is a separate glasses React surface, shown once after the
 catalog becomes ready and reachable again through the side navigation. It
 consumes the existing bubbling keyboard event only, not the paired
