@@ -23,6 +23,7 @@ final class SessionRepository
     static final String KEY_STEREO_SCREEN = "stereo_screen_settings";
     static final String KEY_UI_THEME = "ui_theme";
     static final String KEY_TOUCHPAD_BACKGROUND = "touchpad_background";
+    static final String KEY_COMPANION_BACKGROUND_LAYOUT = "companion_background_layout";
 
     interface Store
     {
@@ -367,6 +368,20 @@ final class SessionRepository
         if (CompanionSettingsPolicy.isTouchpadBackground(background))
         {
             store.putString(KEY_TOUCHPAD_BACKGROUND, background);
+        }
+    }
+
+    CompanionBackgroundLayout getCompanionBackgroundLayout()
+    {
+        CompanionBackgroundLayout layout = CompanionBackgroundLayout.parse(store.getString(KEY_COMPANION_BACKGROUND_LAYOUT, ""));
+        return layout == null ? CompanionBackgroundLayout.DEFAULT : layout;
+    }
+
+    void setCompanionBackgroundLayout(CompanionBackgroundLayout layout)
+    {
+        if (layout != null)
+        {
+            store.putString(KEY_COMPANION_BACKGROUND_LAYOUT, layout.toJson().toString());
         }
     }
 

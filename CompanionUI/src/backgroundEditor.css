@@ -1,0 +1,57 @@
+.background-artwork { position: absolute; display: block; inset: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; }
+.background-editor { width: min(460px, calc(100% - 20px)); max-width: none; max-height: calc(100dvh - 24px); padding: 0; overflow: hidden; border: 1px solid #fff; border-radius: 24px; background: #f5f9fb; color: #102232; box-shadow: 0 24px 80px #17394c40; }
+.background-editor[open] { display: flex; flex-direction: column; }
+.background-editor::backdrop { background: #10273570; backdrop-filter: blur(5px); }
+.background-editor__header { display: flex; min-height: 79px; padding: 17px 19px 15px; flex-shrink: 0; align-items: center; justify-content: space-between; border-bottom: 1px solid #dfeaf0; }
+.background-editor__header span { color: #668391; font-size: 9px; letter-spacing: .15em; }
+.background-editor__header h2 { margin: 5px 0 0; font-size: 21px; letter-spacing: -.02em; }
+.background-editor__header button { display: grid; width: 40px; height: 40px; padding: 0; place-items: center; border: 1px solid #dce8ee; border-radius: 50%; color: #496a7b; background: #ffffff90; cursor: pointer; }
+.background-editor__body { min-height: 0; padding: 16px 18px 18px; overflow-y: auto; overscroll-behavior: contain; }
+.background-editor__views { display: flex; padding: 4px; gap: 4px; border: 1px solid #dce8ee; border-radius: 13px; background: #eaf1f5; }
+.background-editor__views > button { display: flex; min-height: 36px; flex: 1; gap: 6px; justify-content: center; align-items: center; border: 0; border-radius: 9px; background: transparent; color: #657c8b; font-size: 12px; cursor: pointer; }
+.background-editor__views > button[aria-pressed="true"] { background: #fff; color: #12698f; box-shadow: 0 2px 6px #29495f0d; }
+.background-editor__canvas { --background-preview-height: 270px; display: flex; min-height: 294px; margin-top: 12px; padding: 12px; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #d7e1e8; border-radius: 17px; background: #d8e2e8; }
+.background-crop-frame { position: relative; max-width: 100%; flex-shrink: 0; overflow: hidden; background: #eaf7fa; box-shadow: 0 0 0 1px #ffffffb3, 0 5px 16px #16394825; }
+.background-crop-frame.is-preview { border-radius: 13px; }
+.background-crop-handle { position: absolute; inset: 0; touch-action: none; cursor: grab; user-select: none; outline-offset: -3px; }
+.is-dragging .background-crop-handle { cursor: grabbing; }
+.background-crop-handle > i { position: absolute; background: #ffffff66; pointer-events: none; }
+.background-crop-handle > i:nth-child(1) { top: 33.333%; left: 0; right: 0; height: 1px; }
+.background-crop-handle > i:nth-child(2) { top: 66.666%; left: 0; right: 0; height: 1px; }
+.background-crop-handle > i:nth-child(3) { left: 33.333%; top: 0; bottom: 0; width: 1px; }
+.background-crop-handle > i:nth-child(4) { left: 66.666%; top: 0; bottom: 0; width: 1px; }
+.background-crop-handle > span { position: absolute; display: flex; bottom: 10px; left: 50%; padding: 6px 8px; align-items: center; gap: 4px; border: 1px solid #ffffff55; border-radius: 20px; background: #102735a6; color: #fff; font-size: 9px; white-space: nowrap; transform: translateX(-50%); pointer-events: none; }
+.is-dragging .background-crop-handle > span { visibility: hidden; }
+.background-editor__hint { margin: 10px 0 18px; color: #637e8c; font-size: 11px; line-height: 1.7; }
+.background-editor__controls { min-width: 0; margin: 0; padding: 0; border: 0; }
+.background-editor__controls > legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.background-editor__label { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #193e53; font-size: 12px; }
+.background-editor__label strong { font-weight: 600; }
+.background-editor__label :is(output, small) { color: #637e8c; font-size: 10px; }
+.background-ratios { display: flex; margin: 10px 0 18px; gap: 6px; }
+.background-ratios label { position: relative; flex: 1; min-width: 0; cursor: pointer; }
+.background-ratios input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.background-ratios span { display: grid; min-height: 39px; padding: 4px; place-items: center; border: 1px solid #d7e4ea; border-radius: 10px; color: #617d8d; background: #fff; font-size: 11px; }
+.background-ratios input:checked + span { color: #0b6691; border-color: #1689b1; background: #e4f3f9; }
+.background-ratios input:focus-visible + span { outline: 2px solid #1689b1; outline-offset: 2px; }
+.background-slider { margin-top: 12px; min-width: 0; }
+.background-slider input { display: block; width: 100%; height: 36px; margin: 1px 0 0; accent-color: #147aa3; cursor: pointer; }
+.background-position-sliders { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.background-transparency-control { margin-top: 8px; padding-top: 8px; border-top: 1px solid #dfeaf0; }
+.background-slider-ends { display: flex; justify-content: space-between; color: #6a808b; font-size: 10px; }
+.background-editor__error { color: #aa3f54; font-size: 12px; line-height: 1.7; }
+.background-editor__footer { display: flex; padding: 12px 18px max(12px, env(safe-area-inset-bottom)); flex-shrink: 0; justify-content: space-between; gap: 10px; border-top: 1px solid #dfeaf0; background: #f5f9fb; }
+.background-editor__footer button { display: flex; min-height: 44px; padding: 10px 13px; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 13px; background: transparent; color: #5b7d8d; font-size: 12px; cursor: pointer; }
+.background-editor__footer .background-editor__apply { min-width: 132px; color: #fff; background: #116d94; }
+.background-editor button:disabled, .background-editor fieldset:disabled { opacity: .5; cursor: default; }
+.background-interface-preview { position: absolute; display: flex; inset: 0; padding: 9px 8px; flex-direction: column; gap: 8px; color: #173d53; pointer-events: none; }
+.background-interface-preview > span { font-size: 6px; }
+.background-interface-preview > strong { margin: 8px 0 1px; font-size: 12px; text-shadow: 0 1px 4px #ffffffa0; }
+.background-interface-preview__device, .background-interface-preview__server { padding: 7px; border: 1px solid #ffffffbd; border-radius: 9px; background: linear-gradient(135deg, #ffffff33, #f2fcff0c); backdrop-filter: blur(4px) saturate(1.12); }
+.background-interface-preview__device img { display: block; width: 100%; height: 75px; object-fit: contain; }
+.background-interface-preview__device b { font-size: 8px; }
+.background-interface-preview__remote { padding: 13px 8px; border-radius: 8px; background: #112934; color: #fff; font-size: 8px; }
+.background-interface-preview__server { font-size: 7px; text-shadow: 0 1px 4px #ffffffb0; }
+@media (max-height: 720px) {
+  .background-editor__canvas { --background-preview-height: 180px; min-height: 204px; }
+}

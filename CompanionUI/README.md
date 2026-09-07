@@ -47,6 +47,18 @@ Standalone and dual-UI browser previews use IndexedDB for their own image. The
 background survives reloads and theme changes; simpleUI and the touchpad do not
 render it. Restoring all preferences also restores the default background.
 
+The background editor saves non-destructive crop metadata: transparency (0–100,
+default 65), aspect preset (screen, 9:16, 3:4, 1:1 or original), zoom (100–300%)
+and normalized X/Y position (0–1000). Drag, arrow keys and sliders adjust the
+same source-image crop used by the wallpaper renderer. The interface preview
+shows the crop filling the phone viewport. Apply waits for persistence; cancel
+or Android Back preserves the previous layout and restores focus to the opener.
+Replacing an image resets its crop while retaining transparency. Resetting the
+background clears both image and layout. Android owns these preferences in
+`SessionRepository`; the bridge rejects invalid values and stale image revisions,
+and publishes only phone state. Browser previews atomically save their image and
+layout together in IndexedDB, including support for older image-only records.
+
 Remote background is a separate Settings choice: `texture` or `black`, valid in
 both themes. Until explicitly selected, Liquid defaults to texture and simpleUI
 to black. Android persists the choice in `SessionRepository` and acknowledges
@@ -55,8 +67,9 @@ mode removes ambient art, grain, glow and decorative rings, and sets every
 background layer and native system bar to opaque zero RGB. Foreground controls
 remain visible; the OS keyboard and overlays are outside this background setting.
 
-Account regression tests for the development harness run without a browser:
+Crop and account regression tests run without a browser:
 
 ```bash
+npm test
 node --test ../DevHarness/*.test.mjs
 ```

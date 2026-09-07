@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { DEFAULT_BACKGROUND_LAYOUT, centeredBackgroundLayout, normalizeBackgroundLayout, sameBackgroundLayout, validBackgroundLayout } from './backgroundLayout.mjs'
 
 const DATABASE = 'jellyfin-companion-appearance'
 const MAX_BYTES = 20 * 1024 * 1024
@@ -61,13 +62,48 @@ export function usePhoneBackground(nativeState, notify) {
   const [blob, setBlob] = useState(null)
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
+  const [layout, setLayout] = useState(DEFAULT_BACKGROUND_LAYOUT)
+  const [dimensions, setDimensions] = useState(null)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const editingRef = useRef(false)
+  const editorOpener = useRef(null)
+  const commitRef = useRef(null)
+  editingRef.current = editing
+
+  const nativeUrl = nativeState?.companionBackground || ''
+  const imageUrl = native ? (/^https:\/\/appassets\.androidplatform\.net\/CompanionUI\/phone-background\.jpg\?v=[a-f0-9]{32}$/.test(nativeUrl) ? nativeUrl : '') : url
+  const currentLayout = native ? normalizeBackgroundLayout(nativeState?.companionBackgroundLayout) : layout
+
+  useEffect(() => {
+    setDimensions(null)
+    if (!imageUrl) return undefined
+    let active = true
+    const image = new Image()
+    image.onload = () => { if (active) setDimensions({ width: image.naturalWidth, height: image.naturalHeight }) }
+    image.src = imageUrl
+    return () => { active = false; image.onload = null }
+  }, [imageUrl])
+
+  useEffect(() => {
+    const commit = commitRef.current
+    if (!commit || !nativeState) return
+    if (nativeUrl !== commit.url) commit.resolve(false)
+    else if (sameBackgroundLayout(nativeState.companionBackgroundLayout, commit.layout)) commit.resolve(true)
+  }, [nativeState, nativeUrl])
+
+  useEffect(() => () => { commitRef.current?.resolve(false) }, [])
 
   useEffect(() => {
     if (native) return
     let active = true
     const started = generation.current
     void storedBackground('read').then((saved) => {
-      if (active && started === generation.current && saved instanceof Blob && saved.size <= MAX_BYTES && saved.type === 'image/jpeg') setBlob(saved)
+      const image = saved instanceof Blob ? saved : saved?.image
+      if (active && started === generation.current && image instanceof Blob && image.size <= MAX_BYTES && image.type === 'image/jpeg') {
+        setBlob(image)
+        setLayout(normalizeBackgroundLayout(saved?.layout))
+      }
     }).catch(() => { /* Import will explain unavailable storage if the user chooses an image. */ })
     return () => { active = false }
   }, [native])
@@ -89,8 +125,10 @@ export function usePhoneBackground(nativeState, notify) {
     setBusy(true)
     try {
       const prepared = await prepareBackground(file)
-      await storedBackground('write', prepared)
+      const nextLayout = centeredBackgroundLayout(currentLayout)
+      await storedBackground('write', { image: prepared, layout: nextLayout })
       setBlob(prepared)
+      setLayout(nextLayout)
       notify('手机背景已更新', 'success')
     } catch (error) {
       notify(error instanceof Error && /^(请选择|图片|无法处理)/.test(error.message)
@@ -113,6 +151,7 @@ export function usePhoneBackground(nativeState, notify) {
     try {
       await storedBackground('clear')
       setBlob(null)
+      setLayout(DEFAULT_BACKGROUND_LAYOUT)
       return true
     } catch {
       notify('背景未能移除，请重试', 'error')
@@ -123,10 +162,54 @@ export function usePhoneBackground(nativeState, notify) {
     }
   }
 
-  const nativeUrl = nativeState?.companionBackground || ''
+  const applyLayout = async (value) => {
+    if (!validBackgroundLayout(value) || !imageUrl || pending.current || importing) return false
+    if (sameBackgroundLayout(value, currentLayout)) return true
+    pending.current = true
+    setSaving(true)
+    generation.current += 1
+    try {
+      if (native) {
+        return await new Promise((resolve) => {
+          const timer = window.setTimeout(() => commitRef.current?.resolve(false), 4000)
+          commitRef.current = { url: imageUrl, layout: value, resolve: (success) => {
+            window.clearTimeout(timer)
+            commitRef.current = null
+            resolve(success)
+          } }
+          try { window.JellyfinNative.setCompanionBackgroundLayout(imageUrl.slice(-32), JSON.stringify(value)) }
+          catch { commitRef.current.resolve(false) }
+        })
+      }
+      await storedBackground('write', { image: blob, layout: value })
+      setLayout({ ...value })
+      return true
+    } catch {
+      return false
+    } finally {
+      pending.current = false
+      setSaving(false)
+    }
+  }
+
   return {
-    url: native ? (/^https:\/\/appassets\.androidplatform\.net\/CompanionUI\/phone-background\.jpg\?v=[a-f0-9]{32}$/.test(nativeUrl) ? nativeUrl : '') : url,
-    busy: importing,
+    url: imageUrl,
+    layout: currentLayout,
+    dimensions,
+    busy: importing || saving,
+    saving,
+    editing,
+    editingRef,
+    editorOpener,
+    edit: () => {
+      if (imageUrl && dimensions && !importing && !pending.current) {
+        editorOpener.current = document.activeElement
+        setEditing(true)
+      }
+    },
+    closeEditor: () => setEditing(false),
+    cancelEditor: () => { if (!pending.current) setEditing(false) },
+    applyLayout,
     input,
     changeFile,
     choose: () => {

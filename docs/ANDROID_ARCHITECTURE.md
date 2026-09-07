@@ -108,6 +108,7 @@ length-limited, and whitelisted before use.
 | `selectUiTheme` | Persist exactly `liquid-glass` or `simpleUI` and publish it to both surfaces |
 | `selectTouchpadBackground` | Persist exactly `texture` or `black` for the phone remote only |
 | `chooseCompanionBackground`, `clearCompanionBackground` | Pick/reset one private phone wallpaper from settings; picking is limited to the Liquid theme |
+| `setCompanionBackgroundLayout` | Save bounded crop/transparency metadata for the current image revision from settings; publish phone state only |
 | `openProjectPage` | Open only the fixed public project, issue list or guide page in the system browser |
 | `setStereoScreen` | Save a bounded flat-screen disparity/size preference without switching hardware mode |
 | `setStereoTestPattern` | Enable/disable the temporary L/R reference overlay while stereo is applied |
@@ -204,13 +205,26 @@ at most 20 MiB, validates JPEG/PNG/WebP dimensions (64 MP and 16000 per edge),
 downsamples before decoding, corrects EXIF orientation with AndroidX, and saves
 an opaque JPEG with a maximum 1600-pixel edge using `AtomicFile`. Original metadata
 is discarded. Cancelled/failed imports retain the previous image; lifecycle
-teardown cancels unfinished work. The bridge publishes only a busy flag and a
+teardown cancels unfinished work. The image bridge publishes a busy flag and a
 fixed virtual HTTPS asset URL with an opaque revision. The companion WebView
 intercepts that exact route and streams the private file with `no-store`; there
 is no wallpaper network request, arbitrary file path or image-byte bridge call.
 The URI, image and revision do not enter glasses bootstrap or diagnostics.
 Browser previews own a separate compressed image in IndexedDB. SimpleUI and
 the touchpad do not render the wallpaper; logout and theme changes preserve it.
+
+`SessionRepository` owns `companion_background_layout`: five bounded fields for
+transparency (0–100), aspect preset, zoom (100–300), and normalized X/Y crop
+travel (0–1000). `CompanionBackgroundLayout` rejects oversized JSON, extra/missing
+fields, unknown ratios, nonnumeric and fractional values, and out-of-range inputs.
+The settings bridge additionally requires the current 32-character image revision
+and an idle image importer. Saving publishes only `companionBackgroundLayout` in
+phone state, never a glasses bootstrap. The editor keeps a draft until Apply and
+waits for that acknowledgement; cancel/Back leaves the saved layout intact.
+One source-coordinate crop feeds both SVG preview and wallpaper. The imported
+JPEG stays intact; replacing it resets crop geometry and preserves transparency,
+while clearing resets all layout fields. Browser previews store image and layout
+in one IndexedDB transaction and migrate old Blob-only records on the next save.
 
 The phone About section reads `BuildConfig.VERSION_NAME` and `VERSION_CODE` from
 state; browser builds read the root `version.properties`. External settings links
@@ -448,7 +462,7 @@ minimum device regression set for any device-facing change.
 | Stereo video composition | Moving frame-number video with DOM controls and text subtitles in both modes, while changing depth/size | Both eyes receive the same frame, video/subtitles/DOM receive identical transforms, no frozen video, duplicate sound/reporting, clipped edge or cross-eye leakage |
 | Browse and focus | Home, search, filters, folders, details, long lists, dialogs, remote back | Exactly one visible spatial focus target exists and overlays prevent background input |
 | UI themes | Default install, saved simpleUI cold launch, rapid switches during browse/direct play/HLS/tutorial in both 2D and SBS, disconnect/reconnect, renderer recovery, logout, reset preferences | Both surfaces and phone system bars agree; focus, document, video, audio and reporting remain single-instance; theme survives logout/recovery and reset restores liquid-glass; simpleUI has no decorative loops or blur |
-| Phone settings | Import/replace/cancel/reset wallpaper, malformed/oversized files, rotated photos, cold launch, renderer recovery, theme changes, About links and installed version | Failed imports retain the image; only Liquid phone pages render it; original metadata stays private; links open fixed public pages outside the WebView; version matches the APK |
+| Phone settings | Import/replace/cancel/reset wallpaper, malformed/oversized files, rotated photos, all crop ratios, zoom/position/opacity extremes, drag, save/cancel/Back, stale revision, cold launch, renderer recovery, theme changes, About links and installed version | Failed imports/cancelled edits retain the image and layout; saved crop restores; clear resets layout; only Liquid phone pages render it; wallpaper edits preserve glasses/video; source metadata stays private; links open fixed public pages outside the WebView; version matches the APK |
 | Remote background | Both themes, texture/black selection, cold launch, gestures, search/IME, playback panels and returning to settings | Choice persists without changing session/video; blank black regions and system-bar backgrounds measure RGB 0,0,0 in a lossless screenshot; no glow/texture/overscroll scrim; controls remain visible |
 | Remote tutorial | First ready catalog, skip/relaunch, six phone gestures, wrong/rapid input, pause/resume/exit, sidebar replay, logout, 2D/SBS switch and renderer recovery | Each real gesture advances once; exactly one focus stays inside practice/dialog; completion or skipping is remembered; no media playback or background navigation; SVG motion and text remain readable in both eyes |
 | Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, text and bitmap subtitle | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |

@@ -61,23 +61,37 @@
 .background-picker__heading > span { color: var(--muted); font-size: 9px; letter-spacing: .08em; }
 .background-picker__body { display: flex; gap: 16px; margin-top: 13px; align-items: center; }
 .background-preview { position: relative; display: flex; width: 78px; height: 112px; padding: 31px 9px 10px; flex: 0 0 auto; flex-direction: column; justify-content: flex-end; gap: 5px; overflow: hidden; border: 1px solid rgba(255,255,255,.8); border-radius: 12px; background: linear-gradient(140deg, #eefaff, #a6d9e8 52%, #d7f1f8); }
-.background-preview > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.background-preview.has-image { background: #eaf7fa; }
 .background-preview > i { z-index: 1; display: block; height: 13px; border: 1px solid rgba(255,255,255,.65); border-radius: 4px; background: rgba(248,252,255,.72); }
 .background-preview > i:first-of-type { height: 31px; }
 .background-picker__copy { flex: 1; min-width: 0; }
 .background-picker__copy > strong { font-size: 12px; }
 .background-picker__copy > p { margin: 6px 0 10px; color: var(--muted); font-size: 11px; line-height: 1.7; }
 .background-choose { display: inline-flex; min-height: 40px; padding: 9px 12px; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 11px; background: rgba(245,253,255,.6); color: var(--blue-deep); font-size: 12px; cursor: pointer; }
+.background-adjust { display: inline-flex; min-height: 40px; margin-left: 8px; padding: 9px 0; border: 0; background: transparent; color: var(--blue-deep); font-size: 12px; cursor: pointer; }
 .background-picker__footer { display: flex; flex-wrap: wrap; margin-top: 9px; align-items: center; justify-content: space-between; gap: 0 8px; }
 .background-picker__footer > p { margin: 5px 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
 .background-picker__footer > button { min-height: 40px; padding: 8px 0; border: 0; background: transparent; color: var(--blue-deep); font-size: 11px; cursor: pointer; }
 
 /* The photo stays fixed behind the phone, so a long settings page never stretches it. */
-.ambient--custom { background: #dcebf0; }
-.ambient--custom > img { width: 100%; height: 100%; object-fit: cover; }
-.ambient__veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(242,249,252,.72), rgba(237,247,250,.60) 40%, rgba(236,247,251,.70)); }
+.ambient--custom { width: min(100%, 430px); left: 50%; transform: translateX(-50%); background: #eaf7fa; }
 .has-custom-background .phone-stage { background: transparent; }
-.home-screen .device-hero { background: linear-gradient(135deg, rgba(255,255,255,.55), rgba(242,252,255,.23)); }
+
+/* Clear glass on the two device cards: retain the edge, let the photo through. */
+:root[data-ui-theme="liquid-glass"] .home-screen :is(.device-hero, .connection-card) {
+  background: linear-gradient(135deg, rgba(255,255,255,.20), rgba(242,252,255,.045));
+  backdrop-filter: blur(4px) saturate(1.12);
+  -webkit-backdrop-filter: blur(4px) saturate(1.12);
+  border-color: rgba(255,255,255,.74);
+  box-shadow: 0 10px 26px rgba(40,91,118,.09), inset 0 1px 0 rgba(255,255,255,.88), inset 0 -1px 0 rgba(71,145,174,.13);
+}
+:root[data-ui-theme="liquid-glass"] .home-screen .device-hero::after { background: none; box-shadow: inset 1px 0 rgba(145,231,250,.34), inset -1px 0 rgba(255,226,222,.24); }
+:root[data-ui-theme="liquid-glass"] .home-screen .connection-card :is(strong, small, em, .connection-card__action) { text-shadow: 0 1px 5px rgba(255,255,255,.55); }
+
+@media (min-width: 680px) {
+  .ambient--custom { top: 34px; bottom: auto; width: 414px; height: min(884px, calc(100dvh - 68px)); border-radius: 38px; }
+}
+.is-native .ambient--custom { top: 0; left: 0; width: 100%; height: 100dvh; border-radius: 0; transform: none; }
 
 @media (max-width: 360px) {
   .settings-screen .setting-row { gap: 9px; padding-inline: 12px; }

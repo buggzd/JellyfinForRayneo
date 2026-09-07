@@ -84,6 +84,9 @@ final class CompanionWebViewController
         void clearCompanionBackground();
 
         @android.webkit.JavascriptInterface
+        void setCompanionBackgroundLayout(String revision, String payload);
+
+        @android.webkit.JavascriptInterface
         void openProjectPage(String page);
 
         @android.webkit.JavascriptInterface
