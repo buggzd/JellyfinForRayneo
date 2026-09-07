@@ -68,6 +68,7 @@ import type {
 import { postNativeMessage, requestUiPreference } from './runtime'
 import { normalizeSubtitleSize, subtitleFontSize, type SubtitleSize } from '../../SharedUI/subtitles.mjs'
 import GlassesSettings from './GlassesSettings'
+import { uiSounds, type UiSound } from './uiSounds'
 import RemoteTutorial from './RemoteTutorial'
 import VideoInfoOverlay from './VideoInfoOverlay'
 import type { PlaybackInfoSource } from './playbackInfo'
@@ -131,6 +132,14 @@ function focusSpatialElement(element?: HTMLElement | null, options: FocusOptions
   element.setAttribute('data-spatial-focus', 'true')
   element.focus(options)
   return document.activeElement === element || element.matches(spatialFocusSelector)
+}
+
+function soundNavigation(action: () => void, boundary = true) {
+  const previous = currentSpatialFocus()
+  action()
+  const next = currentSpatialFocus()
+  if (next && next !== previous) uiSounds.play('focus')
+  else if (boundary && previous) uiSounds.play('boundary')
 }
 
 function moveFocus(direction: Direction) {
@@ -389,6 +398,7 @@ function cx(...classes: Array<string | false | undefined>) {
 }
 
 type FocusButtonProps = {
+  sound?: UiSound | 'none'
   children: ReactNode
   icon?: ReactNode
   trailing?: ReactNode
@@ -404,6 +414,7 @@ type FocusButtonProps = {
 }
 
 function FocusButton({
+  sound,
   children,
   icon,
   trailing,
@@ -421,6 +432,7 @@ function FocusButton({
     <button
       type="button"
       data-focusable="true"
+      data-ui-sound={sound}
       data-autofocus={autoFocusTarget ? 'true' : undefined}
       aria-label={label}
       aria-pressed={active === undefined ? undefined : active}
@@ -599,6 +611,7 @@ function PageHeader({ active, onNavigate, onRefresh, onExit, serverName, userNam
           className="logo-button side-navigation__brand"
           icon={<span className="side-navigation__brand-mark">L</span>}
           label="回到首页"
+          sound="home"
           onClick={() => onNavigate('home')}
         >
           <Logo compact />
@@ -610,11 +623,11 @@ function PageHeader({ active, onNavigate, onRefresh, onExit, serverName, userNam
         </div>
 
         <nav className="main-nav" aria-label="主导航">
-          <FocusButton className="side-navigation__item" variant="ghost" icon={<Home size={22} />} active={active === 'home'} onClick={() => onNavigate('home')}>首页</FocusButton>
+          <FocusButton className="side-navigation__item" variant="ghost" icon={<Home size={22} />} sound="home" active={active === 'home'} onClick={() => onNavigate('home')}>首页</FocusButton>
           <FocusButton className="side-navigation__item" variant="ghost" icon={<Search size={22} />} active={active === 'search'} onClick={() => onNavigate('search')}>搜索</FocusButton>
           <FocusButton className="side-navigation__item" variant="ghost" icon={<Grid3X3 size={22} />} active={active === 'browse'} onClick={() => onNavigate('browse')}>媒体库</FocusButton>
           <FocusButton className="side-navigation__item" variant="ghost" icon={<Heart size={22} />} active={active === 'favorites'} onClick={() => onNavigate('favorites')}>我的收藏</FocusButton>
-          <FocusButton className="side-navigation__item settings-launch" variant="ghost" icon={<Settings2 size={22} />} active={active === 'settings'} onClick={() => onNavigate('settings')}>设置</FocusButton>
+          <FocusButton className="side-navigation__item settings-launch" variant="ghost" icon={<Settings2 size={22} />} sound="open" active={active === 'settings'} onClick={() => onNavigate('settings')}>设置</FocusButton>
         </nav>
 
         <div className="header-spacer" />
@@ -623,8 +636,8 @@ function PageHeader({ active, onNavigate, onRefresh, onExit, serverName, userNam
           <span><small>JELLYFIN SERVER</small><strong>{serverName || 'Jellyfin'}</strong></span>
         </div>
         <nav className="side-navigation__utilities" aria-label="服务器操作">
-          <FocusButton className="side-navigation__item tutorial-launch" variant="ghost" icon={<BookOpen size={21} />} onClick={() => onNavigate('tutorial')}>遥控教学</FocusButton>
-          <FocusButton className="side-navigation__item" variant="ghost" disabled={refreshing} busy={refreshing} icon={<RefreshCw className={cx(refreshing && 'is-spinning')} size={21} />} onClick={onRefresh}>{refreshing ? '正在刷新' : '刷新媒体库'}</FocusButton>
+          <FocusButton sound="open" className="side-navigation__item tutorial-launch" variant="ghost" icon={<BookOpen size={21} />} onClick={() => onNavigate('tutorial')}>遥控教学</FocusButton>
+          <FocusButton className="side-navigation__item" variant="ghost" sound="loading" disabled={refreshing} busy={refreshing} icon={<RefreshCw className={cx(refreshing && 'is-spinning')} size={21} />} onClick={onRefresh}>{refreshing ? '正在刷新' : '刷新媒体库'}</FocusButton>
           <FocusButton className="side-navigation__item" variant="ghost" icon={<LogOut size={21} />} onClick={onExit}>管理登录</FocusButton>
         </nav>
       </div>
@@ -663,6 +676,7 @@ const MediaCard = memo(function MediaCard({
       type="button"
       data-focusable="true"
       data-autofocus={autoFocusTarget ? 'true' : undefined}
+      data-ui-sound="open"
       className={cx('media-card', wide && 'media-card--wide', library && 'media-card--library')}
       onClick={() => onOpen(item)}
       onFocus={() => onPreview(item)}
@@ -949,7 +963,7 @@ function BrowsePage({
       />
       <main className="browse-content">
         <div className="breadcrumbs">
-          <FocusButton variant="round" label="返回上一级" onClick={() => path.length > 1 ? truncatePath(path.length - 1) : path.length ? resetLibrary() : onNavigate('home')}><ArrowLeft size={20} /></FocusButton>
+          <FocusButton variant="round" sound="back" label="返回上一级" onClick={() => path.length > 1 ? truncatePath(path.length - 1) : path.length ? resetLibrary() : onNavigate('home')}><ArrowLeft size={20} /></FocusButton>
           <FocusButton variant="ghost" onClick={() => { setPath([]); onNavigate('home') }}><Home size={16} /> 首页</FocusButton>
           {mode === 'library' && <><ChevronRight size={15} /><FocusButton variant="ghost" active={!path.length} onClick={resetLibrary}>媒体库</FocusButton></>}
           {path.map((crumb, index) => <span className="breadcrumb-part" key={crumb.item.id}><ChevronRight size={15} /><FocusButton variant="ghost" active={index === path.length - 1} onClick={() => truncatePath(index + 1)}>{crumb.item.title}</FocusButton></span>)}
@@ -1438,7 +1452,7 @@ function DetailPage({
     >
       <PageHeader active="none" minimal serverName={serverName} userName={userName} refreshing={refreshing} onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
       <main className="detail-content">
-        <FocusButton variant="round" className="detail-back" label="返回" onClick={() => onNavigate('home')}><ArrowLeft size={22} /></FocusButton>
+        <FocusButton variant="round" className="detail-back" sound="back" label="返回" onClick={() => onNavigate('home')}><ArrowLeft size={22} /></FocusButton>
         <section className="detail-hero">
           <div className="detail-poster-wrap"><ArtFrame item={resolvedItem} className="detail-poster" /></div>
           <div className="detail-copy">
@@ -2016,6 +2030,7 @@ function PlayerPage({
     const video = videoRef.current
     if (!video || !Number.isFinite(video.duration) || !planRef.current?.canSeek) return
     const next = Math.max(0, Math.min(video.duration, video.currentTime + seconds))
+    uiSounds.play(next === video.currentTime ? 'boundary' : 'select')
     video.currentTime = next
     currentRef.current = next
     setCurrent(next)
@@ -2261,6 +2276,7 @@ function PlayerPage({
         if (phase !== 'hidden' && active) {
           active.click()
         } else {
+          uiSounds.play('select')
           togglePlayback()
           reveal()
         }
@@ -2392,7 +2408,7 @@ function PlayerPage({
 
       <div className={cx('player-chrome', chrome === 'hidden' && 'is-hidden')} inert={chrome === 'hidden'} aria-hidden={chrome === 'hidden'}>
         <header className="player-topbar">
-          <FocusButton className="player-back" variant="round" label="退出播放器" onClick={onBack}><ArrowLeft size={22} /></FocusButton>
+          <FocusButton className="player-back" variant="round" sound="back" label="退出播放器" onClick={onBack}><ArrowLeft size={22} /></FocusButton>
           <div className="player-title"><small>正在播放 · {episodeLabel}</small><strong>{item.title} <span>·</span> {titleDetail}</strong></div>
           {plan && <div className="player-direct"><span /> {playbackMethod} <i /> {plan.transcoding ? '源格式 ' : ''}{formatLabel}</div>}
         </header>
@@ -2416,7 +2432,7 @@ function PlayerPage({
           <p>{error}</p>
           <div>
             <FocusButton variant="primary" autoFocusTarget icon={<RefreshCw size={18} />} onClick={() => { void prepare(positionTicks(), { mediaSourceId: plan?.mediaSourceId, audioStreamIndex: plan?.audioStreamIndex, subtitleStreamIndex: plan?.subtitleStreamIndex }) }}>重新尝试</FocusButton>
-            <FocusButton variant="glass" onClick={onBack}>返回详情</FocusButton>
+            <FocusButton variant="glass" sound="back" onClick={onBack}>返回详情</FocusButton>
           </div>
         </div>
       )}
@@ -2462,7 +2478,7 @@ function PlayerPage({
       <div ref={bottomChromeRef} className={cx('player-chrome player-chrome--bottom', !controls && 'is-hidden')} inert={!controls} aria-hidden={!controls}>
         {panel && controls && (
           <aside ref={trackPanelRef} className="track-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="track-panel-title">
-            <header><div><small>PLAYBACK OPTIONS</small><h2 id="track-panel-title">{panel === 'audio' ? '选择音轨' : '选择字幕'}</h2></div><FocusButton className="track-panel__close" variant="round" label="关闭面板" onClick={() => closeTrackPanel()}><X size={20} /></FocusButton></header>
+            <header><div><small>PLAYBACK OPTIONS</small><h2 id="track-panel-title">{panel === 'audio' ? '选择音轨' : '选择字幕'}</h2></div><FocusButton className="track-panel__close" variant="round" sound="close" label="关闭面板" onClick={() => closeTrackPanel()}><X size={20} /></FocusButton></header>
             <div className="track-list">
               {(panel === 'audio'
                 ? audioTracks
@@ -2492,9 +2508,9 @@ function PlayerPage({
             </div>
             <div className="player-now"><span className={cx('playing-bars', !playing && 'is-paused')}><i /><i /><i /></span><div><small>{statusLabel}</small><strong>{titleDetail}</strong></div></div>
             <div className="player-control-group player-control-group--right">
-              <FocusButton className="player-track-trigger--audio" variant="round" label="音轨" disabled={!audioTracks.length || status === 'preparing'} active={panel === 'audio'} onClick={() => toggleTrackPanel('audio')}><AudioLines size={21} /></FocusButton>
-              <FocusButton className="player-track-trigger--subtitles" variant="round" label="字幕" disabled={!subtitleTracks.length || status === 'preparing'} active={panel === 'subtitles'} onClick={() => toggleTrackPanel('subtitles')}><Captions size={21} /></FocusButton>
-              <FocusButton className="player-info-trigger" variant="round" label="视频信息" active={infoVisible} onClick={() => { onToggleInfo(); reveal() }}><Info size={21} /></FocusButton>
+              <FocusButton sound={panel === 'audio' ? 'close' : 'open'} className="player-track-trigger--audio" variant="round" label="音轨" disabled={!audioTracks.length || status === 'preparing'} active={panel === 'audio'} onClick={() => toggleTrackPanel('audio')}><AudioLines size={21} /></FocusButton>
+              <FocusButton sound={panel === 'subtitles' ? 'close' : 'open'} className="player-track-trigger--subtitles" variant="round" label="字幕" disabled={!subtitleTracks.length || status === 'preparing'} active={panel === 'subtitles'} onClick={() => toggleTrackPanel('subtitles')}><Captions size={21} /></FocusButton>
+              <FocusButton sound={infoVisible ? 'toggle-off' : 'toggle-on'} className="player-info-trigger" variant="round" label="视频信息" active={infoVisible} onClick={() => { onToggleInfo(); reveal() }}><Info size={21} /></FocusButton>
             </div>
           </div>
           <div className="player-hints" aria-label="手机触控板手势">
@@ -2808,6 +2824,7 @@ export default function App() {
   }, [jellyfin.status, page])
 
   const showToast = useCallback((message: string, tone: FeedbackTone = 'info') => {
+    uiSounds.play(tone === 'info' ? 'notification' : tone)
     setToast({ text: message, tone })
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
     toastTimer.current = window.setTimeout(() => setToast(null), tone === 'error' ? 4000 : 2400)
@@ -2947,6 +2964,7 @@ export default function App() {
 
       if (key === 'escape' || key === 'backspace') {
         event.preventDefault()
+        uiSounds.play('back')
         if (page === 'player') {
           window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: 'back' }))
         } else if (page === 'settings') {
@@ -2983,7 +3001,7 @@ export default function App() {
       if (page === 'player') {
         if (direction) {
           event.preventDefault()
-          window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: direction }))
+          soundNavigation(() => window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: direction })), false)
         } else if (key === 'enter' || key === ' ') {
           event.preventDefault()
           window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: 'enter' }))
@@ -2993,9 +3011,11 @@ export default function App() {
 
       if (direction) {
         event.preventDefault()
-        const active = currentSpatialFocus()
-        if (active && moveSeriesSearchFocus(active, direction)) return
-        moveFocus(direction)
+        soundNavigation(() => {
+          const active = currentSpatialFocus()
+          if (active && moveSeriesSearchFocus(active, direction)) return
+          moveFocus(direction)
+        })
         return
       }
 
@@ -3036,7 +3056,7 @@ export default function App() {
     if (page === 'settings') return <div className="settings-page page-enter">
       <PageHeader active="settings" serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={navigateFromMenu} onRefresh={refreshLibrary} onExit={manageLogin} />
       <main className="glasses-settings-page">
-        <FocusButton variant="ghost" icon={<ArrowLeft size={21} />} onClick={closeSettings}>返回</FocusButton>
+        <FocusButton variant="ghost" sound="back" icon={<ArrowLeft size={21} />} onClick={closeSettings}>返回</FocusButton>
         <GlassesSettings theme={uiTheme} subtitleSize={subtitleSize} onThemeChange={changeUiTheme} onSubtitleSizeChange={changeSubtitleSize} />
       </main>
       <RemoteHint />

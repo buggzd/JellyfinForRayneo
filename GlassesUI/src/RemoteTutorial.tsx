@@ -9,6 +9,7 @@ import {
   type TutorialOutcome,
 } from './tutorialState'
 import './remoteTutorial.css'
+import { uiSounds } from './uiSounds'
 
 const gestureUrl = (name: string) => new URL(`./assets/tutorial/${name}.svg`, document.baseURI).href
 const commandIcons = { right: ArrowRight, down: ArrowDown, left: ArrowLeft, up: ArrowUp, enter: Check, back: RotateCcw }
@@ -34,6 +35,19 @@ export default function RemoteTutorial({ onExit, onComplete, simpleUi = false }:
   const isMenu = state.exitOpen || state.phase !== 'practice'
   const completedSteps = state.phase === 'complete' ? 6 : state.phase === 'welcome' ? 0 : state.step + Number(success)
   const focusId = isMenu ? `choice-${state.choice}` : 'practice'
+  const previousSoundState = useRef(state)
+
+  useEffect(() => {
+    const previous = previousSoundState.current
+    previousSoundState.current = state
+    if (previous === state) return
+    if (state.outcome && !previous.outcome) uiSounds.play('back')
+    else if (state.exitOpen !== previous.exitOpen) uiSounds.play(state.exitOpen ? 'open' : 'close')
+    else if (state.feedback === 'success' && previous.feedback !== 'success') uiSounds.play('success')
+    else if (state.feedback === 'retry' && (previous.feedback !== 'retry' || state.lastInput !== previous.lastInput)) uiSounds.play('error')
+    else if (state.phase === 'practice' && previous.phase !== 'practice') uiSounds.play('select')
+    else if (isMenu && state.choice !== previous.choice) uiSounds.play('focus')
+  }, [isMenu, state])
 
   useEffect(() => {
     // Android emits a custom remote notification AND a bubbling keyboard event.

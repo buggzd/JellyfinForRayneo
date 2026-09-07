@@ -1,4 +1,6 @@
-import { Check, Palette, Subtitles } from 'lucide-react'
+import { Check, Palette, Subtitles, Volume2 } from 'lucide-react'
+import { useState } from 'react'
+import { uiSounds } from './uiSounds'
 import type { UiTheme } from '../../SharedUI/theme.mjs'
 import { SUBTITLE_SIZES, subtitleFontSize, type SubtitleSize } from '../../SharedUI/subtitles.mjs'
 import './glassesSettings.css'
@@ -27,6 +29,14 @@ export default function GlassesSettings({ theme, subtitleSize, onThemeChange, on
   onThemeChange: (theme: UiTheme) => void
   onSubtitleSizeChange: (size: SubtitleSize) => void
 }) {
+  const [soundsEnabled, setSoundsEnabled] = useState(uiSounds.isEnabled)
+  const [soundSaveFailed, setSoundSaveFailed] = useState(false)
+  const toggleSounds = () => {
+    const enabled = !soundsEnabled
+    setSoundSaveFailed(!uiSounds.setEnabled(enabled))
+    setSoundsEnabled(enabled)
+    if (enabled) uiSounds.play('toggle-on')
+  }
   return (
     <>
       <header className="glasses-settings-heading">
@@ -58,6 +68,16 @@ export default function GlassesSettings({ theme, subtitleSize, onThemeChange, on
           </div>
           <SubtitleSizeOptions value={subtitleSize} onChange={onSubtitleSizeChange} />
           <p className="subtitle-size-note">选择后应用于播放字幕。已固定在视频画面里的字幕不受此设置影响。</p>
+        </section>
+        <section className="glasses-setting glasses-sound-setting glass-panel" aria-labelledby="glasses-sound-heading">
+          <header><Volume2 size={24} /><div><h2 id="glasses-sound-heading">UI 音效</h2>
+            <p id="glasses-sound-description">{soundSaveFailed ? '当前选择已生效，但未能保存，重启后请重新设置。' : '眼镜端操作提示音，不影响影片声音。'}</p>
+          </div></header>
+          <button type="button" className="glasses-sound-toggle" role="switch" data-focusable="true"
+            data-ui-sound="none" aria-checked={soundsEnabled} aria-labelledby="glasses-sound-heading"
+            aria-describedby="glasses-sound-description" onClick={toggleSounds}>
+            <span>{soundsEnabled ? '已开启' : '已关闭'}</span><i aria-hidden="true"><b /></i>
+          </button>
         </section>
       </div>
     </>

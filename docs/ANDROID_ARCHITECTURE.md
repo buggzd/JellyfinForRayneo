@@ -217,6 +217,21 @@ Sizing applies to local text subtitles; burned-in/bitmap subtitles already in
 the video cannot be resized by this preference. Logout preserves both appearance
 preferences, and standalone previews persist only their dedicated preference keys.
 
+Glasses UI sounds are a separate, glasses-only localStorage preference
+(`rayneo.glasses.ui-sounds.v1`, exact `off` disables, otherwise enabled).
+`UiSoundPlayer` preloads a bounded pool of local MORI PCM clips in the existing
+glasses document, with at most one UI clip playing at a time. Repeated cues are
+throttled; navigation/enter/back use only the keyboard/click path, while volume
+uses the existing remote notification. Initial/restored focus is silent.
+Mute, document hiding and page teardown stop pending/active UI audio; failed
+playback has no retry queue. Re-enabling plays one confirmation; disabling is
+immediately silent. Storage failure applies the choice in memory and is shown
+in settings. The phone has no sound setting, player, or new bridge message.
+This preference survives logout and renderer recreation, independently of native
+appearance preferences and the phone's reset action. UI clips neither control
+nor duplicate the single video soundtrack or Jellyfin reporting stream; stereo
+draws the same document twice and never creates a second sound player.
+
 Phone wallpaper is a separate private JPEG owned by `CompanionBackground`, not
 a session or glasses preference. A system single-image picker grants temporary
 access to a `content` URI without storage permissions. One bounded worker reads
@@ -506,6 +521,7 @@ minimum device regression set for any device-facing change.
 | Liquid glass transparency | Default/custom wallpaper, 0/88/100%, mixed dark/light photos, expanded settings, scrolling navigation, rapid edits, reload, theme switches, reset and account changes | Card/nav fill follows the saved value without fading text; local text color accounts for stacked glass; the solid touch key covers the navigation rim; reset restores 88 and glasses/video/black remote remain unchanged |
 | Glasses settings and subtitle size | Enter/exit glasses Settings, both themes and four sizes, phone/glasses edits, paused/direct/HLS playback, text versus burned-in subtitles, cold launch/logout/reset in 2D and SBS | One focus returns to Settings; both surfaces acknowledge the same saved preference; playback uses the chosen text size with no font controls in player menus, duplicate video or reporting |
 | Remote tutorial | First ready catalog, skip/relaunch, six phone gestures, wrong/rapid input, pause/resume/exit, sidebar replay, logout, 2D/SBS switch and renderer recovery | Each real gesture advances once; exactly one focus stays inside practice/dialog; completion or skipping is remembered; no media playback or background navigation; SVG motion and text remain readable in both eyes |
+| Glasses UI sounds | Direction/confirm/back, boundary, panels, volume, tutorial and feedback; mute/unmute during a cue; cold launch, logout, detach/reattach, renderer recovery, both themes and display modes, direct/HLS playback | Each gesture triggers at most one immediate cue, no queued/overlapping UI clips; mute persists and stops active/pending cues; no startup/restoration cue or phone UI sounds; video soundtrack/volume/reporting are unchanged and stereo does not duplicate cues |
 | Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, text and bitmap subtitle | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |
 | Single-instance invariants | Mirror and stereo during representative playback | One glasses WebView, one HTML `<video>`, one audio stream, and one Jellyfin reporting stream remain active |
 | Renderer recovery | Kill or crash the glasses WebView renderer during browse and playback | The WebView is rebuilt, session bootstrap is republished, and the phone receives a safe state |

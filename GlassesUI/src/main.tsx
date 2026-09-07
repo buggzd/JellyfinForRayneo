@@ -5,6 +5,10 @@ import './styles.css'
 import '../../SharedUI/simpleUI.css'
 import './simpleUI.css'
 import { applyUiTheme, readPreviewTheme } from '../../SharedUI/theme.mjs'
+import { installUiSounds } from './uiSounds'
+
+const uninstallUiSounds = installUiSounds()
+if (import.meta.hot) import.meta.hot.dispose(uninstallUiSounds)
 
 async function start() {
   try {
