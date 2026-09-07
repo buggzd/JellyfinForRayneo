@@ -2,26 +2,33 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { applyUiTheme, normalizeUiTheme, readPreviewTheme, savePreviewTheme } from '../../SharedUI/theme.mjs'
 import { suspendHiddenAnimations } from '../../SharedUI/hiddenAnimations.mjs'
 import { Toast, usePresence } from './feedback'
+import { usePhoneBackground } from './phoneBackground'
+import { isTouchpadBackground, normalizeTouchpadBackground, readPreviewTouchpadBackground, savePreviewTouchpadBackground } from './touchpadBackground'
 import {
   ArrowLeft,
   ArrowRight,
   Box,
+  BookOpen,
   Check,
   ChevronRight,
-  CircleHelp,
+  ChevronDown,
   Copy,
   ExternalLink,
   Eye,
   EyeOff,
   Glasses,
+  Github,
+  ImagePlus,
   KeyRound,
   Link2,
   LoaderCircle,
   Info,
   LockKeyhole,
   Monitor,
+  MessageSquare,
   MoreHorizontal,
   Plus,
+  Palette,
   Radar,
   Radio,
   RefreshCw,
@@ -32,9 +39,9 @@ import {
   Settings2,
   Share2,
   ShieldCheck,
-  Sparkles,
   UserRound,
   Trash2,
+  Touchpad,
   Vibrate,
   Wifi,
   X,
@@ -178,6 +185,10 @@ function App() {
     ? normalizeUiTheme(parseNativePayload(callNative('getState'))?.uiTheme)
     : readPreviewTheme())
   const simpleUi = uiTheme === 'simpleUI'
+  const [touchpadPreference, setTouchpadPreference] = useState(() => isNative
+    ? parseNativePayload(callNative('getState'))?.touchpadBackground
+    : readPreviewTouchpadBackground())
+  const touchpadBackground = normalizeTouchpadBackground(touchpadPreference, uiTheme)
   useLayoutEffect(() => { applyUiTheme(uiTheme) }, [uiTheme])
   const [session, setSession] = useStoredState('jellyfin-rayneo-session', null, !isNative)
   const [demoAccounts, setDemoAccounts] = useState(() => {
@@ -198,6 +209,13 @@ function App() {
   const [displayMode, setDisplayMode] = useStoredState('jellyfin-rayneo-display', 'stereo')
   const [haptics, setHaptics] = useStoredState('jellyfin-rayneo-haptics', true)
   const [screen, setScreen] = useState(() => (!isNative && session ? 'home' : 'connect'))
+  const blackTouchpad = screen === 'touchpad' && touchpadBackground === 'black'
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    if (screen === 'touchpad') root.dataset.touchpadBackground = touchpadBackground
+    else delete root.dataset.touchpadBackground
+    return () => { delete root.dataset.touchpadBackground }
+  }, [screen, touchpadBackground])
   const [selectedServer, setSelectedServer] = useState(DEMO_SERVERS[0])
   const [servers, setServers] = useState(() => (isNative ? [] : DEMO_SERVERS))
   const [authMode, setAuthMode] = useState('password')
@@ -253,6 +271,8 @@ function App() {
     toastTimer.current = window.setTimeout(() => setToast(''), tone === 'error' ? 4000 : 2400)
   }
 
+  const background = usePhoneBackground(nativeState, notify)
+
   const go = (next) => {
     window.scrollTo({ top: 0, behavior: 'instant' })
     if (next === 'touchpad') setToast('')
@@ -304,6 +324,7 @@ function App() {
 
       setNativeState(next)
       setUiTheme(normalizeUiTheme(next.uiTheme))
+      setTouchpadPreference(next.touchpadBackground)
       setDisplayMode(next.displayMode === 'stereo_screen' ? 'stereo' : 'mirror')
       // Ignore an older acknowledgement while the latest slider/button edit is still in flight.
       if (validStereoScreen(next.stereoScreen)
@@ -502,6 +523,15 @@ function App() {
     }
   }
 
+  const changeTouchpadBackground = (value) => {
+    if (!isTouchpadBackground(value)) return
+    if (isNative) callNative('selectTouchpadBackground', value)
+    else {
+      setTouchpadPreference(value)
+      savePreviewTouchpadBackground(value)
+    }
+  }
+
   const changeStereoScreen = (patch) => {
     const next = { ...stereoScreenRef.current, ...patch }
     if (!validStereoScreen(next) || sameStereoScreen(next, stereoScreenRef.current)) return
@@ -530,8 +560,10 @@ function App() {
     go('touchpad')
   }
 
-  const resetPreferences = () => {
+  const resetPreferences = async () => {
+    if (background.busy || !(await background.clear())) return
     changeUiTheme('liquid-glass')
+    changeTouchpadBackground('texture')
     changeStereoTestPattern(false)
     changeStereoScreen(DEFAULT_STEREO_SCREEN)
     changeDisplayMode('mirror')
@@ -597,14 +629,15 @@ function App() {
   }
 
   return (
-    <div className={`prototype-shell ${screen === 'touchpad' ? 'is-touchpad' : ''} ${isNative ? 'is-native' : ''}`}>
-      {!simpleUi && <AmbientBackdrop dark={screen === 'touchpad'} />}
+    <div className={`prototype-shell ${screen === 'touchpad' ? 'is-touchpad' : ''} ${isNative ? 'is-native' : ''} ${!simpleUi && background.url && screen !== 'touchpad' ? 'has-custom-background' : ''}`}>
+      {!simpleUi && !blackTouchpad && <AmbientBackdrop dark={screen === 'touchpad'} background={background.url} />}
       <main
         className="phone-stage"
-        onPointerMove={simpleUi ? undefined : moveButtonOptics}
-        onPointerOut={simpleUi ? undefined : resetButtonOptics}
+        onPointerMove={simpleUi || blackTouchpad ? undefined : moveButtonOptics}
+        onPointerOut={simpleUi || blackTouchpad ? undefined : resetButtonOptics}
       >
-        {!simpleUi && <GlassOptics />}
+        {!simpleUi && !blackTouchpad && <GlassOptics />}
+        <input ref={background.input} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={background.changeFile} />
         {screen !== 'touchpad' && <StatusBar />}
 
         <div className="screen-stack" inert={manualOpen || Boolean(pendingRemoval)}>
@@ -646,7 +679,6 @@ function App() {
 
           {screen === 'home' && (
             <HomeScreen
-              simpleUi={simpleUi}
               session={session}
               server={selectedServer}
               onTouchpad={openTouchpad}
@@ -661,7 +693,10 @@ function App() {
           {screen === 'settings' && (
             <SettingsScreen
               uiTheme={uiTheme}
+              background={background}
               onUiThemeChange={changeUiTheme}
+              touchpadBackground={touchpadBackground}
+              onTouchpadBackgroundChange={changeTouchpadBackground}
               session={session}
               server={selectedServer}
               displayMode={displayMode}
@@ -674,14 +709,12 @@ function App() {
               haptics={haptics}
               setHaptics={setHaptics}
               onChangeAccount={() => go('accounts')}
-              onChangeServer={() => go('accounts')}
               onReset={resetPreferences}
               onShareDiagnostics={() => {
                 if (isNative) callNative('shareDiagnostics')
                 else notify('原生应用会打开系统分享面板')
               }}
               nativeState={nativeState}
-              notify={notify}
             />
           )}
 
@@ -699,6 +732,7 @@ function App() {
           {screen === 'touchpad' && (
             <TouchpadScreen
               simpleUi={simpleUi}
+              pureBlack={blackTouchpad}
               displayMode={displayMode}
               haptics={haptics}
               playback={nativeState?.playback}
@@ -766,7 +800,15 @@ function GlassOptics() {
   )
 }
 
-function AmbientBackdrop({ dark }) {
+function AmbientBackdrop({ dark, background }) {
+  if (background && !dark) {
+    return (
+      <div className="ambient ambient--custom" aria-hidden="true">
+        <img src={background} alt="" />
+        <div className="ambient__veil" />
+      </div>
+    )
+  }
   return (
     <div className={`ambient ${dark ? 'ambient--dark' : ''}`} aria-hidden="true">
       <div className="ambient__wash" />
@@ -1170,7 +1212,6 @@ function QuickConnect({
 }
 
 function HomeScreen({
-  simpleUi,
   session,
   server,
   onTouchpad,
@@ -1218,8 +1259,6 @@ function HomeScreen({
       </div>
 
       <div className="device-hero glass-panel">
-        {!simpleUi && <img src={assetUrl('luma-device-card-light.png')} alt="" />}
-        <div className="device-hero__mist" />
         <div className="device-hero__head">
           <span className={`connected-pill ${connected ? '' : 'is-offline'}`}><i /> {connected ? '眼镜已连接' : '等待连接眼镜'}</span>
           <button onClick={() => notify(deviceState?.displayMessage || 'RayNeo Air 3S · USB-C 空间显示')} aria-label="设备详情"><MoreHorizontal size={19} /></button>
@@ -1336,7 +1375,10 @@ function ThemeSelector({ value, onChange }) {
 
 function SettingsScreen({
   uiTheme,
+  background,
   onUiThemeChange,
+  touchpadBackground,
+  onTouchpadBackgroundChange,
   session,
   server,
   displayMode,
@@ -1349,54 +1391,60 @@ function SettingsScreen({
   haptics,
   setHaptics,
   onChangeAccount,
-  onChangeServer,
   onReset,
   onShareDiagnostics,
   nativeState,
-  notify,
 }) {
   const activeServer = session?.server ?? server
   const username = session?.username ?? nativeState?.username ?? 'Jellyfin'
   const sessionSaved = session?.saved ?? nativeState?.sessionSaved ?? true
+  const version = nativeState?.appVersionName || __APP_VERSION__
+  const versionCode = nativeState?.appVersionCode || __APP_VERSION_CODE__
 
   return (
     <section className="screen settings-screen with-nav">
       <header className="settings-header">
         <div>
-          <span className="eyebrow">PREFERENCES</span>
-          <h1>连接与偏好</h1>
+          <span className="eyebrow">MAKE IT YOURS</span>
+          <h1>设置</h1>
+          <p>你的设备，你的观影方式。</p>
         </div>
-        <button className="icon-button glass-soft" onClick={() => notify('偏好会自动保存；眼镜输出状态以页面提示为准')} aria-label="设置说明">
-          <CircleHelp size={20} />
-        </button>
+        <span className="settings-header__mark glass-soft" aria-hidden="true"><Settings2 size={23} /></span>
       </header>
 
-      <div className="account-card glass-panel">
+      <button className="account-card glass-panel settings-account" onClick={onChangeAccount} aria-label="管理服务器与账号">
         <div className="account-avatar">{profileInitials(username)}<i /></div>
         <div className="account-card__copy">
-          <small>JELLYFIN ACCOUNT</small>
+          <small>服务器与账号</small>
           <strong>{username}</strong>
-          <span><i /> 已登录 · {sessionSaved ? '会话已保存' : '仅本次运行'}</span>
+          <span>{activeServer?.name ?? 'Jellyfin 媒体库'} · {sessionSaved ? '登录已保存' : '仅本次运行'}</span>
         </div>
-        <button onClick={onChangeAccount}>管理</button>
-      </div>
+        <ChevronRight size={18} className="settings-account__arrow" />
+      </button>
 
-      <SettingsGroup title="媒体服务器">
-        <button className="setting-row" onClick={onChangeServer}>
-          <span className="setting-row__icon blue"><Router size={19} /></span>
-          <span className="setting-row__copy">
-            <strong>{activeServer?.name ?? 'Jellyfin 媒体库'}</strong>
-            <small>{activeServer?.host ?? '尚未选择服务器'}</small>
-          </span>
-          <span className="setting-action">管理 <ChevronRight size={15} /></span>
+      <SettingsGroup title="外观与交互">
+        <SettingsDisclosure icon={Palette} title="界面外观" detail="主题风格与手机背景" value={uiTheme === 'simpleUI' ? 'simpleUI' : 'Liquid UI'}>
+          <ThemeSelector value={uiTheme} onChange={onUiThemeChange} />
+          {uiTheme === 'liquid-glass' && <BackgroundPicker background={background} />}
+        </SettingsDisclosure>
+        <SettingsDisclosure icon={Touchpad} title="遥控器背景" detail="纹理氛围或 OLED 纯黑"
+          value={touchpadBackground === 'black' ? '纯黑' : '纹理'}>
+          <TouchpadBackgroundSelector value={touchpadBackground} onChange={onTouchpadBackgroundChange} />
+        </SettingsDisclosure>
+        <button className="setting-row" role="switch" aria-checked={haptics} onClick={() => {
+          const next = !haptics
+          setHaptics(next)
+          if (next) callNative('previewHaptic')
+        }}>
+          <span className="setting-row__icon mint"><Vibrate size={19} /></span>
+          <span className="setting-row__copy"><strong>轻触震动</strong><small>触控板手势完成时的短促反馈</small></span>
+          <Toggle checked={haptics} />
         </button>
       </SettingsGroup>
 
-      <SettingsGroup title="界面风格">
-        <ThemeSelector value={uiTheme} onChange={onUiThemeChange} />
-      </SettingsGroup>
-
-      <SettingsGroup title="显示">
+      <SettingsGroup title="眼镜显示">
+        <SettingsDisclosure icon={Glasses} title="画面输出" detail="显示模式、银幕远近与大小"
+          value={displayMode === 'stereo' ? '虚拟银幕' : '镜像 2D'} onClose={() => onStereoTestPatternChange(false)}>
         <div className="settings-mode-wrap">
           <ModeSelector value={displayMode} onChange={setDisplayMode} />
           {isNative
@@ -1438,50 +1486,113 @@ function SettingsScreen({
             </div>
           )}
         </div>
+        </SettingsDisclosure>
       </SettingsGroup>
 
-      <SettingsGroup title="触控反馈">
-        <button className="setting-row" role="switch" aria-checked={haptics} onClick={() => {
-          setHaptics((value) => {
-            const next = !value
-            if (next) callNative('previewHaptic')
-            return next
-          })
-        }}>
-          <span className="setting-row__icon mint"><Vibrate size={19} /></span>
+      <SettingsGroup title="关于与帮助">
+        <div className="setting-row setting-row--static">
+          <span className="setting-row__icon pearl"><Info size={19} /></span>
           <span className="setting-row__copy">
-            <strong>轻触震动</strong>
-            <small>手势完成时给出短促反馈</small>
+            <strong>当前版本</strong>
+            <small>Jellyfin for RayNeo{nativeState?.appVersionName ? '' : ' · 浏览器预览'}</small>
           </span>
-          <Toggle checked={haptics} />
-        </button>
-        <div className="setting-row">
-          <span className="setting-row__icon pearl"><Sparkles size={19} /></span>
-          <span className="setting-row__copy">
-            <strong>微光反馈</strong>
-            <small>跟随手指的低亮度光点</small>
-          </span>
-          <span className="setting-value">柔和</span>
+          <span className="app-version"><strong>{version}</strong><small>Build {versionCode}</small></span>
         </div>
-      </SettingsGroup>
-
-      <SettingsGroup title="诊断">
+        <ProjectSettingLink page="project" icon={Github} title="项目地址" detail="GitHub · 源码与最新动态" />
+        <ProjectSettingLink page="issues" icon={MessageSquare} title="反馈问题" detail="提交 Issue，或查看已有反馈" />
+        <ProjectSettingLink page="guide" icon={BookOpen} title="使用指南" detail="连接、操作与常见问题" />
         <button className="setting-row" onClick={onShareDiagnostics}>
           <span className="setting-row__icon blue"><Share2 size={19} /></span>
           <span className="setting-row__copy">
             <strong>分享诊断日志</strong>
-            <small>已脱敏，可一键分享到 QQ 等应用</small>
+            <small>导出脱敏日志，帮助排查问题</small>
           </span>
-          <span className="setting-action">分享 <ChevronRight size={15} /></span>
+          <ChevronRight size={16} className="setting-chevron" />
         </button>
       </SettingsGroup>
 
-      <button className="reset-button" onClick={onReset}>
+      <button className="reset-button" disabled={background.busy} onClick={onReset}>
         <RotateCcw size={16} /> 恢复默认偏好
       </button>
 
-      <p className="version-copy">JELLYFIN FOR RAYNEO · COMPANION</p>
+      <p className="settings-footer">Jellyfin for RayNeo<span>开源第三方客户端 · MIT License</span></p>
     </section>
+  )
+}
+
+function SettingsDisclosure({ icon: Icon, title, detail, value, onClose, children }) {
+  return (
+    <details className="settings-disclosure" onToggle={(event) => { if (!event.currentTarget.open) onClose?.() }}>
+      <summary className="setting-row">
+        <span className="setting-row__icon blue"><Icon size={19} /></span>
+        <span className="setting-row__copy"><strong>{title}</strong><small>{detail}</small></span>
+        <span className="setting-current">{value}<ChevronDown size={16} /></span>
+      </summary>
+      <div className="settings-disclosure__content">{children}</div>
+    </details>
+  )
+}
+
+function TouchpadBackgroundSelector({ value, onChange }) {
+  return (
+    <div className="touchpad-background-selector">
+      <div className="touchpad-background-options" role="group" aria-label="遥控器背景">
+        {[
+          { id: 'texture', title: '纹理', detail: '柔和暗纹与触摸微光' },
+          { id: 'black', title: '纯黑', detail: '适合 OLED 屏幕' },
+        ].map((option) => (
+          <button key={option.id} type="button" aria-pressed={value === option.id} onClick={() => onChange(option.id)}>
+            <span className={`touchpad-background-preview is-${option.id}`} aria-hidden="true"><i /><span>轻触 · 滑动</span></span>
+            <span className="touchpad-background-option__title">{option.title}<span className="radio-check">{value === option.id && <Check size={10} />}</span></span>
+            <small>{option.detail}</small>
+          </button>
+        ))}
+      </div>
+      <p>纯黑关闭背景纹理与触摸光晕，保留操作提示和震动反馈。</p>
+    </div>
+  )
+}
+
+function BackgroundPicker({ background }) {
+  return (
+    <div className="background-picker" aria-busy={background.busy}>
+      <div className="background-picker__heading"><strong>手机背景</strong><span>LIQUID UI</span></div>
+      <div className="background-picker__body">
+        <div className={`background-preview ${background.url ? 'has-image' : ''}`} aria-hidden="true">
+          {background.url && <img src={background.url} alt="" />}
+          <i /><i /><i />
+        </div>
+        <div className="background-picker__copy">
+          <strong>{background.url ? '自定义背景' : '默认冰蓝'}</strong>
+          <p>换一张喜欢的图片，让玻璃映出你的色彩。</p>
+          <button className="background-choose" disabled={background.busy} onClick={background.choose}>
+            {background.busy ? <LoaderCircle className="is-spinning" size={15} /> : <ImagePlus size={15} />}
+            {background.busy ? '正在处理…' : background.url ? '更换图片' : '选择图片'}
+          </button>
+        </div>
+      </div>
+      <div className="background-picker__footer">
+        <p>图片仅保存在本机，用于 Liquid 手机界面。</p>
+        {background.url && <button disabled={background.busy} onClick={background.clear}>恢复默认背景</button>}
+      </div>
+    </div>
+  )
+}
+
+function ProjectSettingLink({ page, icon: Icon, title, detail }) {
+  const root = 'https://github.com/buggzd/JellyfinForRayneo'
+  const url = { project: root, issues: `${root}/issues`, guide: `${root}/blob/main/docs/USER_GUIDE.md` }[page]
+  return (
+    <a className="setting-row" href={url} target="_blank" rel="noopener noreferrer" onClick={(event) => {
+      if (typeof window.JellyfinNative?.openProjectPage === 'function') {
+        event.preventDefault()
+        callNative('openProjectPage', page)
+      }
+    }}>
+      <span className="setting-row__icon pearl"><Icon size={19} /></span>
+      <span className="setting-row__copy"><strong>{title}</strong><small>{detail}</small></span>
+      <ExternalLink size={15} className="setting-chevron" />
+    </a>
   )
 }
 
@@ -1559,9 +1670,9 @@ function RemoveAccountDialog({ account, onCancel, onConfirm }) {
 
 function SettingsGroup({ title, children }) {
   return (
-    <section className="settings-group glass-panel">
+    <section className="settings-group">
       <h2>{title}</h2>
-      <div>{children}</div>
+      <div className="settings-group__body glass-panel">{children}</div>
     </section>
   )
 }
@@ -1591,6 +1702,7 @@ function BottomNav({ active, onHome, onTouchpad, onSettings }) {
 
 function TouchpadScreen({
   simpleUi,
+  pureBlack,
   displayMode,
   haptics,
   playback,
@@ -1644,6 +1756,7 @@ function TouchpadScreen({
   }
 
   const requestGlowAnimation = () => {
+    if (pureBlack) return
     if (!glowFrameRef.current) {
       glowFrameRef.current = window.requestAnimationFrame(animateGlow)
     }
@@ -1666,7 +1779,7 @@ function TouchpadScreen({
       window.clearTimeout(hideTimer.current)
       window.clearTimeout(tapTimer.current)
     }
-  }, [])
+  }, [pureBlack])
 
   useEffect(() => {
     setSearchValue(searchActive ? normalizeRemoteSearchQuery(searchQuery) : '')
@@ -1698,6 +1811,7 @@ function TouchpadScreen({
   }
 
   const updateTarget = (event) => {
+    if (pureBlack) return
     const rect = surfaceRectRef.current || surfaceRef.current.getBoundingClientRect()
     surfaceRectRef.current = rect
     point.current.tx = ((event.clientX - rect.left) / rect.width) * 100
@@ -1805,9 +1919,9 @@ function TouchpadScreen({
         setPressed(false)
       }}
     >
-      {!simpleUi && <img className="touchpad-texture" src={assetUrl('luma-touchpad-void.png')} alt="" draggable="false" />}
-      <div ref={glowRef} className="finger-glow"><i /></div>
-      <div className="touchpad-grain" />
+      {!pureBlack && <img className="touchpad-texture" src={assetUrl('luma-touchpad-void.png')} alt="" draggable="false" />}
+      {!pureBlack && <div ref={glowRef} className="finger-glow"><i /></div>}
+      {!simpleUi && !pureBlack && <div className="touchpad-grain" />}
 
       <header className="touchpad-top">
         <button
@@ -1901,7 +2015,7 @@ function TouchpadScreen({
       </div>
 
       <div ref={introRef} className={`touchpad-intro ${introVisible && !searchActive ? 'is-visible' : ''}`}>
-        <span className="touchpad-intro__mark"><i /></span>
+        {!pureBlack && <span className="touchpad-intro__mark"><i /></span>}
         <strong>触控已就绪</strong>
         <small>在任意位置开始</small>
       </div>

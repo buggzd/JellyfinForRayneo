@@ -1,0 +1,89 @@
+/* Settings keep the overview compact; detailed controls expand in place. */
+.settings-screen { padding-top: 24px; }
+.settings-header { margin-bottom: 22px; }
+.settings-header h1 { margin-top: 7px; font-size: 30px; letter-spacing: -.035em; }
+.settings-header p { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.settings-header__mark { display: grid; width: 46px; height: 46px; place-items: center; border-radius: 17px; color: var(--blue-deep); }
+.settings-account { width: 100%; padding: 17px 16px; text-align: left; cursor: pointer; }
+.settings-account .account-card__copy { min-width: 0; gap: 3px; }
+.settings-account .account-card__copy small { font-size: 10px; letter-spacing: .02em; }
+.settings-account .account-card__copy strong { font-size: 19px; overflow-wrap: anywhere; }
+.settings-account .account-card__copy span { display: block; overflow: hidden; font-size: 11px; line-height: 1.7; text-overflow: ellipsis; white-space: nowrap; }
+.settings-account__arrow { flex-shrink: 0; color: var(--muted); }
+.settings-group { margin-top: 23px; overflow: visible; border-radius: 0; }
+.settings-group > h2 { margin: 0 0 8px; padding: 0 5px; border: 0; background: transparent; color: var(--muted); font-size: 11px; letter-spacing: .07em; }
+.settings-group__body { overflow: hidden; border-radius: 21px; }
+.settings-screen .setting-row { min-height: 68px; padding: 13px 15px; gap: 12px; color: var(--ink); text-decoration: none; }
+.settings-screen .setting-row__copy strong { font-size: 13px; font-weight: 600; }
+.settings-screen .setting-row__copy small { margin-top: 4px; font-size: 11px; line-height: 1.6; white-space: normal; overflow-wrap: anywhere; }
+.setting-row--static { cursor: default; }
+.setting-chevron { flex-shrink: 0; color: var(--muted); }
+.setting-current { display: flex; flex-shrink: 0; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.setting-current svg { transition: transform 180ms ease; }
+.settings-disclosure > summary { list-style: none; }
+.settings-disclosure > summary::-webkit-details-marker { display: none; }
+.settings-disclosure[open] > summary .setting-current svg { transform: rotate(180deg); }
+.settings-disclosure + .setting-row { border-top: 1px solid var(--line); }
+.settings-disclosure + .settings-disclosure { border-top: 1px solid var(--line); }
+.settings-disclosure__content { padding: 2px 0 14px; }
+.settings-screen :is(button, a, summary):focus-visible { outline: 2px solid var(--blue-deep); outline-offset: -3px; border-radius: 12px; }
+.settings-screen .theme-selector { padding: 0 15px 6px; }
+.settings-screen .theme-selector__intro { margin-bottom: 12px; font-size: 11px; }
+.settings-screen .theme-preview { height: 80px; }
+.settings-screen .theme-selector__note { margin-top: 10px; }
+.settings-screen .settings-mode-wrap { padding: 0 14px; }
+.settings-screen .reset-button { min-height: 48px; margin-top: 19px; font-size: 12px; }
+.settings-screen button:disabled { opacity: .5; cursor: default; }
+.app-version { display: flex; flex: 0 0 auto; max-width: 43%; flex-direction: column; align-items: flex-end; gap: 4px; text-align: right; }
+.app-version strong { color: var(--blue-deep); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.app-version small { color: var(--muted); font-size: 10px; }
+.settings-footer { display: flex; margin: 12px 0 5px; flex-direction: column; gap: 5px; color: var(--muted); font-size: 11px; text-align: center; }
+.settings-footer span { font-size: 10px; }
+
+.touchpad-background-selector { padding: 0 15px; }
+.touchpad-background-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.touchpad-background-options > button { min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 15px; background: var(--glass); text-align: left; cursor: pointer; }
+.touchpad-background-options > button[aria-pressed="true"] { border-color: var(--blue-deep); }
+.touchpad-background-preview { display: flex; height: 83px; flex-direction: column; align-items: center; justify-content: center; gap: 14px; overflow: hidden; border-radius: 9px; background: #000; color: #7c8e95; }
+.touchpad-background-preview.is-texture { background: url('/art/luma-touchpad-void.png') center / cover, #010203; }
+.touchpad-background-preview > i { width: 4px; height: 4px; border-radius: 50%; background: #adbfc4; }
+.touchpad-background-preview.is-texture > i { box-shadow: 0 0 17px 7px #6ce4f740; }
+.touchpad-background-preview > span { font-size: 9px; letter-spacing: .12em; }
+.touchpad-background-option__title { display: flex; margin: 10px 1px 5px; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; font-weight: 600; }
+.touchpad-background-options .radio-check { position: static; width: 16px; height: 16px; flex: 0 0 auto; }
+.touchpad-background-options [aria-pressed="true"] .radio-check { color: white; background: var(--blue-deep); border-color: var(--blue-deep); }
+.touchpad-background-options button > small { display: block; margin: 0 1px 3px; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.touchpad-background-selector > p { margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.8; }
+
+.background-picker { margin: 9px 15px 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.background-picker__heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.background-picker__heading > strong { font-size: 13px; font-weight: 600; }
+.background-picker__heading > span { color: var(--muted); font-size: 9px; letter-spacing: .08em; }
+.background-picker__body { display: flex; gap: 16px; margin-top: 13px; align-items: center; }
+.background-preview { position: relative; display: flex; width: 78px; height: 112px; padding: 31px 9px 10px; flex: 0 0 auto; flex-direction: column; justify-content: flex-end; gap: 5px; overflow: hidden; border: 1px solid rgba(255,255,255,.8); border-radius: 12px; background: linear-gradient(140deg, #eefaff, #a6d9e8 52%, #d7f1f8); }
+.background-preview > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.background-preview > i { z-index: 1; display: block; height: 13px; border: 1px solid rgba(255,255,255,.65); border-radius: 4px; background: rgba(248,252,255,.72); }
+.background-preview > i:first-of-type { height: 31px; }
+.background-picker__copy { flex: 1; min-width: 0; }
+.background-picker__copy > strong { font-size: 12px; }
+.background-picker__copy > p { margin: 6px 0 10px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.background-choose { display: inline-flex; min-height: 40px; padding: 9px 12px; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 11px; background: rgba(245,253,255,.6); color: var(--blue-deep); font-size: 12px; cursor: pointer; }
+.background-picker__footer { display: flex; flex-wrap: wrap; margin-top: 9px; align-items: center; justify-content: space-between; gap: 0 8px; }
+.background-picker__footer > p { margin: 5px 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.background-picker__footer > button { min-height: 40px; padding: 8px 0; border: 0; background: transparent; color: var(--blue-deep); font-size: 11px; cursor: pointer; }
+
+/* The photo stays fixed behind the phone, so a long settings page never stretches it. */
+.ambient--custom { background: #dcebf0; }
+.ambient--custom > img { width: 100%; height: 100%; object-fit: cover; }
+.ambient__veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(242,249,252,.72), rgba(237,247,250,.60) 40%, rgba(236,247,251,.70)); }
+.has-custom-background .phone-stage { background: transparent; }
+.home-screen .device-hero { background: linear-gradient(135deg, rgba(255,255,255,.55), rgba(242,252,255,.23)); }
+
+@media (max-width: 360px) {
+  .settings-screen .setting-row { gap: 9px; padding-inline: 12px; }
+  .setting-current { font-size: 10px; gap: 3px; }
+  .settings-screen .setting-row__icon { width: 30px; height: 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .setting-current svg { transition: none; }
+}

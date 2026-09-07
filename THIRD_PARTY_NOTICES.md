@@ -28,6 +28,18 @@ including:
 Transitive packages and exact resolved versions are listed in
 `GlassesUI/package-lock.json` and `CompanionUI/package-lock.json`.
 
+## Android image metadata
+
+AndroidX ExifInterface 1.4.2 — Apache License 2.0 — is used to preserve the
+orientation of imported phone backgrounds. The saved JPEG is resized and
+re-encoded without the original metadata.
+
+- Source and license: <https://android.googlesource.com/platform/frameworks/support/+/androidx-main/exifinterface/>
+- Apache License: <https://www.apache.org/licenses/LICENSE-2.0>
+
+The license text is bundled in `CompanionUI/public/licenses/Apache-2.0.txt`.
+AndroidX annotations and the other transitive dependencies retain their original licenses.
+
 ## Jellyfin
 
 Jellyfin names and trademarks belong to their respective owners. This

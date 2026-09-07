@@ -38,7 +38,7 @@ html,
 body,
 #root {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
   min-height: 100%;
 }
 
@@ -1295,26 +1295,6 @@ button[aria-busy="true"] { opacity: .85; }
   min-height: 0;
   border-radius: 25px;
   box-shadow: 0 12px 30px rgba(51, 106, 133, .09), inset 0 1px 0 rgba(255, 255, 255, .9);
-}
-
-.device-hero > img:not(.device-hero__product) {
-  position: absolute;
-  z-index: 0;
-  inset: -3%;
-  width: 106%;
-  height: 106%;
-  object-fit: cover;
-  filter: saturate(.88) contrast(.94) brightness(1.035);
-  animation: none;
-}
-
-.device-hero__mist {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.14), transparent 52%, rgba(222,245,250,.16)),
-    radial-gradient(circle at 22% 18%, rgba(255,255,255,.26), transparent 35%);
 }
 
 .device-hero__head {

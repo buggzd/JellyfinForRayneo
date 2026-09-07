@@ -12,6 +12,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -74,6 +75,18 @@ final class CompanionWebViewController
         void selectUiTheme(String theme);
 
         @android.webkit.JavascriptInterface
+        void selectTouchpadBackground(String background);
+
+        @android.webkit.JavascriptInterface
+        void chooseCompanionBackground();
+
+        @android.webkit.JavascriptInterface
+        void clearCompanionBackground();
+
+        @android.webkit.JavascriptInterface
+        void openProjectPage(String page);
+
+        @android.webkit.JavascriptInterface
         void setStereoScreen(String payload);
 
         @android.webkit.JavascriptInterface
@@ -101,6 +114,7 @@ final class CompanionWebViewController
     private final Activity activity;
     private final JavascriptBridge javascriptBridge;
     private final StateProvider stateProvider;
+    private final CompanionBackground background;
     private final FrameLayout root;
     private final Runnable recreate = new Runnable()
     {
@@ -123,11 +137,13 @@ final class CompanionWebViewController
     CompanionWebViewController(
             Activity activity,
             JavascriptBridge javascriptBridge,
-            StateProvider stateProvider)
+            StateProvider stateProvider,
+            CompanionBackground background)
     {
         this.activity = activity;
         this.javascriptBridge = javascriptBridge;
         this.stateProvider = stateProvider;
+        this.background = background;
         root = new FrameLayout(activity);
         root.setBackgroundColor(Color.BLACK);
     }
@@ -299,6 +315,17 @@ final class CompanionWebViewController
         webView.addJavascriptInterface(javascriptBridge, "JellyfinNative");
         webView.setWebViewClient(new WebViewClient()
         {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request)
+            {
+                if (request != null && request.getUrl() != null
+                        && CompanionSettingsPolicy.isBackgroundRequest(request.getUrl().toString()))
+                {
+                    return background.open();
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request)
             {

@@ -1,0 +1,31 @@
+/* Loaded after both themes. Opaque zero-RGB surfaces cover the document,
+   viewport edges and all remote panels, including during entry and gestures. */
+:root[data-touchpad-background="black"] {
+  background: #000;
+  color-scheme: dark;
+  overscroll-behavior: none;
+}
+:root[data-touchpad-background="black"] :is(body, #root, .prototype-shell, .phone-stage, .screen-stack, .touchpad-screen) {
+  background: #000;
+  border-color: #000;
+  opacity: 1;
+  animation: none !important;
+  transition: none !important;
+  overscroll-behavior: none;
+}
+:root[data-touchpad-background="black"] *,
+:root[data-touchpad-background="black"] *::before,
+:root[data-touchpad-background="black"] *::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+:root[data-touchpad-background="black"] :is(.touchpad-top > button, .touchpad-playback, .touchpad-search-input, .touchpad-search-input label, .touchpad-search-input button) {
+  background: #000;
+}
+:root[data-touchpad-background="black"] :is(.touch-feedback::before, .touchpad-playback::after) {
+  display: none;
+}
