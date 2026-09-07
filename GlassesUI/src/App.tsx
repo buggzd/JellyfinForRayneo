@@ -1305,7 +1305,6 @@ function SearchPage({
 }
 
 function DetailPage({
-  simpleUi,
   item,
   detail,
   loading,
@@ -1324,7 +1323,6 @@ function DetailPage({
   onRefresh,
   onExit,
 }: {
-  simpleUi: boolean
   item: MediaItem
   detail: DetailSnapshot | null
   loading: boolean
@@ -1353,7 +1351,6 @@ function DetailPage({
   const [expanded, setExpanded] = useState(false)
   const [infoTab, setInfoTab] = useState<'credits' | 'media'>('credits')
   const [detailSection, setDetailSection] = useState<'episodes' | 'similar' | 'clips' | 'details'>('episodes')
-  const [heroActive, setHeroActive] = useState(true)
   const detailPageRef = useRef<HTMLDivElement>(null)
   const appliedEpisodeHint = useRef('')
 
@@ -1408,7 +1405,6 @@ function DetailPage({
 
   const restoreSeriesBackdropOutsideEpisodes = (target: EventTarget | null) => {
     if (!(target instanceof Element)) return
-    setHeroActive(Boolean(target.closest('.detail-hero, .detail-back')))
     if (target.closest('.episode-card')) return
     onPreview(resolvedItem)
   }
@@ -1440,7 +1436,7 @@ function DetailPage({
       <main className="detail-content">
         <FocusButton variant="round" className="detail-back" label="返回" onClick={() => onNavigate('home')}><ArrowLeft size={22} /></FocusButton>
         <section className="detail-hero">
-          {(!simpleUi || heroActive) && <div className="detail-poster-wrap"><ArtFrame item={resolvedItem} className="detail-poster" /></div>}
+          <div className="detail-poster-wrap"><ArtFrame item={resolvedItem} className="detail-poster" /></div>
           <div className="detail-copy">
             <div className="detail-title-lockup">
               <div className="detail-kicker">JELLYFIN · {resolvedItem.sourceType?.toLocaleUpperCase() ?? 'MEDIA'}</div>
@@ -1504,16 +1500,20 @@ function DetailPage({
                 </div>
               </header>
               {loading ? <LoadingCards label="正在读取剧集…" rail /> : <div className="episode-rail">
-                {episodes.map((episode, index) => (
+                {episodes.map((episode, index) => {
+                  const episodeNumber = episode.indexNumber ?? index + 1
+                  const episodeTitle = `${episodeNumber}.${episode.original || episode.title}`
+                  return (
                     <button key={episode.id} type="button" data-focusable="true" data-autofocus={initialEpisodeNumber === episode.indexNumber ? 'true' : undefined} data-episode-number={episode.indexNumber} className="episode-card" onClick={() => onPlay(episode)} onFocus={() => onPreview(episode)}>
                       <ArtFrame item={episode} wide>
-                        <span className="episode-card__number">{String(episode.indexNumber ?? index + 1).padStart(2, '0')}</span>
+                        <span className="episode-card__number">{String(episodeNumber).padStart(2, '0')}</span>
                         <span className="episode-card__play"><Play size={19} fill="currentColor" /></span>
                         <MediaIndicators item={episode} />
                       </ArtFrame>
-                      <span className="episode-card__copy"><strong title={episode.original || episode.title}>{episode.original || episode.title}</strong><small>{episode.duration || episode.subtitle}</small></span>
+                      <span className="episode-card__copy"><strong title={episodeTitle}>{episodeTitle}</strong><small>{episode.duration || episode.subtitle}</small></span>
                     </button>
-                ))}
+                  )
+                })}
               </div>}
             </section>
           )}
@@ -3020,7 +3020,7 @@ export default function App() {
         : jellyfin.seriesIndex.length ? jellyfin.seriesIndex : fallbackSeries
       return <SearchPage series={searchableSeries} indexStatus={jellyfin.seriesIndexStatus} prioritySeriesIds={searchPrioritySeriesIds} query={searchQuery} focusPane={searchPane} keyboardMode={searchKeyboardMode} keyboardFocusId={searchKeyboardFocusId} resultFocusId={searchResultFocusId} phoneKeyboardState={phoneKeyboardState} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onQueryChange={setSearchQuery} onKeyboardModeChange={setSearchKeyboardMode} onKeyboardFocus={(id) => { setSearchPane('keyboard'); setSearchKeyboardFocusId(id) }} onResultFocus={(id) => { setSearchPane('results'); setSearchResultFocusId(id) }} onNavigate={navigateFromMenu} onOpen={openSearchSeries} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     }
-    if (page === 'detail') return <DetailPage key={selected.id} simpleUi={simpleUi} item={selected} detail={detail} loading={detailLoading} error={detailError} initialEpisodeNumber={searchEpisodeHint?.seriesId === selected.id ? searchEpisodeHint.episode : undefined} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigateFromMenu(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? '已加入收藏' : '已取消收藏', 'success'); return saved } catch { showToast('收藏状态更新失败，请重试', 'error'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? '已标记为看过' : '已标记为未看', 'success'); return saved } catch { showToast('观看状态更新失败，请重试', 'error'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
+    if (page === 'detail') return <DetailPage key={selected.id} item={selected} detail={detail} loading={detailLoading} error={detailError} initialEpisodeNumber={searchEpisodeHint?.seriesId === selected.id ? searchEpisodeHint.episode : undefined} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigateFromMenu(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? '已加入收藏' : '已取消收藏', 'success'); return saved } catch { showToast('收藏状态更新失败，请重试', 'error'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? '已标记为看过' : '已标记为未看', 'success'); return saved } catch { showToast('观看状态更新失败，请重试', 'error'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     const request = playback ?? {
       item: selected.canPlay
         ? selected
