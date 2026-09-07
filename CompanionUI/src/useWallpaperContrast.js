@@ -1,5 +1,17 @@
 import { useEffect } from 'react'
 import { wallpaperTextAppearance } from './backgroundContrast.mjs'
+import { DEFAULT_GLASS_TRANSPARENCY, glassSurfaceOpacity } from './liquidAppearance.mjs'
+
+function surfaceBehind(element, transparency) {
+  let layers = 0
+  for (let node = element; node; node = node.parentElement) {
+    if (node.hasAttribute('data-liquid-surface')) layers += 1
+  }
+  const glass = glassSurfaceOpacity(transparency, layers)
+  // Login/form panels retain a fixed light fill; appearance cards share the slider.
+  const form = element?.closest('.server-card, .restore-card, .field, .quick-code, .manual-card, .scan-empty, .saved-accounts-link')
+  return form ? 1 - (1 - glass) * (1 - 0.92) : glass
+}
 
 function textRegions(element, viewport) {
   const regions = []
@@ -21,22 +33,18 @@ function textRegions(element, viewport) {
   return regions
 }
 
-function navigationRegions(element, viewport, regions) {
+function navigationRegions(element, viewport, regions, transparency) {
   const nav = element.closest('.bottom-nav')
   return regions.map((region) => {
     const x = viewport.x + (region.x + region.width / 2) * viewport.width
     const y = viewport.y + (region.y + region.height / 2) * viewport.height
     const underneath = document.elementsFromPoint(x, y).find((node) => !nav.contains(node))
-    // Scrolling content can sit between the fixed wallpaper and clear navigation.
-    // These are the light surfaces defined in wallpaperContrast.css.
-    const panel = underneath?.closest('.settings-group__body, .settings-account, .account-server-card, .accounts-empty, .server-card, .restore-card, .field, .quick-code, .manual-card, .scan-empty, .saved-accounts-link')
-    const clearCard = underneath?.closest('.device-hero, .connection-card')
-    const behind = panel ? 0.92 : clearCard ? 0.12 : 0
-    return { ...region, surface: 1 - (1 - 0.12) * (1 - behind) }
+    const behind = surfaceBehind(underneath, transparency)
+    return { ...region, surface: 1 - (1 - glassSurfaceOpacity(transparency)) * (1 - behind) }
   })
 }
 
-export function useWallpaperContrast(rootRef, background, layout, screenAspect, enabled, viewportSelector) {
+export function useWallpaperContrast(rootRef, background, layout, screenAspect, enabled, viewportSelector, glassTransparency = DEFAULT_GLASS_TRANSPARENCY) {
   const { transparency, ratio, zoom, x, y, textColor } = layout
   useEffect(() => {
     const root = rootRef.current
@@ -53,9 +61,9 @@ export function useWallpaperContrast(rootRef, background, layout, screenAspect, 
         if (element.closest('[data-wallpaper-scope]') !== root) continue
         let regions = textRegions(element, viewport)
         if (!regions.length) continue
-        if (element.dataset.wallpaperText === 'navigation') regions = navigationRegions(element, viewport, regions)
+        if (element.dataset.wallpaperText === 'navigation') regions = navigationRegions(element, viewport, regions, glassTransparency)
         const appearance = wallpaperTextAppearance(background.samples, { transparency, ratio, zoom, x, y, textColor }, screenAspect,
-          regions, element.dataset.wallpaperText === 'glass' ? 0.12 : 0, element.dataset.textTone)
+          regions, surfaceBehind(element, glassTransparency), element.dataset.textTone)
         if (element.dataset.textTone !== appearance.tone) element.dataset.textTone = appearance.tone
         if (element.dataset.textSupport !== String(appearance.support)) element.dataset.textSupport = String(appearance.support)
         painted.add(element)
@@ -84,5 +92,5 @@ export function useWallpaperContrast(rootRef, background, layout, screenAspect, 
         delete element.dataset.textSupport
       }
     }
-  }, [rootRef, background.samples, background.url, transparency, ratio, zoom, x, y, textColor, screenAspect, enabled, viewportSelector])
+  }, [rootRef, background.samples, background.url, transparency, ratio, zoom, x, y, textColor, screenAspect, enabled, viewportSelector, glassTransparency])
 }

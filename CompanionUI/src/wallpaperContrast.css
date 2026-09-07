@@ -1,5 +1,5 @@
-/* Text on the photo, clear cards and navigation adapts locally. Form surfaces
-   keep a predictable light palette, including in the editor. */
+/* Adaptive markers belong to text and transparent controls, never a whole
+   settings group: preview swatches and solid accents retain their own palette. */
 :root[data-ui-theme="liquid-glass"] :is(.has-custom-background, .background-crop-frame) [data-wallpaper-text][data-text-tone] {
   --wallpaper-ink: #0e1f2c;
   --wallpaper-halo: rgba(255,255,255,.92);
@@ -14,16 +14,16 @@
   text-shadow: -.7px 0 var(--wallpaper-halo), .7px 0 var(--wallpaper-halo), 0 -.7px var(--wallpaper-halo), 0 .7px var(--wallpaper-halo), 0 1px 4px var(--wallpaper-halo), 0 0 8px var(--wallpaper-halo);
 }
 :root[data-ui-theme="liquid-glass"] :is(.has-custom-background, .background-crop-frame) [data-wallpaper-text][data-text-tone]
-  :is(h1, h2, h3, p, strong, b, small, em, .eyebrow, li, .device-hero__info span, .subpage-header__title span, .settings-footer span) {
+  :is(h1, h2, h3, p, strong, b, small, em, span, output, .eyebrow, li) {
   color: var(--wallpaper-ink);
   text-shadow: inherit;
 }
-:root[data-ui-theme="liquid-glass"] .has-custom-background :is(.settings-group__body, .settings-account, .account-server-card, .accounts-empty, .server-card, .restore-card, .field, .quick-code, .manual-card, .scan-empty, .saved-accounts-link) {
+:root[data-ui-theme="liquid-glass"] .has-custom-background :is(.server-card, .restore-card, .field, .quick-code, .manual-card, .scan-empty, .saved-accounts-link) {
   --muted: #506575;
   color: #102232;
   background: rgba(248,253,255,.92);
 }
-:root[data-ui-theme="liquid-glass"] .has-custom-background :is(.setting-row__copy small, .account-card__copy small, .account-card__copy span, .server-card__host, .server-card__meta, .muted-icon) { color: #506575; }
+:root[data-ui-theme="liquid-glass"] .has-custom-background :is(.server-card__host, .server-card__meta, .muted-icon) { color: #506575; }
 :root[data-ui-theme="liquid-glass"] .has-custom-background .bottom-nav button[data-text-tone] svg { filter: drop-shadow(0 1px 1px var(--wallpaper-halo)); }
 :root[data-ui-theme="liquid-glass"] .has-custom-background :is(.connected-pill, .profile-button, .settings-header__mark) { background: rgba(248,253,255,.94); }
 

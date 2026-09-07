@@ -7,10 +7,11 @@ import test from 'node:test'
 const source = await readFile(new URL('./harness.js', import.meta.url), 'utf8')
 const settle = () => new Promise(resolve => setImmediate(resolve))
 
-async function harness(storedTheme = null, storedBackground = null) {
+async function harness(storedTheme = null, storedBackground = null, storedTransparency = null) {
   const storage = new Map([
     ['jellyfin-rayneo-preview-theme', storedTheme],
     ['jellyfin-rayneo-preview-touchpad-background', storedBackground],
+    ['jellyfin-rayneo-preview-glass-transparency', storedTransparency],
   ])
   const messages = []
   const elements = new Map()
@@ -47,6 +48,7 @@ async function harness(storedTheme = null, storedBackground = null) {
     bootstrap: () => messages.filter(message => message.type === 'bootstrap').at(-1).payload,
     savedTheme: () => storage.get('jellyfin-rayneo-preview-theme'),
     savedBackground: () => storage.get('jellyfin-rayneo-preview-touchpad-background'),
+    savedTransparency: () => storage.get('jellyfin-rayneo-preview-glass-transparency'),
     bootstrapCount: () => messages.filter(message => message.type === 'bootstrap').length,
   }
 }
@@ -123,6 +125,35 @@ test('remote background persists across themes, reload and logout without republ
   assert.equal(app.state().touchpadBackground, 'texture')
   const restored = await harness('simpleUI', app.savedBackground())
   assert.equal(restored.state().touchpadBackground, 'texture')
+})
+
+test('glass edits save from settings only and leave the account, playback and glasses bootstrap intact', async () => {
+  const app = await harness()
+  app.call('applySession', account())
+  app.call('handlePlaybackState', { state: 'playing', itemId: 'demo-film', positionTicks: 100000000, durationTicks: 600000000 })
+  const before = app.state()
+  const bootstraps = app.bootstrapCount()
+  app.command('screenChanged', 'home')
+  app.command('setCompanionGlassTransparency', '0')
+  assert.equal(app.state().companionGlassTransparency, 88)
+  app.command('screenChanged', 'settings')
+  app.command('setCompanionGlassTransparency', '70')
+  assert.equal(app.state().companionGlassTransparency, 70)
+  assert.equal(app.savedTransparency(), '70')
+  assert.equal(app.bootstrapCount(), bootstraps)
+  assert.equal(app.state().activeSessionId, before.activeSessionId)
+  assert.deepEqual(app.state().playback, before.playback)
+  assert.equal('companionGlassTransparency' in app.bootstrap(), false)
+  for (const invalid of [null, 50, '', ' 50', '50\n', '01', '0.5', '-1', '101', '1e2', 'x'.repeat(65536)]) {
+    app.command('setCompanionGlassTransparency', invalid)
+    assert.equal(app.state().companionGlassTransparency, 70)
+  }
+  app.command('selectUiTheme', 'simpleUI')
+  app.command('clearSession')
+  const restored = await harness('simpleUI', null, app.savedTransparency())
+  assert.equal(restored.state().companionGlassTransparency, 70)
+  const corrupt = await harness(null, null, 'NaN')
+  assert.equal(corrupt.state().companionGlassTransparency, 88)
 })
 
 test('missing or corrupt remote preference preserves each theme default until explicitly chosen', async () => {

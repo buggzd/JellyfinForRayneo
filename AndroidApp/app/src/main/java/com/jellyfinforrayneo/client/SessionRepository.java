@@ -24,6 +24,7 @@ final class SessionRepository
     static final String KEY_UI_THEME = "ui_theme";
     static final String KEY_TOUCHPAD_BACKGROUND = "touchpad_background";
     static final String KEY_COMPANION_BACKGROUND_LAYOUT = "companion_background_layout";
+    static final String KEY_COMPANION_GLASS_TRANSPARENCY = "companion_glass_transparency";
 
     interface Store
     {
@@ -368,6 +369,21 @@ final class SessionRepository
         if (CompanionSettingsPolicy.isTouchpadBackground(background))
         {
             store.putString(KEY_TOUCHPAD_BACKGROUND, background);
+        }
+    }
+
+    int getCompanionGlassTransparency()
+    {
+        Integer value = CompanionSettingsPolicy.parseGlassTransparency(
+                store.getString(KEY_COMPANION_GLASS_TRANSPARENCY, ""));
+        return value == null ? CompanionSettingsPolicy.DEFAULT_GLASS_TRANSPARENCY : value;
+    }
+
+    void setCompanionGlassTransparency(int value)
+    {
+        if (value >= 0 && value <= 100)
+        {
+            store.putString(KEY_COMPANION_GLASS_TRANSPARENCY, Integer.toString(value));
         }
     }
 

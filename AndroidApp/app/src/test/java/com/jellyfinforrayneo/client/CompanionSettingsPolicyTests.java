@@ -17,6 +17,20 @@ import static org.junit.Assert.assertTrue;
 public final class CompanionSettingsPolicyTests
 {
     @Test
+    public void glassTransparency_AcceptsOnlyBoundedWholePercentages()
+    {
+        for (String value : Arrays.asList("0", "1", "50", "88", "99", "100"))
+        {
+            assertEquals(Integer.valueOf(value), CompanionSettingsPolicy.parseGlassTransparency(value));
+        }
+        for (String value : Arrays.asList(null, "", "-1", "101", "0.5", "50.0", "+50", " 50", "50\n", "05",
+                "1e2", "{}", "NaN", new String(new char[65536])))
+        {
+            assertNull(CompanionSettingsPolicy.parseGlassTransparency(value));
+        }
+    }
+
+    @Test
     public void projectLinks_AllowOnlyNamedPublicPages()
     {
         assertEquals("https://github.com/buggzd/JellyfinForRayneo", CompanionSettingsPolicy.projectPage("project"));

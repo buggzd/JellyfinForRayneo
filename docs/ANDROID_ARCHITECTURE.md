@@ -109,6 +109,7 @@ length-limited, and whitelisted before use.
 | `selectTouchpadBackground` | Persist exactly `texture` or `black` for the phone remote only |
 | `chooseCompanionBackground`, `clearCompanionBackground` | Pick/reset one private phone wallpaper from settings; picking is limited to the Liquid theme |
 | `setCompanionBackgroundLayout` | Save bounded crop/transparency metadata for the current image revision from settings; publish phone state only |
+| `setCompanionGlassTransparency` | Save an integer 0–100 glass transparency from settings, independently of wallpaper; publish phone state only |
 | `openProjectPage` | Open only the fixed public project, issue list or guide page in the system browser |
 | `setStereoScreen` | Save a bounded flat-screen disparity/size preference without switching hardware mode |
 | `setStereoTestPattern` | Enable/disable the temporary L/R reference overlay while stereo is applied |
@@ -241,6 +242,16 @@ state; browser builds read the root `version.properties`. External settings link
 accept only exact `project`, `issues` and `guide` identifiers, then launch their
 fixed public HTTPS pages. They never navigate either application WebView away
 from its asset root. Collapsing the display settings ends the eye test overlay.
+
+`companion_glass_transparency` is a separate `SessionRepository` preference (0–100,
+default 88), with no image revision requirement. Its bridge accepts only a bounded
+canonical integer string from settings and publishes `companionGlassTransparency`
+to the phone. The frontend previews slider edits immediately and ignores older
+acknowledgements until the latest value arrives. Device/settings/account cards,
+nested choices and navigation share the white fill; text samples compose the actual
+stacked fill. The central touch key is opaque and above the navigation rim. Theme
+changes, logout and wallpaper removal preserve the value; reset restores 88.
+Neither the glasses bootstrap nor the touchpad uses this preference.
 
 The phone-only `touchpadBackground` state comes from `SessionRepository`'s
 `touchpad_background` preference. Until a valid choice is saved, Liquid uses
@@ -474,6 +485,7 @@ minimum device regression set for any device-facing change.
 | UI themes | Default install, saved simpleUI cold launch, rapid switches during browse/direct play/HLS/tutorial in both 2D and SBS, disconnect/reconnect, renderer recovery, logout, reset preferences | Both surfaces and phone system bars agree; focus, document, video, audio and reporting remain single-instance; theme survives logout/recovery and reset restores liquid-glass; simpleUI has no decorative loops or blur |
 | Phone settings | Import/replace/cancel/reset wallpaper, malformed/oversized files, rotated photos, all crop ratios, zoom/position/opacity extremes, drag, save/cancel/Back, stale revision, cold launch, renderer recovery, theme changes, About links and installed version | Failed imports/cancelled edits retain the image and layout; saved crop restores; clear resets layout; only Liquid phone pages render it; wallpaper edits preserve glasses/video; source metadata stays private; links open fixed public pages outside the WebView; version matches the APK |
 | Remote background | Both themes, texture/black selection, cold launch, gestures, search/IME, playback panels and returning to settings | Choice persists without changing session/video; blank black regions and system-bar backgrounds measure RGB 0,0,0 in a lossless screenshot; no glow/texture/overscroll scrim; controls remain visible |
+| Liquid glass transparency | Default/custom wallpaper, 0/88/100%, mixed dark/light photos, expanded settings, scrolling navigation, rapid edits, reload, theme switches, reset and account changes | Card/nav fill follows the saved value without fading text; local text color accounts for stacked glass; the solid touch key covers the navigation rim; reset restores 88 and glasses/video/black remote remain unchanged |
 | Remote tutorial | First ready catalog, skip/relaunch, six phone gestures, wrong/rapid input, pause/resume/exit, sidebar replay, logout, 2D/SBS switch and renderer recovery | Each real gesture advances once; exactly one focus stays inside practice/dialog; completion or skipping is remembered; no media playback or background navigation; SVG motion and text remain readable in both eyes |
 | Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, text and bitmap subtitle | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |
 | Single-instance invariants | Mirror and stereo during representative playback | One glasses WebView, one HTML `<video>`, one audio stream, and one Jellyfin reporting stream remain active |
