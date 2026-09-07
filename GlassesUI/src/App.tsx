@@ -1499,16 +1499,20 @@ function DetailPage({
                 </div>
               </header>
               {loading ? <LoadingCards label="正在读取剧集…" rail /> : <div className="episode-rail">
-                {episodes.map((episode, index) => (
+                {episodes.map((episode, index) => {
+                  const episodeNumber = episode.indexNumber ?? index + 1
+                  const episodeTitle = `${episodeNumber}.${episode.original || episode.title}`
+                  return (
                     <button key={episode.id} type="button" data-focusable="true" data-autofocus={initialEpisodeNumber === episode.indexNumber ? 'true' : undefined} data-episode-number={episode.indexNumber} className="episode-card" onClick={() => onPlay(episode)} onFocus={() => onPreview(episode)}>
                       <ArtFrame item={episode} wide>
-                        <span className="episode-card__number">{String(episode.indexNumber ?? index + 1).padStart(2, '0')}</span>
+                        <span className="episode-card__number">{String(episodeNumber).padStart(2, '0')}</span>
                         <span className="episode-card__play"><Play size={19} fill="currentColor" /></span>
                         <MediaIndicators item={episode} />
                       </ArtFrame>
-                      <span className="episode-card__copy"><strong title={episode.original || episode.title}>{episode.original || episode.title}</strong><small>{episode.duration || episode.subtitle}</small></span>
+                      <span className="episode-card__copy"><strong title={episodeTitle}>{episodeTitle}</strong><small>{episode.duration || episode.subtitle}</small></span>
                     </button>
-                ))}
+                  )
+                })}
               </div>}
             </section>
           )}
