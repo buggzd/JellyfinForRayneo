@@ -206,7 +206,7 @@ public final class SessionRepositoryTests
     {
         FakeStore store = new FakeStore();
         SessionRepository repository = new SessionRepository(store);
-        CompanionBackgroundLayout layout = CompanionBackgroundLayout.parse("{\"transparency\":25,\"ratio\":\"3:4\",\"zoom\":150,\"x\":120,\"y\":730}");
+        CompanionBackgroundLayout layout = CompanionBackgroundLayout.parse("{\"transparency\":25,\"ratio\":\"3:4\",\"zoom\":150,\"x\":120,\"y\":730,\"textColor\":\"light\"}");
         repository.save(validSession(), true);
         String id = repository.getActiveId();
         repository.setCompanionBackgroundLayout(layout);

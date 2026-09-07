@@ -6,21 +6,23 @@ import org.json.JSONObject;
 final class CompanionBackgroundLayout
 {
     static final int MAX_JSON_LENGTH = 160;
-    static final CompanionBackgroundLayout DEFAULT = new CompanionBackgroundLayout(65, "screen", 100, 500, 500);
+    static final CompanionBackgroundLayout DEFAULT = new CompanionBackgroundLayout(65, "screen", 100, 500, 500, "auto");
 
     final int transparency;
     final String ratio;
     final int zoom;
     final int x;
     final int y;
+    final String textColor;
 
-    private CompanionBackgroundLayout(int transparency, String ratio, int zoom, int x, int y)
+    private CompanionBackgroundLayout(int transparency, String ratio, int zoom, int x, int y, String textColor)
     {
         this.transparency = transparency;
         this.ratio = ratio;
         this.zoom = zoom;
         this.x = x;
         this.y = y;
+        this.textColor = textColor;
     }
 
     static CompanionBackgroundLayout parse(String payload)
@@ -33,7 +35,10 @@ final class CompanionBackgroundLayout
         {
             JSONObject json = new JSONObject(payload);
             Object ratio = json.opt("ratio");
-            if (json.length() != 5 || !(ratio instanceof String)
+            Object textColor = json.has("textColor") ? json.opt("textColor") : "auto";
+            if (json.length() != (json.has("textColor") ? 6 : 5)
+                    || !("auto".equals(textColor) || "light".equals(textColor) || "dark".equals(textColor))
+                    || !(ratio instanceof String)
                     || !("screen".equals(ratio) || "9:16".equals(ratio) || "3:4".equals(ratio)
                     || "1:1".equals(ratio) || "original".equals(ratio)))
             {
@@ -44,7 +49,7 @@ final class CompanionBackgroundLayout
             int x = integer(json.opt("x"), 0, 1000);
             int y = integer(json.opt("y"), 0, 1000);
             return transparency < 0 || zoom < 0 || x < 0 || y < 0 ? null
-                    : new CompanionBackgroundLayout(transparency, (String) ratio, zoom, x, y);
+                    : new CompanionBackgroundLayout(transparency, (String) ratio, zoom, x, y, (String) textColor);
         }
         catch (Exception ignored)
         {
@@ -65,7 +70,7 @@ final class CompanionBackgroundLayout
 
     CompanionBackgroundLayout centered()
     {
-        return new CompanionBackgroundLayout(transparency, "screen", 100, 500, 500);
+        return new CompanionBackgroundLayout(transparency, "screen", 100, 500, 500, textColor);
     }
 
     JSONObject toJson()
@@ -78,6 +83,7 @@ final class CompanionBackgroundLayout
             json.put("zoom", zoom);
             json.put("x", x);
             json.put("y", y);
+            json.put("textColor", textColor);
         }
         catch (Exception ignored)
         {

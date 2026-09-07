@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_BACKGROUND_LAYOUT, centeredBackgroundLayout, normalizeBackgroundLayout, sameBackgroundLayout, validBackgroundLayout } from './backgroundLayout.mjs'
+import { sampleBackground } from './backgroundContrast.mjs'
 
 const DATABASE = 'jellyfin-companion-appearance'
 const MAX_BYTES = 20 * 1024 * 1024
@@ -64,6 +65,7 @@ export function usePhoneBackground(nativeState, notify) {
   const [busy, setBusy] = useState(false)
   const [layout, setLayout] = useState(DEFAULT_BACKGROUND_LAYOUT)
   const [dimensions, setDimensions] = useState(null)
+  const [samples, setSamples] = useState(null)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const editingRef = useRef(false)
@@ -77,12 +79,25 @@ export function usePhoneBackground(nativeState, notify) {
 
   useEffect(() => {
     setDimensions(null)
+    setSamples(null)
     if (!imageUrl) return undefined
     let active = true
     const image = new Image()
-    image.onload = () => { if (active) setDimensions({ width: image.naturalWidth, height: image.naturalHeight }) }
+    image.crossOrigin = 'anonymous'
+    image.onload = () => {
+      if (!active) return
+      setDimensions({ width: image.naturalWidth, height: image.naturalHeight })
+      try { setSamples(sampleBackground(image)) }
+      catch { setSamples(null) }
+    }
+    image.onerror = () => {
+      // Preserve display and manual text colors if an older WebView cannot sample it.
+      if (!active || !image.crossOrigin) return
+      image.removeAttribute('crossorigin')
+      image.src = imageUrl
+    }
     image.src = imageUrl
-    return () => { active = false; image.onload = null }
+    return () => { active = false; image.onload = null; image.onerror = null }
   }, [imageUrl])
 
   useEffect(() => {
@@ -196,6 +211,7 @@ export function usePhoneBackground(nativeState, notify) {
     url: imageUrl,
     layout: currentLayout,
     dimensions,
+    samples,
     busy: importing || saving,
     saving,
     editing,

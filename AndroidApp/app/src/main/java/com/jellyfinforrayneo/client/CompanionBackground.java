@@ -19,7 +19,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -136,17 +137,22 @@ final class CompanionBackground
 
     WebResourceResponse open()
     {
+        // The trusted file:// companion document has an opaque (null) origin.
+        // Allow its local canvas to sample contrast; do not grant remote origins access.
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Cache-Control", "no-store");
+        headers.put("Access-Control-Allow-Origin", "null");
         synchronized (image)
         {
             try
             {
                 return new WebResourceResponse("image/jpeg", null, 200, "OK",
-                        Collections.singletonMap("Cache-Control", "no-store"), image.openRead());
+                        headers, image.openRead());
             }
             catch (IOException ignored)
             {
                 return new WebResourceResponse("image/jpeg", null, 404, "Not Found",
-                        Collections.singletonMap("Cache-Control", "no-store"),
+                        headers,
                         new ByteArrayInputStream(new byte[0]));
             }
         }
