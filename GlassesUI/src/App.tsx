@@ -134,12 +134,16 @@ function focusSpatialElement(element?: HTMLElement | null, options: FocusOptions
   return document.activeElement === element || element.matches(spatialFocusSelector)
 }
 
-function soundNavigation(action: () => void, boundary = true) {
+function soundNavigation(direction: Direction, action: () => void, boundary = true) {
   const previous = currentSpatialFocus()
   action()
   const next = currentSpatialFocus()
-  if (next && next !== previous) uiSounds.play('focus')
-  else if (boundary && previous) uiSounds.play('boundary')
+  if (next && next !== previous) {
+    uiSounds.resetBoundary()
+    uiSounds.play('focus')
+  } else if (boundary && previous) {
+    uiSounds.playBoundaryOnce(previous, direction)
+  }
 }
 
 function moveFocus(direction: Direction) {
@@ -2030,7 +2034,6 @@ function PlayerPage({
     const video = videoRef.current
     if (!video || !Number.isFinite(video.duration) || !planRef.current?.canSeek) return
     const next = Math.max(0, Math.min(video.duration, video.currentTime + seconds))
-    uiSounds.play(next === video.currentTime ? 'boundary' : 'select')
     video.currentTime = next
     currentRef.current = next
     setCurrent(next)
@@ -2276,7 +2279,6 @@ function PlayerPage({
         if (phase !== 'hidden' && active) {
           active.click()
         } else {
-          uiSounds.play('select')
           togglePlayback()
           reveal()
         }
@@ -2964,7 +2966,7 @@ export default function App() {
 
       if (key === 'escape' || key === 'backspace') {
         event.preventDefault()
-        uiSounds.play('back')
+        if (page !== 'player') uiSounds.play('back')
         if (page === 'player') {
           window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: 'back' }))
         } else if (page === 'settings') {
@@ -3001,7 +3003,7 @@ export default function App() {
       if (page === 'player') {
         if (direction) {
           event.preventDefault()
-          soundNavigation(() => window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: direction })), false)
+          window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: direction }))
         } else if (key === 'enter' || key === ' ') {
           event.preventDefault()
           window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: 'enter' }))
@@ -3011,7 +3013,7 @@ export default function App() {
 
       if (direction) {
         event.preventDefault()
-        soundNavigation(() => {
+        soundNavigation(direction, () => {
           const active = currentSpatialFocus()
           if (active && moveSeriesSearchFocus(active, direction)) return
           moveFocus(direction)

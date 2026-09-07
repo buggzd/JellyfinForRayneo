@@ -16,6 +16,8 @@ export class UiSoundPlayer {
   private enabled = true
   private generation = 0
   private activityVersion = 0
+  private boundaryTarget: unknown = null
+  private boundaryDirection = ''
 
   constructor(
     private createClip: (sound: UiSound) => Clip,
@@ -46,6 +48,20 @@ export class UiSoundPlayer {
     for (const sound of uiSoundNames) this.clip(sound)
   }
 
+  resetBoundary() {
+    this.boundaryTarget = null
+    this.boundaryDirection = ''
+  }
+
+  playBoundaryOnce(target: unknown, direction: string) {
+    if (!this.enabled || !this.visible()
+      || (this.boundaryTarget === target && this.boundaryDirection === direction)) return
+    this.play('boundary')
+    // play() stops the previous clip and clears its boundary sequence first.
+    this.boundaryTarget = target
+    this.boundaryDirection = direction
+  }
+
   private clip(sound: UiSound) {
     try {
       let clip = this.clips.get(sound)
@@ -65,6 +81,7 @@ export class UiSoundPlayer {
     this.active = null
     this.lastSound = null
     this.lastTime = -Infinity
+    this.resetBoundary()
   }
 
   play(sound: UiSound) {

@@ -51,6 +51,24 @@ test('rapid directions are throttled and a distinct action interrupts the old cl
   assert.equal(f.clips.get('focus').currentTime, 0)
 })
 
+test('a continuous boundary input sounds once until focus or direction changes', () => {
+  const f = fixture()
+  const topItem = {}
+  f.player.playBoundaryOnce(topItem, 'up')
+  f.advance(1_000)
+  f.player.playBoundaryOnce(topItem, 'up')
+  f.advance(1_000)
+  f.player.playBoundaryOnce(topItem, 'up')
+  assert.deepEqual(f.calls, [['play', 'boundary']])
+
+  f.player.playBoundaryOnce(topItem, 'left')
+  assert.deepEqual(f.calls.slice(-2), [['pause', 'boundary'], ['play', 'boundary']])
+  f.player.resetBoundary()
+  f.advance(300)
+  f.player.playBoundaryOnce(topItem, 'up')
+  assert.equal(f.calls.filter(([action]) => action === 'play').length, 3)
+})
+
 test('stale rejected play cannot lose the active clip after reuse, and mute aborts it', async () => {
   const f = fixture()
   f.player.preload()

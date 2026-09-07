@@ -19,7 +19,7 @@ export function installUiSounds() {
   const onClickStart = (event: MouseEvent) => {
     const button = event.target instanceof Element ? event.target.closest('button') : null
     if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true'
-      || button.closest('[inert], .remote-tutorial')) return
+      || button.closest('[inert], .remote-tutorial, .player-page')) return
     const sound = button.dataset.uiSound ?? 'select'
     if (!uiSoundNames.includes(sound as UiSound)) return
     clicks.set(event, { sound: sound as UiSound, revision: uiSounds.revision })
