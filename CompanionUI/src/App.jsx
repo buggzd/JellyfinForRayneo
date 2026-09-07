@@ -3,6 +3,7 @@ import { applyUiTheme, normalizeUiTheme, readPreviewTheme, savePreviewTheme } fr
 import { suspendHiddenAnimations } from '../../SharedUI/hiddenAnimations.mjs'
 import { Toast, usePresence } from './feedback'
 import { usePhoneBackground } from './phoneBackground'
+import BackgroundEditor, { BackgroundArtwork } from './BackgroundEditor'
 import { isTouchpadBackground, normalizeTouchpadBackground, readPreviewTouchpadBackground, savePreviewTouchpadBackground } from './touchpadBackground'
 import {
   ArrowLeft,
@@ -181,6 +182,12 @@ function useStoredState(key, initialValue, enabled = true) {
 
 function App() {
   const isNative = useMemo(() => hasNativeBridge(), [])
+  const [screenAspect, setScreenAspect] = useState(() => phoneScreenAspect(isNative))
+  useEffect(() => {
+    const resize = () => setScreenAspect(phoneScreenAspect(isNative))
+    window.addEventListener('resize', resize)
+    return () => window.removeEventListener('resize', resize)
+  }, [isNative])
   const [uiTheme, setUiTheme] = useState(() => isNative
     ? normalizeUiTheme(parseNativePayload(callNative('getState'))?.uiTheme)
     : readPreviewTheme())
@@ -274,6 +281,7 @@ function App() {
   const background = usePhoneBackground(nativeState, notify)
 
   const go = (next) => {
+    if (next !== 'settings') background.closeEditor()
     window.scrollTo({ top: 0, behavior: 'instant' })
     if (next === 'touchpad') setToast('')
     if (next !== 'settings') setDemoStereoTestPattern(false)
@@ -375,7 +383,7 @@ function App() {
 
       const touchpadBecameReady = Boolean(next.touchpadReady) && !touchpadReadyRef.current
       touchpadReadyRef.current = Boolean(next.touchpadReady)
-      if (touchpadBecameReady && (screenRef.current === 'home' || screenRef.current === 'settings')) {
+      if (touchpadBecameReady && !background.editingRef.current && (screenRef.current === 'home' || screenRef.current === 'settings')) {
         go('touchpad')
       }
 
@@ -396,6 +404,10 @@ function App() {
         go(requestedScreen)
       },
       handleBack: () => {
+        if (background.editingRef.current) {
+          background.cancelEditor()
+          return
+        }
         if (pendingRemovalRef.current) {
           setPendingRemoval(null)
           return
@@ -630,7 +642,7 @@ function App() {
 
   return (
     <div className={`prototype-shell ${screen === 'touchpad' ? 'is-touchpad' : ''} ${isNative ? 'is-native' : ''} ${!simpleUi && background.url && screen !== 'touchpad' ? 'has-custom-background' : ''}`}>
-      {!simpleUi && !blackTouchpad && <AmbientBackdrop dark={screen === 'touchpad'} background={background.url} />}
+      {!simpleUi && !blackTouchpad && <AmbientBackdrop dark={screen === 'touchpad'} background={background} screenAspect={screenAspect} />}
       <main
         className="phone-stage"
         onPointerMove={simpleUi || blackTouchpad ? undefined : moveButtonOptics}
@@ -640,7 +652,7 @@ function App() {
         <input ref={background.input} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={background.changeFile} />
         {screen !== 'touchpad' && <StatusBar />}
 
-        <div className="screen-stack" inert={manualOpen || Boolean(pendingRemoval)}>
+        <div className="screen-stack" inert={manualOpen || Boolean(pendingRemoval) || background.editing}>
           {screen === 'connect' && (
             <ConnectScreen
               simpleUi={simpleUi}
@@ -694,6 +706,7 @@ function App() {
             <SettingsScreen
               uiTheme={uiTheme}
               background={background}
+              screenAspect={screenAspect}
               onUiThemeChange={changeUiTheme}
               touchpadBackground={touchpadBackground}
               onTouchpadBackgroundChange={changeTouchpadBackground}
@@ -770,6 +783,9 @@ function App() {
         {pendingRemoval && (
           <RemoveAccountDialog account={pendingRemoval} onCancel={() => setPendingRemoval(null)} onConfirm={removeAccount} />
         )}
+        {background.editing && screen === 'settings' && (
+          <BackgroundEditor key={background.url} background={background} screenAspect={screenAspect} />
+        )}
         <Toast message={toast} />
       </main>
     </div>
@@ -800,12 +816,16 @@ function GlassOptics() {
   )
 }
 
-function AmbientBackdrop({ dark, background }) {
-  if (background && !dark) {
+function phoneScreenAspect(native) {
+  if (native || window.innerWidth < 680) return (native ? window.innerWidth : Math.min(430, window.innerWidth)) / window.innerHeight
+  return 414 / Math.max(1, Math.min(900, window.innerHeight - 52) - 16)
+}
+
+function AmbientBackdrop({ dark, background, screenAspect }) {
+  if (background.url && !dark) {
     return (
       <div className="ambient ambient--custom" aria-hidden="true">
-        <img src={background} alt="" />
-        <div className="ambient__veil" />
+        <BackgroundArtwork background={background} screenAspect={screenAspect} />
       </div>
     )
   }
@@ -1376,6 +1396,7 @@ function ThemeSelector({ value, onChange }) {
 function SettingsScreen({
   uiTheme,
   background,
+  screenAspect,
   onUiThemeChange,
   touchpadBackground,
   onTouchpadBackgroundChange,
@@ -1425,7 +1446,7 @@ function SettingsScreen({
       <SettingsGroup title="外观与交互">
         <SettingsDisclosure icon={Palette} title="界面外观" detail="主题风格与手机背景" value={uiTheme === 'simpleUI' ? 'simpleUI' : 'Liquid UI'}>
           <ThemeSelector value={uiTheme} onChange={onUiThemeChange} />
-          {uiTheme === 'liquid-glass' && <BackgroundPicker background={background} />}
+          {uiTheme === 'liquid-glass' && <BackgroundPicker background={background} screenAspect={screenAspect} />}
         </SettingsDisclosure>
         <SettingsDisclosure icon={Touchpad} title="遥控器背景" detail="纹理氛围或 OLED 纯黑"
           value={touchpadBackground === 'black' ? '纯黑' : '纹理'}>
@@ -1553,22 +1574,23 @@ function TouchpadBackgroundSelector({ value, onChange }) {
   )
 }
 
-function BackgroundPicker({ background }) {
+function BackgroundPicker({ background, screenAspect }) {
   return (
     <div className="background-picker" aria-busy={background.busy}>
       <div className="background-picker__heading"><strong>手机背景</strong><span>LIQUID UI</span></div>
       <div className="background-picker__body">
         <div className={`background-preview ${background.url ? 'has-image' : ''}`} aria-hidden="true">
-          {background.url && <img src={background.url} alt="" />}
+          {background.url && <BackgroundArtwork background={background} screenAspect={screenAspect} />}
           <i /><i /><i />
         </div>
         <div className="background-picker__copy">
           <strong>{background.url ? '自定义背景' : '默认冰蓝'}</strong>
-          <p>换一张喜欢的图片，让玻璃映出你的色彩。</p>
+          <p>{background.url ? `透明度 ${background.layout.transparency}% · 可调整裁切与位置` : '换一张喜欢的图片，让玻璃映出你的色彩。'}</p>
           <button className="background-choose" disabled={background.busy} onClick={background.choose}>
             {background.busy ? <LoaderCircle className="is-spinning" size={15} /> : <ImagePlus size={15} />}
             {background.busy ? '正在处理…' : background.url ? '更换图片' : '选择图片'}
           </button>
+          {background.url && <button className="background-adjust" disabled={background.busy || !background.dimensions} onClick={background.edit}>调整背景</button>}
         </div>
       </div>
       <div className="background-picker__footer">

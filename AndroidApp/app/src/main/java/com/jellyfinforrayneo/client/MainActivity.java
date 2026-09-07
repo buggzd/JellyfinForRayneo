@@ -53,6 +53,7 @@ public final class MainActivity extends Activity
     private GlassesPresentationController glassesPresentation;
     private CompanionWebViewController companionWebView;
     private CompanionBackground companionBackground;
+    private String lastCompanionBackgroundUrl = "";
 
     private String state = "login_required";
     private String message = "请选择 Jellyfin 服务器并登录。";
@@ -229,7 +230,8 @@ public final class MainActivity extends Activity
                             }
                         }));
 
-        companionBackground = new CompanionBackground(this, this::pushCompanionState);
+        companionBackground = new CompanionBackground(this, this::onCompanionBackgroundChanged);
+        lastCompanionBackgroundUrl = companionBackground.getUrl();
         companionWebView = new CompanionWebViewController(
                 this,
                 new CompanionBridge(),
@@ -660,6 +662,7 @@ public final class MainActivity extends Activity
             result.put("appVersionCode", BuildConfig.VERSION_CODE);
             result.put("companionBackground", companionBackground == null ? "" : companionBackground.getUrl());
             result.put("companionBackgroundBusy", companionBackground != null && companionBackground.isBusy());
+            result.put("companionBackgroundLayout", sessions.getCompanionBackgroundLayout().toJson());
             result.put("message", message);
             result.put("isError", error);
             result.put("serverUrl", session == null ? selectedServerUrl : session.getServerUrl());
@@ -724,6 +727,19 @@ public final class MainActivity extends Activity
             return new JSONObject().toString();
         }
         return result.toString();
+    }
+
+    private void onCompanionBackgroundChanged()
+    {
+        String url = companionBackground.getUrl();
+        if (!companionBackground.isBusy() && (url.isEmpty() || !url.equals(lastCompanionBackgroundUrl)))
+        {
+            // A new image starts centered; failed/cancelled imports leave the old crop intact.
+            sessions.setCompanionBackgroundLayout(url.isEmpty() ? CompanionBackgroundLayout.DEFAULT
+                    : sessions.getCompanionBackgroundLayout().centered());
+            lastCompanionBackgroundUrl = url;
+        }
+        pushCompanionState();
     }
 
     private void pushCompanionState()
@@ -1245,6 +1261,25 @@ public final class MainActivity extends Activity
                 if (!destroyed && "settings".equals(webScreen))
                 {
                     companionBackground.clear();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void setCompanionBackgroundLayout(String revision, String payload)
+        {
+            CompanionBackgroundLayout layout = CompanionBackgroundLayout.parse(payload);
+            if (layout == null || revision == null || revision.length() != 32 || !revision.matches("[a-f0-9]{32}"))
+            {
+                return;
+            }
+            runOnUiThread(() ->
+            {
+                if (!destroyed && "settings".equals(webScreen) && !companionBackground.isBusy()
+                        && (CompanionSettingsPolicy.BACKGROUND_URL + revision).equals(companionBackground.getUrl()))
+                {
+                    sessions.setCompanionBackgroundLayout(layout);
+                    pushCompanionState();
                 }
             });
         }

@@ -202,6 +202,23 @@ public final class SessionRepositoryTests
     }
 
     @Test
+    public void backgroundLayout_SurvivesRecreationThemeSwitchAndLogout()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        CompanionBackgroundLayout layout = CompanionBackgroundLayout.parse("{\"transparency\":25,\"ratio\":\"3:4\",\"zoom\":150,\"x\":120,\"y\":730}");
+        repository.save(validSession(), true);
+        String id = repository.getActiveId();
+        repository.setCompanionBackgroundLayout(layout);
+        repository.setUiTheme(UiTheme.SIMPLE);
+        assertEquals(id, repository.getActiveId());
+        repository.clear();
+        assertEquals(layout.toJson().toString(), new SessionRepository(store).getCompanionBackgroundLayout().toJson().toString());
+        store.putString(SessionRepository.KEY_COMPANION_BACKGROUND_LAYOUT, "{}");
+        assertEquals(CompanionBackgroundLayout.DEFAULT.toJson().toString(), repository.getCompanionBackgroundLayout().toJson().toString());
+    }
+
+    @Test
     public void missingOrCorruptStereoPreference_UsesConservativeDefault()
     {
         FakeStore store = new FakeStore();
