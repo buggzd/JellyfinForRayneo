@@ -1,4 +1,9 @@
-export const DEFAULT_BACKGROUND_LAYOUT = Object.freeze({ transparency: 65, ratio: 'screen', zoom: 100, x: 500, y: 500 })
+export const DEFAULT_BACKGROUND_LAYOUT = Object.freeze({ transparency: 65, ratio: 'screen', zoom: 100, x: 500, y: 500, textColor: 'auto' })
+export const BACKGROUND_TEXT_COLORS = Object.freeze([
+  { value: 'auto', label: '自动' },
+  { value: 'light', label: '浅色' },
+  { value: 'dark', label: '深色' },
+])
 export const BACKGROUND_RATIOS = Object.freeze([
   { value: 'screen', label: '屏幕' },
   { value: '9:16', label: '9:16' },
@@ -10,14 +15,17 @@ const integer = (value, min, max) => Number.isInteger(value) && value >= min && 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
 export function validBackgroundLayout(value) {
-  return value !== null && typeof value === 'object' && Object.keys(value).length === 5
+  return value !== null && typeof value === 'object' && Object.keys(value).length === 6
     && integer(value.transparency, 0, 100) && integer(value.zoom, 100, 300)
     && integer(value.x, 0, 1000) && integer(value.y, 0, 1000)
     && BACKGROUND_RATIOS.some(({ value: ratio }) => ratio === value.ratio)
+    && BACKGROUND_TEXT_COLORS.some(({ value: color }) => color === value.textColor)
 }
 
 export function normalizeBackgroundLayout(value) {
-  return { ...(validBackgroundLayout(value) ? value : DEFAULT_BACKGROUND_LAYOUT) }
+  // Older installations saved five crop fields. Keep their crop when adding auto text.
+  const migrated = value && !Object.hasOwn(value, 'textColor') ? { ...value, textColor: 'auto' } : value
+  return { ...(validBackgroundLayout(migrated) ? migrated : DEFAULT_BACKGROUND_LAYOUT) }
 }
 
 export function sameBackgroundLayout(a, b) {
@@ -26,7 +34,8 @@ export function sameBackgroundLayout(a, b) {
 }
 
 export function centeredBackgroundLayout(value) {
-  return { ...DEFAULT_BACKGROUND_LAYOUT, transparency: normalizeBackgroundLayout(value).transparency }
+  const layout = normalizeBackgroundLayout(value)
+  return { ...DEFAULT_BACKGROUND_LAYOUT, transparency: layout.transparency, textColor: layout.textColor }
 }
 
 // Keep the crop in source-image coordinates. Rendering and editing share this

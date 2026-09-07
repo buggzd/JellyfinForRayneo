@@ -213,18 +213,28 @@ The URI, image and revision do not enter glasses bootstrap or diagnostics.
 Browser previews own a separate compressed image in IndexedDB. SimpleUI and
 the touchpad do not render the wallpaper; logout and theme changes preserve it.
 
-`SessionRepository` owns `companion_background_layout`: five bounded fields for
+`SessionRepository` owns `companion_background_layout`: six bounded fields for
 transparency (0–100), aspect preset, zoom (100–300), and normalized X/Y crop
-travel (0–1000). `CompanionBackgroundLayout` rejects oversized JSON, extra/missing
-fields, unknown ratios, nonnumeric and fractional values, and out-of-range inputs.
+travel (0–1000), plus text color (`auto`, `light`, `dark`). Old five-field records
+retain their crop and default to automatic text. `CompanionBackgroundLayout` rejects
+oversized JSON, extra/missing fields, unknown ratios/colors, nonnumeric and fractional
+values, and out-of-range inputs.
 The settings bridge additionally requires the current 32-character image revision
 and an idle image importer. Saving publishes only `companionBackgroundLayout` in
 phone state, never a glasses bootstrap. The editor keeps a draft until Apply and
 waits for that acknowledgement; cancel/Back leaves the saved layout intact.
 One source-coordinate crop feeds both SVG preview and wallpaper. The imported
-JPEG stays intact; replacing it resets crop geometry and preserves transparency,
+JPEG stays intact; replacing it resets crop geometry and preserves transparency and text color,
 while clearing resets all layout fields. Browser previews store image and layout
 in one IndexedDB transaction and migrate old Blob-only records on the next save.
+
+The exact private JPEG route grants CORS only to the trusted file document's `null`
+origin, allowing a local canvas to build one small contrast raster. HTTP(S) origins
+receive no CORS grant; the route remains local to the companion WebView. The raster
+never enters persistence, diagnostics, the bridge or the glasses. Image loading can
+fall back to display-only/manual colors if sampling is unavailable. Automatic color
+uses the final crop/opacity and per-text screen bounds, including glass fill; a
+coalesced event-driven update follows scrolling/resizing without an idle loop.
 
 The phone About section reads `BuildConfig.VERSION_NAME` and `VERSION_CODE` from
 state; browser builds read the root `version.properties`. External settings links

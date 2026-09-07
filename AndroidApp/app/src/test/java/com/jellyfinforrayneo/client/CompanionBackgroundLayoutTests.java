@@ -28,7 +28,8 @@ public final class CompanionBackgroundLayoutTests
         for (Object[] change : new Object[][]{
                 {"transparency", "50"}, {"transparency", 101}, {"transparency", -1},
                 {"zoom", 99}, {"zoom", 301}, {"x", -1}, {"x", 1.5}, {"y", 1001},
-                {"ratio", "9/16"}, {"ratio", 1}, {"url", "https://example.test"}})
+                {"ratio", "9/16"}, {"ratio", 1}, {"url", "https://example.test"},
+                {"textColor", "red"}, {"textColor", "LIGHT"}, {"textColor", 1}, {"textColor", JSONObject.NULL}})
         {
             JSONObject json = CompanionBackgroundLayout.DEFAULT.toJson();
             json.put((String) change[0], change[1]);
@@ -49,5 +50,22 @@ public final class CompanionBackgroundLayoutTests
         assertEquals(100, next.zoom);
         assertEquals(500, next.x);
         assertEquals(500, next.y);
+    }
+
+    @Test
+    public void textColor_MigratesOldCropAndSurvivesReplacement() throws Exception
+    {
+        CompanionBackgroundLayout legacy = CompanionBackgroundLayout.parse("{\"transparency\":22,\"ratio\":\"1:1\",\"zoom\":150,\"x\":120,\"y\":700}");
+        assertEquals("auto", legacy.textColor);
+        assertEquals(150, legacy.zoom);
+        assertEquals(120, legacy.x);
+        for (String color : new String[]{"auto", "light", "dark"})
+        {
+            JSONObject json = legacy.toJson().put("textColor", color);
+            CompanionBackgroundLayout parsed = CompanionBackgroundLayout.parse(json.toString());
+            assertNotNull(parsed);
+            assertEquals(color, parsed.centered().textColor);
+            assertEquals(color, CompanionBackgroundLayout.parse(parsed.toJson().toString()).textColor);
+        }
     }
 }

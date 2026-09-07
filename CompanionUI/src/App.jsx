@@ -4,6 +4,7 @@ import { suspendHiddenAnimations } from '../../SharedUI/hiddenAnimations.mjs'
 import { Toast, usePresence } from './feedback'
 import { usePhoneBackground } from './phoneBackground'
 import BackgroundEditor, { BackgroundArtwork } from './BackgroundEditor'
+import { useWallpaperContrast } from './useWallpaperContrast'
 import { isTouchpadBackground, normalizeTouchpadBackground, readPreviewTouchpadBackground, savePreviewTouchpadBackground } from './touchpadBackground'
 import {
   ArrowLeft,
@@ -279,6 +280,9 @@ function App() {
   }
 
   const background = usePhoneBackground(nativeState, notify)
+  const wallpaperScope = useRef(null)
+  useWallpaperContrast(wallpaperScope, background, background.layout, screenAspect,
+    !simpleUi && Boolean(background.url) && screen !== 'touchpad', '.ambient--custom')
 
   const go = (next) => {
     if (next !== 'settings') background.closeEditor()
@@ -641,7 +645,7 @@ function App() {
   }
 
   return (
-    <div className={`prototype-shell ${screen === 'touchpad' ? 'is-touchpad' : ''} ${isNative ? 'is-native' : ''} ${!simpleUi && background.url && screen !== 'touchpad' ? 'has-custom-background' : ''}`}>
+    <div ref={wallpaperScope} data-wallpaper-scope="phone" className={`prototype-shell ${screen === 'touchpad' ? 'is-touchpad' : ''} ${isNative ? 'is-native' : ''} ${!simpleUi && background.url && screen !== 'touchpad' ? 'has-custom-background' : ''}`}>
       {!simpleUi && !blackTouchpad && <AmbientBackdrop dark={screen === 'touchpad'} background={background} screenAspect={screenAspect} />}
       <main
         className="phone-stage"
@@ -842,8 +846,8 @@ function AmbientBackdrop({ dark, background, screenAspect }) {
 function StatusBar() {
   return (
     <div className="status-bar" aria-hidden="true">
-      <span>09:41</span>
-      <div className="status-icons">
+      <span data-wallpaper-text="">09:41</span>
+      <div className="status-icons" data-wallpaper-text="">
         <span className="signal-bars"><i /><i /><i /><i /></span>
         <Wifi size={14} strokeWidth={2.3} />
         <span className="battery"><i /></span>
@@ -859,7 +863,7 @@ function Brand({ compact = false }) {
         <i className="brand-mark__ring" />
         <i className="brand-mark__drop" />
       </span>
-      <span>
+      <span data-wallpaper-text="">
         <strong>JELLYFIN</strong>
         <small>RAYNEO</small>
       </span>
@@ -937,7 +941,7 @@ function ConnectScreen({
         </button>
       )}
 
-      <div className="section-heading">
+      <div className="section-heading" data-wallpaper-text="">
         <div>
           <span className="eyebrow">LOCAL NETWORK</span>
           <h2>选择媒体服务器</h2>
@@ -999,7 +1003,7 @@ function ConnectScreen({
         <ArrowRight size={18} />
       </button>
 
-      <div className="privacy-note">
+      <div className="privacy-note" data-wallpaper-text="">
         <ShieldCheck size={15} />
         发现过程仅在当前局域网内进行
       </div>
@@ -1048,7 +1052,7 @@ function AuthScreen({
         <button className="icon-button glass-soft" onClick={onBack} aria-label="返回">
           <ArrowLeft size={20} />
         </button>
-        <div className="subpage-header__title">
+        <div className="subpage-header__title" data-wallpaper-text="">
           <strong>连接 Jellyfin</strong>
           <span>{server.host}</span>
         </div>
@@ -1079,7 +1083,7 @@ function AuthScreen({
 
       {mode === 'password' ? (
         <form className="auth-content mode-enter" key="password" onSubmit={(event) => { event.preventDefault(); login() }}>
-          <div className="form-heading">
+          <div className="form-heading" data-wallpaper-text="">
             <span className="eyebrow">WELCOME BACK</span>
             <h2>登录你的媒体库</h2>
             <p>凭据只会发送至你选择的 Jellyfin 服务器。</p>
@@ -1109,7 +1113,7 @@ function AuthScreen({
             </button>
           </label>
 
-          <button type="button" role="switch" aria-checked={remember} className="remember-row" onClick={() => setRemember((value) => !value)}>
+          <button type="button" role="switch" aria-checked={remember} className="remember-row" data-wallpaper-text="" onClick={() => setRemember((value) => !value)}>
             <span className={`check-box ${remember ? 'is-checked' : ''}`}>
               {remember && <Check size={13} strokeWidth={3} />}
             </span>
@@ -1178,7 +1182,7 @@ function QuickConnect({
 
   return (
     <div className="quick-content mode-enter" key="quick">
-      <div className="form-heading">
+      <div className="form-heading" data-wallpaper-text="">
         <span className="eyebrow">PASSWORDLESS</span>
         <h2>在已登录设备上确认</h2>
         <p>打开 Jellyfin 授权页面，然后输入这组一次性登录码。</p>
@@ -1199,7 +1203,7 @@ function QuickConnect({
         <div className="quick-code__halo" />
       </div>
 
-      <ol className="quick-steps">
+      <ol className="quick-steps" data-wallpaper-text="">
         <li><i>1</i><span>在手机或电脑上打开 Jellyfin</span></li>
         <li><i>2</i><span>进入 Quick Connect 并输入上方代码</span></li>
       </ol>
@@ -1272,19 +1276,19 @@ function HomeScreen({
 
       <div className="welcome-line">
         <div>
-          <span className="eyebrow">MY DEVICES</span>
-          <h1>我的设备</h1>
-          <p>{welcomeTitle}</p>
+          <span className="eyebrow" data-wallpaper-text="">MY DEVICES</span>
+          <h1 data-wallpaper-text="">我的设备</h1>
+          <p data-wallpaper-text="">{welcomeTitle}</p>
         </div>
       </div>
 
       <div className="device-hero glass-panel">
         <div className="device-hero__head">
           <span className={`connected-pill ${connected ? '' : 'is-offline'}`}><i /> {connected ? '眼镜已连接' : '等待连接眼镜'}</span>
-          <button onClick={() => notify(deviceState?.displayMessage || 'RayNeo Air 3S · USB-C 空间显示')} aria-label="设备详情"><MoreHorizontal size={19} /></button>
+          <button data-wallpaper-text="glass" onClick={() => notify(deviceState?.displayMessage || 'RayNeo Air 3S · USB-C 空间显示')} aria-label="设备详情"><MoreHorizontal size={19} /></button>
         </div>
         <img className="device-hero__product" src={assetUrl('rayneo-air-3s.webp')} alt="RayNeo Air 3S，深色一体式镜片与白色镜腿" />
-        <div className="device-hero__info">
+        <div className="device-hero__info" data-wallpaper-text="glass">
           <strong>RayNeo Air 3S</strong>
           <span><Zap size={13} /> {connected ? 'USB-C 已连接' : '通过 USB-C 连接眼镜'}</span>
         </div>
@@ -1315,12 +1319,12 @@ function HomeScreen({
 
       <button className="connection-card glass-panel pressable" onClick={onAccounts} aria-label="管理服务器与账号">
         <span className="server-orb server-orb--small"><Server size={17} /></span>
-        <span>
+        <span data-wallpaper-text="glass">
           <small>当前媒体库</small>
           <strong>{activeServer?.name ?? 'Jellyfin 媒体库'}</strong>
           <em>{username} · 当前账号</em>
         </span>
-        <span className="connection-card__action">管理 <ChevronRight size={16} /></span>
+        <span className="connection-card__action" data-wallpaper-text="glass">管理 <ChevronRight size={16} /></span>
       </button>
     </section>
   )
@@ -1425,7 +1429,7 @@ function SettingsScreen({
   return (
     <section className="screen settings-screen with-nav">
       <header className="settings-header">
-        <div>
+        <div data-wallpaper-text="">
           <span className="eyebrow">MAKE IT YOURS</span>
           <h1>设置</h1>
           <p>你的设备，你的观影方式。</p>
@@ -1532,11 +1536,11 @@ function SettingsScreen({
         </button>
       </SettingsGroup>
 
-      <button className="reset-button" disabled={background.busy} onClick={onReset}>
+      <button className="reset-button" data-wallpaper-text="" disabled={background.busy} onClick={onReset}>
         <RotateCcw size={16} /> 恢复默认偏好
       </button>
 
-      <p className="settings-footer">Jellyfin for RayNeo<span>开源第三方客户端 · MIT License</span></p>
+      <p className="settings-footer" data-wallpaper-text="">Jellyfin for RayNeo<span>开源第三方客户端 · MIT License</span></p>
     </section>
   )
 }
@@ -1630,10 +1634,10 @@ function AccountsScreen({ accounts, onBack, onAddServer, onAddAccount, onActivat
     <section className="screen accounts-screen">
       <header className="subpage-header">
         <button className="icon-button glass-soft" onClick={onBack} aria-label="返回"><ArrowLeft size={20} /></button>
-        <div className="subpage-header__title"><strong>服务器与账号</strong><span>{groups.length} 台服务器 · {accounts.length} 个账号</span></div>
+        <div className="subpage-header__title" data-wallpaper-text=""><strong>服务器与账号</strong><span>{groups.length} 台服务器 · {accounts.length} 个账号</span></div>
         <span className="account-header-icon"><Router size={22} /></span>
       </header>
-      <div className="accounts-intro">
+      <div className="accounts-intro" data-wallpaper-text="">
         <h1>连接你的媒体库</h1>
         <p>切换已登录账号，无需重复输入密码。添加服务器或账号时，当前连接会保留到登录成功。</p>
       </div>
@@ -1693,7 +1697,7 @@ function RemoveAccountDialog({ account, onCancel, onConfirm }) {
 function SettingsGroup({ title, children }) {
   return (
     <section className="settings-group">
-      <h2>{title}</h2>
+      <h2 data-wallpaper-text="">{title}</h2>
       <div className="settings-group__body glass-panel">{children}</div>
     </section>
   )

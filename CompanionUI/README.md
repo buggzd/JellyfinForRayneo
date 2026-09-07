@@ -49,15 +49,24 @@ render it. Restoring all preferences also restores the default background.
 
 The background editor saves non-destructive crop metadata: transparency (0–100,
 default 65), aspect preset (screen, 9:16, 3:4, 1:1 or original), zoom (100–300%)
-and normalized X/Y position (0–1000). Drag, arrow keys and sliders adjust the
+and normalized X/Y position (0–1000), plus text color (`auto`, `light`, `dark`). Drag, arrow keys and sliders adjust the
 same source-image crop used by the wallpaper renderer. The interface preview
 shows the crop filling the phone viewport. Apply waits for persistence; cancel
 or Android Back preserves the previous layout and restores focus to the opener.
-Replacing an image resets its crop while retaining transparency. Resetting the
+Replacing an image resets its crop while retaining transparency and text color. Resetting the
 background clears both image and layout. Android owns these preferences in
 `SessionRepository`; the bridge rejects invalid values and stale image revisions,
 and publishes only phone state. Browser previews atomically save their image and
 layout together in IndexedDB, including support for older image-only records.
+
+Automatic text color samples the imported image once into a raster with a maximum
+96-pixel edge, kept only in memory. Each exposed text group uses its current bounds,
+the final centered crop and composed opacity to compare light/dark contrast; scroll,
+layout and appearance changes schedule a coalesced update. Close scores preserve
+the previous tone, and mixed regions receive stronger text edging. There is no
+idle sampling loop. Opaque form/navigation surfaces keep their own legible palette;
+simpleUI and the remote do not run wallpaper analysis. Older five-field crop records
+preserve their crop and default to automatic text.
 
 Remote background is a separate Settings choice: `texture` or `black`, valid in
 both themes. Until explicitly selected, Liquid defaults to texture and simpleUI

@@ -1,0 +1,38 @@
+/* Only text sitting directly on the photo/clear cards changes color. Form and
+   navigation surfaces keep a predictable light palette, including in the editor. */
+:root[data-ui-theme="liquid-glass"] :is(.has-custom-background, .background-crop-frame) [data-wallpaper-text][data-text-tone] {
+  --wallpaper-ink: #0e1f2c;
+  --wallpaper-halo: rgba(255,255,255,.92);
+  color: var(--wallpaper-ink);
+  text-shadow: 0 1px 3px var(--wallpaper-halo), 0 0 7px var(--wallpaper-halo);
+}
+:root[data-ui-theme="liquid-glass"] :is(.has-custom-background, .background-crop-frame) [data-wallpaper-text][data-text-tone="light"] {
+  --wallpaper-ink: #fff;
+  --wallpaper-halo: rgba(0,8,16,.9);
+}
+:root[data-ui-theme="liquid-glass"] :is(.has-custom-background, .background-crop-frame) [data-wallpaper-text][data-text-support="true"] {
+  text-shadow: -.7px 0 var(--wallpaper-halo), .7px 0 var(--wallpaper-halo), 0 -.7px var(--wallpaper-halo), 0 .7px var(--wallpaper-halo), 0 1px 4px var(--wallpaper-halo), 0 0 8px var(--wallpaper-halo);
+}
+:root[data-ui-theme="liquid-glass"] :is(.has-custom-background, .background-crop-frame) [data-wallpaper-text][data-text-tone]
+  :is(h1, h2, h3, p, strong, b, small, em, .eyebrow, li, .device-hero__info span, .subpage-header__title span, .settings-footer span) {
+  color: var(--wallpaper-ink);
+  text-shadow: inherit;
+}
+:root[data-ui-theme="liquid-glass"] .has-custom-background :is(.settings-group__body, .settings-account, .account-server-card, .accounts-empty, .server-card, .restore-card, .field, .quick-code, .manual-card, .scan-empty, .saved-accounts-link, .bottom-nav) {
+  --muted: #506575;
+  color: #102232;
+  background: rgba(248,253,255,.92);
+}
+:root[data-ui-theme="liquid-glass"] .has-custom-background :is(.setting-row__copy small, .account-card__copy small, .account-card__copy span, .bottom-nav button:not(.is-active):not(.nav-primary), .server-card__host, .server-card__meta, .muted-icon) { color: #506575; }
+:root[data-ui-theme="liquid-glass"] .has-custom-background :is(.connected-pill, .profile-button, .settings-header__mark) { background: rgba(248,253,255,.94); }
+
+.background-text-colors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
+.background-text-colors label { position: relative; cursor: pointer; }
+.background-text-colors input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.background-text-colors label > span { display: flex; min-height: 45px; justify-content: center; align-items: center; gap: 7px; border: 1px solid #d7e4ea; border-radius: 10px; background: #fff; color: #496372; font-size: 11px; }
+.background-text-colors input:checked + span { color: #0b6691; border-color: #1689b1; background: #e4f3f9; }
+.background-text-colors input:focus-visible + span { outline: 2px solid #1689b1; outline-offset: 2px; }
+.text-color-swatch { display: grid; width: 23px; height: 24px; place-items: center; border-radius: 6px; background: #1c3040; color: #fff; font-size: 10px; font-style: normal; font-weight: 700; }
+.text-color-swatch.is-dark { color: #172d3c; background: #e7f0f5; }
+.text-color-swatch.is-auto { color: #fff; background: linear-gradient(120deg, #aec1cc 0 45%, #1c3040 46%); text-shadow: 0 1px 2px #142936; }
+.background-text-help { margin: 9px 0 18px; color: #637e8c; font-size: 11px; line-height: 1.7; }
