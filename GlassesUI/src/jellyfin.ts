@@ -301,7 +301,7 @@ function createWebViewDeviceProfile(hardwareVideoCodecs: ReadonlySet<string>) {
   const tenBitVideoCodecs = ['hevc', 'vp9', 'av1'].filter((codec) => hardwareVideoCodecs.has(codec))
 
   return {
-    Name: 'Lucent Android WebView Hardware',
+    Name: 'tachi Android WebView Hardware',
     MaxStreamingBitrate: directPlayMaxBitrate,
     MaxStaticBitrate: directPlayMaxBitrate,
     DirectPlayProfiles: [
@@ -637,7 +637,7 @@ export class JellyfinClient {
     headers.set('X-Emby-Token', this.session.accessToken)
     headers.set(
       'X-Emby-Authorization',
-      `MediaBrowser Client="Lucent for RayNeo", Device="RayNeo Air", DeviceId="${this.session.deviceId}", Version="${__APP_VERSION__}", Token="${this.session.accessToken}"`,
+      `MediaBrowser Client="tachi", Device="RayNeo Air", DeviceId="${this.session.deviceId}", Version="${__APP_VERSION__}", Token="${this.session.accessToken}"`,
     )
     if (init.body) headers.set('Content-Type', 'application/json')
 

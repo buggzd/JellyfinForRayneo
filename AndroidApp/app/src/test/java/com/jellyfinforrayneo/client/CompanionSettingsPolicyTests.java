@@ -33,9 +33,9 @@ public final class CompanionSettingsPolicyTests
     @Test
     public void projectLinks_AllowOnlyNamedPublicPages()
     {
-        assertEquals("https://github.com/buggzd/JellyfinForRayneo", CompanionSettingsPolicy.projectPage("project"));
-        assertEquals("https://github.com/buggzd/JellyfinForRayneo/issues", CompanionSettingsPolicy.projectPage("issues"));
-        assertEquals("https://github.com/buggzd/JellyfinForRayneo/blob/main/docs/USER_GUIDE.md",
+        assertEquals("https://github.com/buggzd/tachi", CompanionSettingsPolicy.projectPage("project"));
+        assertEquals("https://github.com/buggzd/tachi/issues", CompanionSettingsPolicy.projectPage("issues"));
+        assertEquals("https://github.com/buggzd/tachi/blob/main/docs/USER_GUIDE.md",
                 CompanionSettingsPolicy.projectPage("guide"));
         for (String page : Arrays.asList(null, "", "Issues", " issues", "javascript:alert(1)",
                 "https://example.com", "../issues", "issues?token=test", new String(new char[5000])))

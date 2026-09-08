@@ -122,7 +122,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${RELEASE_TAG#v}"
-          asset_name="JellyfinForRayneo-${version}-arm64-v8a.apk"
+          asset_name="tachi-${version}-arm64-v8a.apk"
           release_directory="${RUNNER_TEMP}/release"
           mkdir -p "${release_directory}"
           cp AndroidApp/app/build/outputs/apk/release/app-release.apk \
@@ -143,7 +143,7 @@ jobs:
           release_flags=(
             --verify-tag
             --generate-notes
-            --title "Jellyfin for RayNeo ${RELEASE_TAG}"
+            --title "tachi ${RELEASE_TAG}"
             --notes "正式签名的 ARM64 APK；安装前可使用随附 SHA-256 文件校验下载。"
           )
           if [[ "${RELEASE_TAG}" == *-* ]]; then

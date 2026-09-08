@@ -1,5 +1,5 @@
 <resources>
-    <style name="Theme.JellyfinForRayNeo" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.Tachi" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowBackground">#02070D</item>

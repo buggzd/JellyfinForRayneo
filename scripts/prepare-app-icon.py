@@ -1,4 +1,4 @@
-"""Prepare Android launcher resources from the supplied TACHI mech artwork.
+"""Prepare Android launcher resources from the supplied tachi mech artwork.
 
 Run with Python 3 and Pillow. Crop and monochrome contours describe source.png,
 not arbitrary replacement artwork; review them again when changing the source.
@@ -147,7 +147,7 @@ def legacy_icon(square, size, circle=False):
 def save_preview(square, monochrome):
     sheet = Image.new('RGB', (840, 330), '#e9eef4')
     draw = ImageDraw.Draw(sheet)
-    draw.text((24, 18), 'TACHI | launcher icon', fill='#253c4b')
+    draw.text((24, 18), 'tachi | launcher icon', fill='#253c4b')
     for index, label in enumerate(('Rounded', 'Circle', 'Themed')):
         size = 192
         if label == 'Themed':

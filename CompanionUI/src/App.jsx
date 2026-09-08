@@ -903,7 +903,7 @@ function Brand({ compact = false }) {
         <i className="brand-mark__drop" />
       </span>
       <span data-wallpaper-text="">
-        <strong>TACHI</strong>
+        <strong>tachi</strong>
         <small>塔奇</small>
       </span>
     </div>
@@ -946,7 +946,7 @@ function ConnectScreen({
     <section className="screen connect-screen">
       <header className="top-row">
         {onBack ? <button className="icon-button glass-soft" onClick={onBack} aria-label="返回服务器与账号"><ArrowLeft size={20} /></button> : <Brand />}
-        <button className="icon-button glass-soft" aria-label="更多选项" onClick={() => notify('塔奇TACHI · 手机伴侣')}>
+        <button className="icon-button glass-soft" aria-label="更多选项" onClick={() => notify('tachi（塔奇） · 手机伴侣')}>
           <MoreHorizontal size={20} />
         </button>
       </header>
@@ -955,7 +955,7 @@ function ConnectScreen({
         {!simpleUi && <img src={assetUrl('liquid-blue.png')} alt="冰蓝色流体抽象艺术" />}
         <div className="art-hero__refraction" />
         <div className="art-hero__copy">
-          <span className="eyebrow light">TACHI COMPANION</span>
+          <span className="eyebrow light">tachi COMPANION</span>
           <h1>{simpleUi ? <>随身影院<br />静享光影</> : <>让影像<br />穿过玻璃</>}</h1>
           <p>Jellyfin × RayNeo Air</p>
         </div>
@@ -1575,7 +1575,7 @@ function SettingsScreen({
           <span className="setting-row__icon pearl"><Info size={19} /></span>
           <span className="setting-row__copy" data-wallpaper-text="glass">
             <strong>当前版本</strong>
-            <small>塔奇TACHI{nativeState?.appVersionName ? '' : ' · 浏览器预览'}</small>
+            <small>tachi（塔奇）{nativeState?.appVersionName ? '' : ' · 浏览器预览'}</small>
           </span>
           <span className="app-version" data-wallpaper-text="glass"><strong>{version}</strong><small>Build {versionCode}</small></span>
         </div>
@@ -1596,7 +1596,7 @@ function SettingsScreen({
         <RotateCcw size={16} /> 恢复默认偏好
       </button>
 
-      <p className="settings-footer" data-wallpaper-text="">塔奇TACHI<span>开源第三方客户端 · MIT License</span></p>
+      <p className="settings-footer" data-wallpaper-text="">tachi（塔奇）<span>开源第三方客户端 · MIT License</span></p>
     </section>
   )
 }
@@ -1674,7 +1674,7 @@ function BackgroundPicker({ background, screenAspect }) {
 }
 
 function ProjectSettingLink({ page, icon: Icon, title, detail }) {
-  const root = 'https://github.com/buggzd/JellyfinForRayneo'
+  const root = 'https://github.com/buggzd/tachi'
   const url = { project: root, issues: `${root}/issues`, guide: `${root}/blob/main/docs/USER_GUIDE.md` }[page]
   return (
     <a className="setting-row" href={url} target="_blank" rel="noopener noreferrer" onClick={(event) => {

@@ -134,7 +134,7 @@ window.LucentNative = {
 function authorizationHeader(deviceId: string, token?: string) {
   const safeDeviceId = deviceId.replace(/["\\]/g, '')
   const values = [
-    'MediaBrowser Client="Lucent for RayNeo"',
+    'MediaBrowser Client="tachi"',
     'Device="RayNeo Air"',
     `DeviceId="${safeDeviceId}"`,
     `Version="${__APP_VERSION__.replace(/["\\]/g, '')}"`,

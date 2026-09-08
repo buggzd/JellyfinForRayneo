@@ -2,6 +2,11 @@
 
 ## Project Map
 
+The project is **tachi（塔奇）**, named after Tachikoma from Ghost in the Shell.
+Use lowercase `tachi` for product branding and `buggzd/tachi` for GitHub links.
+Keep the existing Android application ID and persisted storage/bridge identifiers
+compatible so renaming does not break upgrades or discard user settings.
+
 This repository contains a native Android app and two embedded React/Vite
 frontends:
 

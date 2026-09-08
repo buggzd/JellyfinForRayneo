@@ -1,27 +1,29 @@
-# 塔奇TACHI
+# tachi（塔奇）
 
 > 面向 RayNeo Air 系列眼镜的第三方 Jellyfin 客户端：手机负责连接与遥控，眼镜负责浏览与播放，一个应用提供 2D 镜像和 SBS 立体虚拟屏幕。
+
+**tachi（塔奇）**的名字源自《攻壳机动队》的塔奇克马（Tachikoma）。英文名称统一使用小写 `tachi`，中文名称为“塔奇”。
 
 本项目不是 Jellyfin 或 RayNeo 的官方产品，与这些公司不存在隶属或背书关系。
 
 [快速开始](#快速开始) · [核心能力](#核心能力) · [当前边界](#当前边界) · [文档](#文档)
 
 <p align="center">
-  <img src="docs/images/glasses-home.png" width="73%" alt="塔奇TACHI 眼镜端首页">
-  <img src="docs/images/companion-home.png" width="23%" alt="塔奇TACHI 手机伴侣端">
+  <img src="docs/images/glasses-series.png" width="73%" alt="tachi（塔奇）眼镜端《攻壳机动队》剧集详情">
+  <img src="docs/images/companion-home.png" width="23%" alt="tachi（塔奇） 手机伴侣端">
 </p>
 
-<p align="center"><sub>眼镜端媒体首页与手机伴侣端 · 截图使用演示数据</sub></p>
+<p align="center"><sub>眼镜端展示《攻壳机动队 STAND ALONE COMPLEX》，媒体来自测试服务器；手机端使用演示身份，账号信息已隐去。</sub></p>
 
 ## 快速开始
 
 你需要一台可访问的 Jellyfin 服务器、RayNeo Air 系列眼镜及配套 Android 手机。源码构建还需要 JDK 17+、Node.js/npm，以及 Android SDK platform 35 和 build tools 34.0.0。
 
-1. 从 [GitHub Releases](https://github.com/buggzd/JellyfinForRayneo/releases) 下载正式签名的 ARM64 APK；需要自行构建 Debug APK 时：
+1. 从 [GitHub Releases](https://github.com/buggzd/tachi/releases) 下载正式签名的 ARM64 APK；需要自行构建 Debug APK 时：
 
    ```bash
-   git clone https://github.com/buggzd/JellyfinForRayneo.git
-   cd JellyfinForRayneo
+   git clone https://github.com/buggzd/tachi.git
+   cd tachi
    ./scripts/build-android.sh debug
    ```
 
@@ -47,6 +49,8 @@
 - **两种眼镜显示方式**：可在 Mirror 2D 与 SBS 虚拟银幕之间切换；银幕支持四档靠近程度和独立大小调节，并保持单路视频、声音和播放上报。
 - **无需 ADB 也能排查问题**：手机端显示连接阶段和安全诊断，可分享经过脱敏的诊断报告。
 - **观看偏好**：手机与眼镜设置都能切换液态玻璃（liquid-glass）／simpleUI 和四档字幕大小，自动保存、两端同步；播放器沿用设置中选择的文字字号。
+
+<p align="center"><img src="docs/images/glasses-episodes.png" width="96%" alt="tachi 眼镜端《攻壳机动队》分集浏览"></p>
 
 ## 工作方式
 

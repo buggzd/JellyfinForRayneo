@@ -4,11 +4,14 @@
 
 ## 正式发布身份
 
+- 项目名称：`tachi`（塔奇）；GitHub 仓库：[`buggzd/tachi`](https://github.com/buggzd/tachi)
 - Android application ID：`com.jellyfinforrayneo.client`
 - 首个正式版本：`v0.2.0`，`versionCode=2`
 - 正式签名证书 SHA-256：`71:28:B1:AE:A0:7F:26:9F:15:40:2B:9C:DC:4D:5D:D6:80:5D:79:AC:C1:EF:E6:B7:F9:85:FD:2C:AF:AC:C4:75`
 
 证书指纹和 alias 不是秘密，可以用于核对发布身份。keystore、私钥和密码必须保密；后续 APK 必须继续使用同一私钥，才能覆盖升级 `v0.2.0` 及之后的安装。
+
+改名保留原 application ID、签名证书与持久化键名，现有用户可继续覆盖升级。后续发布附件使用 `tachi-<versionName>-arm64-v8a.apk`；已发布的旧版标签和附件保持原样。
 
 ## 发布前准备
 
@@ -104,10 +107,10 @@ CI 不会发布 unsigned APK，也不会回退到 Debug 证书。
 确认 Actions 成功、Release 不是 Draft，并同时存在 APK 与 `.sha256`。下载后校验：
 
 ```bash
-gh release download v<versionName> --repo buggzd/JellyfinForRayneo
-shasum -a 256 --check JellyfinForRayneo-<versionName>-arm64-v8a.apk.sha256
+gh release download v<versionName> --repo buggzd/tachi
+shasum -a 256 --check tachi-<versionName>-arm64-v8a.apk.sha256
 ${ANDROID_HOME}/build-tools/34.0.0/apksigner verify \
-  --verbose --print-certs JellyfinForRayneo-<versionName>-arm64-v8a.apk
+  --verbose --print-certs tachi-<versionName>-arm64-v8a.apk
 ```
 
 Linux 可将 `shasum -a 256 --check` 替换为 `sha256sum --check`。验签结果必须至少显示 v2 scheme 为 `true`、签名者数量为 1，证书 SHA-256 必须与本文记录一致。最后在目标手机完成一次安装或覆盖升级烟雾测试。

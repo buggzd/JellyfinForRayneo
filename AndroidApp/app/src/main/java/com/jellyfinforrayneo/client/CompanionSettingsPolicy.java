@@ -10,7 +10,7 @@ final class CompanionSettingsPolicy
     static final int MAX_IMAGE_EDGE = 1600;
     static final int DEFAULT_GLASS_TRANSPARENCY = 88;
     static final String BACKGROUND_URL = "https://appassets.androidplatform.net/CompanionUI/phone-background.jpg?v=";
-    private static final String PROJECT_URL = "https://github.com/buggzd/JellyfinForRayneo";
+    private static final String PROJECT_URL = "https://github.com/buggzd/tachi";
 
     private CompanionSettingsPolicy()
     {

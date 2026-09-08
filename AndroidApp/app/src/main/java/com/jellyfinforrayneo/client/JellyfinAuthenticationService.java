@@ -337,7 +337,7 @@ final class JellyfinAuthenticationService
 
     private String authorizationHeader()
     {
-        return "MediaBrowser Client=\"Jellyfin for RayNeo\", Device=\""
+        return "MediaBrowser Client=\"tachi\", Device=\""
                 + deviceName
                 + "\", DeviceId=\""
                 + headerSafe(sessions.getOrCreateDeviceId())

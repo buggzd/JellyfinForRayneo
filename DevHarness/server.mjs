@@ -98,7 +98,7 @@ export function normalizeServerUrl(value) {
 
 function authorizationHeader() {
   return [
-    'MediaBrowser Client="Jellyfin for RayNeo"',
+    'MediaBrowser Client="tachi"',
     'Device="Browser Dual UI"',
     `DeviceId="${headerSafe(deviceId)}"`,
     `Version="${headerSafe(applicationVersion)}"`,

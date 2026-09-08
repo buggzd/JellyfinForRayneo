@@ -1,6 +1,6 @@
-# Embedded glasses UI
+# tachi · Embedded glasses UI
 
-This React frontend is the glasses-side Lucent interface bundled into the
+This React frontend is the glasses-side tachi interface bundled into the
 Android APK. Its visual implementation is derived directly from the supplied
 `media centertemp` presentation template.
 

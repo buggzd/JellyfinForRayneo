@@ -1,6 +1,6 @@
-# Embedded companion UI
+# tachi · Embedded companion UI
 
-This frontend is the phone-side interface packaged into the Android APK. It is
+This frontend is the phone-side tachi interface packaged into the Android APK. It is
 based on the supplied Luma Link presentation template, while its data and
 actions are provided by the native Android `MainActivity` through the local
 `JellyfinNative` JavaScript bridge.

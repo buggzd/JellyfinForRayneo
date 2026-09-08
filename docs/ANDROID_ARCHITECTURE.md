@@ -1,8 +1,14 @@
 # Native Android architecture
 
-Jellyfin for RayNeo is a native Android application with two local React/Vite
+tachi is a native Android application with two local React/Vite
 frontends. Android owns lifecycle, session persistence, RayNeo display control,
 the external `Presentation`, and the bounded JavaScript bridges.
+
+The product name is **tachi（塔奇）**. The Android application ID and Java
+namespace remain `com.jellyfinforrayneo.client` for in-place upgrades. Existing
+storage keys, device IDs and WebView bridge identifiers (including
+`LucentNative` and `LumaNative`) retain their original spelling for compatibility;
+these are internal identifiers, not product branding.
 
 ## Runtime topology
 
