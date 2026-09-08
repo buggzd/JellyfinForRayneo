@@ -348,13 +348,9 @@ function createWebViewDeviceProfile(hardwareVideoCodecs: ReadonlySet<string>) {
       }] : []),
     ],
     SubtitleProfiles: [
+      // The local text renderer parses WebVTT; Jellyfin converts other text codecs.
       { Format: 'vtt', Method: 'External' },
       { Format: 'webvtt', Method: 'External' },
-      { Format: 'srt', Method: 'External' },
-      { Format: 'subrip', Method: 'External' },
-      { Format: 'ass', Method: 'External' },
-      { Format: 'ssa', Method: 'External' },
-      { Format: 'mov_text', Method: 'External' },
       { Format: 'pgssub', Method: 'Encode' },
       { Format: 'dvdsub', Method: 'Encode' },
       { Format: 'dvbsub', Method: 'Encode' },
@@ -784,7 +780,8 @@ export class JellyfinClient {
     stream: JellyfinMediaStream | undefined,
   ) {
     if (!stream || stream.Index === undefined || !source.Id) return undefined
-    if (stream.DeliveryUrl) return this.authenticatedUrl(stream.DeliveryUrl)
+    // DeliveryUrl can point to the original ASS/SSA file. Explicitly request
+    // WebVTT on the full media timeline, including when resuming or using HLS.
     return this.authenticatedUrl(
       `/Videos/${encodeURIComponent(itemId)}/${encodeURIComponent(source.Id)}/Subtitles/${stream.Index}/Stream.vtt`,
       {

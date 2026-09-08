@@ -495,6 +495,15 @@ at 3840×2160 and 120 Mbps; H.264/VP8 are limited to 8-bit and HEVC/VP9/AV1 to
 24 Mbps, two-channel H.264/AAC HLS fallback. `hls.js` handles transport and MSE
 demuxing; Chromium still selects the actual Android decoder.
 
+The local subtitle renderer accepts WebVTT only. The device profile advertises
+only VTT/WebVTT for external text delivery; ASS/SSA, SubRip and other supported
+text sources are converted by Jellyfin. Subtitle requests explicitly use the
+selected source/track's `Stream.vtt` endpoint instead of trusting `DeliveryUrl`,
+which can return original ASS content. Requests use the full media timeline
+(`startPositionTicks=0`, `copyTimestamps=false`, `addVttTimeMap=false`) for both
+direct play and HLS, including resume and track changes. ASS styling is flattened
+to text with the user's subtitle size; bitmap tracks retain server-side burn-in.
+
 The glasses player's optional video-information overlay reads the existing
 playback plan, HTML video dimensions/quality/buffered ranges, and the current
 HLS rendition and demuxed codecs. It distinguishes output parameters from the
