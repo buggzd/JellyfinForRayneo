@@ -1,4 +1,4 @@
-# Jellyfin for RayNeo 开发和构建指南
+# 塔奇TACHI 开发和构建指南
 
 这份文档集中记录源码构建、前端调试、发布签名和验证流程。日常安装与使用见 [使用指南](USER_GUIDE.md)；修改会话、WebView 桥、播放、诊断、遥控或显示模式前，请先阅读 [Android 架构说明](ANDROID_ARCHITECTURE.md)。
 
