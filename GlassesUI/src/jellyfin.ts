@@ -982,12 +982,13 @@ export class JellyfinClient {
   }
 
   async loadFolder(parent: MediaItem) {
+    // Match Jellyfin Web: ParentId resolves virtual collection views. An
+    // IncludeItemTypes filter can make such a view return the library root.
     const response = await this.request<JellyfinItemsResponse>(
       `/Users/${encodeURIComponent(this.session.userId)}/Items`,
       {
         ParentId: parent.id,
         Recursive: false,
-        IncludeItemTypes: parent.collectionType?.toLowerCase() === 'boxsets' && parent.sourceType !== 'BoxSet' ? 'BoxSet' : undefined,
         Fields: itemFields,
         ImageTypeLimit: 1,
         EnableImageTypes: 'Primary,Backdrop,Logo',

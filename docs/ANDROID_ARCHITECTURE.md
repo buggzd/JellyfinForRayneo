@@ -199,6 +199,9 @@ locally from the bounded Series index.
 
 Collection browsing keeps Jellyfin's container hierarchy: a `boxsets` library
 lists `BoxSet` containers, and each collection loads only its direct children.
+Requests resolve the view using `ParentId` without `IncludeItemTypes`, matching
+Jellyfin Web: filtering a virtual collection view by `BoxSet` can return root
+libraries instead of its collections.
 Films and series still open their respective details. The glasses frontend
 retains the in-memory breadcrumb path while visiting details; remote Back and
 the breadcrumb back button both leave one container level at a time. A fresh

@@ -28,7 +28,7 @@ test('collection groups and BoxSets browse as containers while films and series 
   assert.equal(client.mapItem({ Id: 'movie', Type: 'Movie', MediaType: 'Video' }).canPlay, true)
 })
 
-test('loads collection groups, their collections and mixed contents one level at a time', async (t) => {
+test('virtual collection views resolve by parent without a type filter that returns the library root', async (t) => {
   const requests = []
   const children = {
     group: [{ Id: 'collection', Type: 'BoxSet' }],
@@ -38,12 +38,16 @@ test('loads collection groups, their collections and mixed contents one level at
   t.mock.method(globalThis, 'fetch', async value => {
     const url = new URL(value)
     requests.push(url.searchParams)
-    return Response.json({ Items: children[url.searchParams.get('ParentId')] })
+    // Real Jellyfin virtual views can resolve a typed request to the root.
+    const items = url.searchParams.has('IncludeItemTypes')
+      ? [{ Id: 'group', Type: 'CollectionFolder', CollectionType: 'boxsets' }]
+      : children[url.searchParams.get('ParentId')]
+    return Response.json({ Items: items })
   })
   const client = new JellyfinClient({ serverUrl: 'https://media.example.invalid', accessToken: 'fixture', userId: 'user', deviceId: 'test' })
   const collections = await client.loadFolder(client.mapItem({ Id: 'group', Type: 'UserView', CollectionType: 'boxsets' }))
   assert.deepEqual(collections.map(item => item.id), ['collection'])
-  assert.equal(requests[0].get('IncludeItemTypes'), 'BoxSet')
+  assert.equal(requests[0].has('IncludeItemTypes'), false)
   const contents = await client.loadFolder(collections[0])
   assert.deepEqual(contents.map(item => item.id), ['movie', 'series', 'nested'])
   assert.equal(requests[1].has('IncludeItemTypes'), false)
