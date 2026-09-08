@@ -1,3 +1,4 @@
+import { parseSeekCommand } from '../../SharedUI/seekCommand.mjs'
 const CHANNEL = 'jellyfin-rayneo-dual-ui-v1'
 const MAX_MESSAGE_LENGTH = 65_536
 const allowedScreens = new Set(['connect', 'auth', 'home', 'settings', 'accounts', 'touchpad'])
@@ -55,6 +56,7 @@ const initialState = {
     playMethod: '',
     positionTicks: 0,
     durationTicks: 0,
+    seekEnabled: false,
   },
   servers: [],
 }
@@ -169,7 +171,7 @@ export function installDevelopmentBridge() {
     openQuickConnectAuthorization: () => call('openQuickConnectAuthorization'),
     remoteCommand: (value, haptic) => {
       const command = boundedText(value, 32).toLowerCase()
-      if (allowedRemoteCommands.has(command)) call('remoteCommand', [command, Boolean(haptic)])
+      if (allowedRemoteCommands.has(command) || parseSeekCommand(command) !== null) call('remoteCommand', [command, Boolean(haptic)])
     },
     searchText: (value) => {
       const query = boundedText(value, 49).toLowerCase()

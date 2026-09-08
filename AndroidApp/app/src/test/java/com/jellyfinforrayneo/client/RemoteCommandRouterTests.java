@@ -85,6 +85,27 @@ public final class RemoteCommandRouterTests
         assertEquals(List.of("search-text:qyn 12 ", "search-text:"), delivered);
     }
 
+    @Test
+    public void circularSeek_IsBoundedAndNeverQueuedForLaterFocus()
+    {
+        RemoteCommandRouter router = new RemoteCommandRouter();
+        List<String> delivered = new ArrayList<>();
+        router.setSink(command -> delivered.add(command));
+        assertFalse(router.submit("seek:15"));
+        assertEquals(0, router.pendingCount());
+        router.setReady(true);
+        assertTrue(router.submit("seek:1"));
+        assertTrue(router.submit("seek:-60"));
+        for (String invalid : List.of("seek:0", "seek:61", "seek:-61", "seek:1.5", "seek:+1", "seek:01", "seek:1;up"))
+        {
+            assertFalse(router.submit(invalid));
+        }
+        router.setSink(command -> false);
+        assertFalse(router.submit("seek:10"));
+        assertEquals(0, router.pendingCount());
+        assertEquals(List.of("seek:1", "seek:-60"), delivered);
+    }
+
     private static String repeat(char value, int count)
     {
         StringBuilder result = new StringBuilder(count);

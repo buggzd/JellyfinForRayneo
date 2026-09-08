@@ -1672,6 +1672,10 @@ public final class MainActivity extends Activity
             String command = bounded(value, 32).trim().toLowerCase(Locale.US);
             runOnUiThread(() ->
             {
+                if (command.startsWith("seek:") && !playback.isSeekEnabled())
+                {
+                    return;
+                }
                 if (remoteCommands.submit(command) && haptic)
                 {
                     companionWebView.haptic("back".equals(command));

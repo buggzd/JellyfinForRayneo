@@ -1,10 +1,11 @@
+import { parseSeekCommand } from '../SharedUI/seekCommand.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import vm from 'node:vm'
 import test from 'node:test'
 
-const source = await readFile(new URL('./harness.js', import.meta.url), 'utf8')
+const source = (await readFile(new URL('./harness.js', import.meta.url), 'utf8')).replace(/^import .*seekCommand.*\n/, '')
 const settle = () => new Promise(resolve => setImmediate(resolve))
 
 async function harness(storedTheme = null, storedBackground = null, storedTransparency = null, storedSubtitleSize = null) {
@@ -25,7 +26,7 @@ async function harness(storedTheme = null, storedBackground = null, storedTransp
     return elements.get(selector)
   }
   const context = vm.createContext({
-    URL, Blob, crypto: { randomUUID },
+    parseSeekCommand, URL, Blob, crypto: { randomUUID },
     document: { querySelector: element },
     window: {
       location: { hostname: '127.0.0.1', origin: 'http://127.0.0.1:4177' },
@@ -43,6 +44,7 @@ async function harness(storedTheme = null, storedBackground = null, storedTransp
   }
   return {
     call,
+    remoteCommands: () => messages.filter(message => message.type === 'remote-command').map(message => message.payload.command),
     command: (method, ...args) => call('handleCompanionCall', { method, args }),
     state: () => messages.filter(message => message.target === 'companion' && message.type === 'state').at(-1).payload,
     generation: () => messages.filter(message => message.type === 'bootstrap').at(-1).payload.catalogGeneration,
@@ -279,4 +281,21 @@ test('successful account switch clears the previous playback and search state', 
   assert.equal(app.state().playback.state, 'stopped')
   assert.equal(app.state().searchInputActive, false)
   assert.equal(app.state().searchQuery, '')
+})
+
+
+test('circular seeking forwards only bounded deltas while progress focus is enabled', async () => {
+  const app = await harness()
+  app.call('applySession', account())
+  app.command('remoteCommand', 'seek:15')
+  assert.equal(app.remoteCommands().length, 0)
+  app.call('handleGlassesMessage', { type: 'playback_state', state: 'paused', seekEnabled: true })
+  app.command('remoteCommand', 'seek:-60')
+  app.command('remoteCommand', 'seek:61')
+  assert.deepEqual(app.remoteCommands(), ['seek:-60'])
+  app.call('handleGlassesMessage', { type: 'playback_state', state: 'playing', seekEnabled: 'true' })
+  app.command('remoteCommand', 'seek:15')
+  assert.equal(app.remoteCommands().length, 1)
+  app.call('handleGlassesMessage', { type: 'playback_state', state: 'stopped', seekEnabled: true })
+  assert.equal(app.state().playback.seekEnabled, false)
 })

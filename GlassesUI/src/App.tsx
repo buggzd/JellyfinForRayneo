@@ -1,3 +1,4 @@
+import { parseSeekCommand } from '../../SharedUI/seekCommand.mjs'
 import { latestWatchedEpisode, resumeProgress, watchedTime } from './watchProgress'
 import AssSubtitles from './AssSubtitles'
 import {
@@ -1753,7 +1754,7 @@ function PlayerPage({
   const controls = chrome === 'controls'
   useLayoutEffect(() => suspendHiddenAnimations(bottomChromeRef.current, !controls), [controls])
   const [panel, setPanel] = useState<'audio' | 'subtitles' | null>(null)
-  const [feedback, setFeedback] = useState<{ direction: 'backward' | 'forward'; id: number } | null>(null)
+  const [feedback, setFeedback] = useState<{ direction: 'backward' | 'forward'; seconds: number; id: number } | null>(null)
   const [volume, setVolume] = useState(100)
   const [volumeVisible, setVolumeVisible] = useState(false)
   const volumeMounted = usePresence(volumeVisible)
@@ -1819,6 +1820,16 @@ function PlayerPage({
     return Math.max(0, Math.round(seconds * jellyfinTicksPerSecond))
   }, [])
 
+  const circularSeekEnabled = useCallback(() => (
+    chromeRef.current === 'controls'
+    && !document.hidden
+    && !['preparing', 'error', 'stopped'].includes(statusRef.current)
+    && Boolean(planRef.current?.canSeek)
+    && Number.isFinite(videoRef.current?.duration) && Number(videoRef.current?.duration) > 0
+    && !playerPageRef.current?.querySelector('.track-panel')
+    && Boolean(currentSpatialFocus()?.matches('.player-progress__bar'))
+  ), [])
+
   const publishNativePlaybackState = useCallback((nextStatus: PlayerStatus | 'stopped') => {
     const active = planRef.current
     const videoDuration = videoRef.current?.duration
@@ -1834,12 +1845,22 @@ function PlayerPage({
       playMethod: active?.playMethod ?? '',
       positionTicks: positionTicks(),
       durationTicks,
+      seekEnabled: nextStatus !== 'stopped' && circularSeekEnabled(),
     })
-  }, [item.id, item.original, item.runtimeTicks, item.subtitle, item.title, positionTicks])
+  }, [circularSeekEnabled, item.id, item.original, item.runtimeTicks, item.subtitle, item.title, positionTicks])
 
   useEffect(() => {
-    publishNativePlaybackState(status)
-  }, [publishNativePlaybackState, status])
+    const publish = () => publishNativePlaybackState(statusRef.current)
+    publish()
+    document.addEventListener('focusin', publish)
+    document.addEventListener('focusout', publish)
+    document.addEventListener('visibilitychange', publish)
+    return () => {
+      document.removeEventListener('focusin', publish)
+      document.removeEventListener('focusout', publish)
+      document.removeEventListener('visibilitychange', publish)
+    }
+  }, [chrome, panel, plan, publishNativePlaybackState, status, total])
 
   useEffect(() => () => {
     publishNativePlaybackState('stopped')
@@ -2071,10 +2092,11 @@ function PlayerPage({
     const video = videoRef.current
     if (!video || !Number.isFinite(video.duration) || !planRef.current?.canSeek) return
     const next = Math.max(0, Math.min(video.duration, video.currentTime + seconds))
+    const applied = next - video.currentTime
     video.currentTime = next
     currentRef.current = next
     setCurrent(next)
-    setFeedback({ direction: seconds > 0 ? 'forward' : 'backward', id: ++feedbackId.current })
+    setFeedback({ direction: seconds > 0 ? 'forward' : 'backward', seconds: Math.round(Math.abs(applied)), id: ++feedbackId.current })
     if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current)
     feedbackTimer.current = window.setTimeout(() => setFeedback(null), 920)
     if (showControls) reveal()
@@ -2336,6 +2358,11 @@ function PlayerPage({
   useEffect(() => {
     const listener = (event: Event) => {
       const command = String((event as CustomEvent<string>).detail ?? '')
+      const seconds = parseSeekCommand(command)
+      if (seconds !== null) {
+        if (circularSeekEnabled()) seek(seconds)
+        return
+      }
       if (!command.startsWith('volume:')) return
       const next = Number(command.slice('volume:'.length))
       if (!Number.isFinite(next)) return
@@ -2346,7 +2373,7 @@ function PlayerPage({
     }
     window.addEventListener('rayneo-remote-command', listener)
     return () => window.removeEventListener('rayneo-remote-command', listener)
-  }, [])
+  }, [circularSeekEnabled, seek])
 
   const chooseTrack = useCallback((kind: 'audio' | 'subtitles', index: number) => {
     const active = planRef.current
@@ -2503,7 +2530,7 @@ function PlayerPage({
           className={cx('seek-feedback', `seek-feedback--${feedback.direction}`)}
           role="status"
           aria-live="polite"
-          aria-label={`${feedback.direction === 'forward' ? '快进' : '快退'} 10 秒`}
+          aria-label={`${feedback.direction === 'forward' ? '快进' : '快退'} ${feedback.seconds} 秒`}
         >
           <div className="seek-feedback__field" aria-hidden="true"><i /><i /><i /></div>
           <div className="seek-feedback__content">
@@ -2512,7 +2539,7 @@ function PlayerPage({
             </span>
             <span className="seek-feedback__copy">
               <small>{feedback.direction === 'forward' ? '快进' : '快退'}</small>
-              <strong>10 <em>秒</em></strong>
+              <strong>{feedback.seconds} <em>秒</em></strong>
               <b>{formatTime(current)}</b>
             </span>
           </div>
@@ -2541,7 +2568,7 @@ function PlayerPage({
         <section className="player-controls glass-panel">
           <div className="player-progress" style={{ '--played': `${progress}%` } as CSSProperties}>
             <span className="player-progress__time">{formatTime(current)}</span>
-            <button type="button" data-focusable="true" aria-label="播放进度，左右滑动快退或快进十秒，单击播放或暂停" className="player-progress__bar" onClick={() => { togglePlayback(); reveal() }}><i><b /></i></button>
+            <button type="button" data-focusable="true" aria-label="播放进度，左右滑动调整十秒，手机顺时针快进、逆时针快退，转得越快调整越多，单击播放或暂停" className="player-progress__bar" onClick={() => { togglePlayback(); reveal() }}><i><b /></i></button>
             <span className="player-progress__time">{formatTime(total)}</span>
           </div>
           <div className="player-control-row">
@@ -2560,7 +2587,7 @@ function PlayerPage({
             </div>
           </div>
           <div className="player-hints" aria-label="手机触控板手势">
-            <span><MoveHorizontal size={17} aria-hidden="true" /><b>左右滑动</b> 进度条上快退 / 快进 10 秒</span>
+            <span><MoveHorizontal size={17} aria-hidden="true" /><b>进度条聚焦</b> 环形转动变速调整 · 左右滑动 10 秒</span>
             <span><MoveVertical size={17} aria-hidden="true" /><b>上下滑动</b> 进度条上滑收起 · 再上滑返回按钮</span>
             <span><Pointer size={17} aria-hidden="true" /><b>单击</b> 确认 / 播放暂停</span>
             <span><RotateCcw size={17} aria-hidden="true" /><b>双击</b> {panel ? '关闭选项' : '返回详情'}</span>

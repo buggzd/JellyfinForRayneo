@@ -2582,3 +2582,24 @@ button:disabled {
 .account-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
 .account-dialog-actions button { min-height: 44px; margin: 0; border-radius: 13px; font-size: 13px; cursor: pointer; }
 .remove-account-confirm { border: 0; background: #ad4251; color: white; }
+
+.touchpad-seek-ring {
+  position: absolute;
+  top: 56%;
+  left: 50%;
+  display: flex;
+  width: min(62vw, 260px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 2px solid rgba(191, 225, 230, .5);
+  border-radius: 50%;
+  color: #cfe5e8;
+  pointer-events: none;
+}
+.touchpad-seek-ring > span { font-size: 25px; }
+.touchpad-seek-ring > strong { font-size: 14px; font-weight: 500; }
+.touchpad-seek-ring > small { font-size: 11px; line-height: 1.8; text-align: center; }

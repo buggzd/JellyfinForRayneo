@@ -39,6 +39,11 @@ final class RemoteCommandRouter
         {
             return false;
         }
+        if (normalized.startsWith("seek:"))
+        {
+            // A dial update belongs to the current focus, never replay after reconnect.
+            return ready && sink != null && sink.dispatch(normalized);
+        }
         return submitNormalized(normalized);
     }
 
@@ -113,6 +118,10 @@ final class RemoteCommandRouter
     private static String normalize(String value)
     {
         String command = value == null ? "" : value.trim().toLowerCase(Locale.US);
+        if (command.matches("seek:-?(?:[1-9]|[1-5][0-9]|60)"))
+        {
+            return command;
+        }
         switch (command)
         {
             case "up":

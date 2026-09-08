@@ -11,6 +11,7 @@ final class PlaybackSnapshot
     private String playMethod = "";
     private long positionTicks;
     private long durationTicks;
+    private boolean seekEnabled;
 
     void update(GlassesMessage message)
     {
@@ -25,6 +26,7 @@ final class PlaybackSnapshot
         playMethod = message.playMethod;
         positionTicks = message.positionTicks;
         durationTicks = message.durationTicks;
+        seekEnabled = message.seekEnabled;
     }
 
     void clear()
@@ -36,6 +38,12 @@ final class PlaybackSnapshot
         playMethod = "";
         positionTicks = 0L;
         durationTicks = 0L;
+        seekEnabled = false;
+    }
+
+    boolean isSeekEnabled()
+    {
+        return seekEnabled;
     }
 
     JSONObject toJson()
@@ -50,6 +58,7 @@ final class PlaybackSnapshot
             result.put("playMethod", playMethod);
             result.put("positionTicks", positionTicks);
             result.put("durationTicks", durationTicks);
+            result.put("seekEnabled", seekEnabled);
         }
         catch (Exception ignored)
         {

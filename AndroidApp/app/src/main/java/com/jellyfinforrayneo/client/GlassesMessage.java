@@ -34,6 +34,7 @@ final class GlassesMessage
     final long positionTicks;
     final long durationTicks;
     final int catalogGeneration;
+    final boolean seekEnabled;
 
     private GlassesMessage(
             Type type,
@@ -47,7 +48,8 @@ final class GlassesMessage
             String preferenceValue,
             long positionTicks,
             long durationTicks,
-            int catalogGeneration)
+            int catalogGeneration,
+            boolean seekEnabled)
     {
         this.type = type;
         this.state = state;
@@ -61,6 +63,7 @@ final class GlassesMessage
         this.positionTicks = positionTicks;
         this.durationTicks = durationTicks;
         this.catalogGeneration = catalogGeneration;
+        this.seekEnabled = seekEnabled;
     }
 
     static GlassesMessage parse(String payload)
@@ -141,7 +144,10 @@ final class GlassesMessage
                     preferenceValue,
                     boundedLong(source, "positionTicks"),
                     boundedLong(source, "durationTicks"),
-                    catalogGeneration);
+                    catalogGeneration,
+                    type == Type.PLAYBACK_STATE
+                            && !"stopped".equals(state) && !"preparing".equals(state) && !"error".equals(state)
+                            && Boolean.TRUE.equals(source.opt("seekEnabled")));
         }
         catch (Exception ignored)
         {

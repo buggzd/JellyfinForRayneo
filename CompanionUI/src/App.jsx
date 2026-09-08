@@ -1,3 +1,4 @@
+import { CircularSeekGesture } from './circularSeek.mjs'
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { applyUiTheme, normalizeUiTheme, readPreviewTheme, savePreviewTheme } from '../../SharedUI/theme.mjs'
 import { suspendHiddenAnimations } from '../../SharedUI/hiddenAnimations.mjs'
@@ -795,7 +796,7 @@ function App() {
               searchActive={Boolean(nativeState?.searchInputActive)}
               searchQuery={nativeState?.searchQuery || ''}
               onExit={() => go('home')}
-              onCommand={(command) => callNative('remoteCommand', command, haptics)}
+              onCommand={(command, useHaptics = haptics) => callNative('remoteCommand', command, useHaptics)}
               onSearchAction={(command) => callNative('remoteCommand', command, false)}
               onSearchText={(value) => callNative('searchText', value)}
               native={isNative}
@@ -1816,8 +1817,12 @@ function TouchpadScreen({
   const glowFrameRef = useRef(0)
   const surfaceRectRef = useRef(null)
   const pointerStart = useRef(null)
+  const seekRingRef = useRef(null)
+  const circularGesture = useRef(null)
+  const circularEnabled = playback?.seekEnabled === true && !searchActive
   const lastTap = useRef(0)
   const tapTimer = useRef(null)
+  const feedbackTimer = useRef(null)
   const hideTimer = useRef(null)
   const [pressed, setPressed] = useState(false)
   const [feedback, setFeedback] = useState('')
@@ -1870,6 +1875,7 @@ function TouchpadScreen({
         window.cancelAnimationFrame(glowFrameRef.current)
         glowFrameRef.current = 0
       }
+      window.clearTimeout(feedbackTimer.current)
       window.clearTimeout(hideTimer.current)
       window.clearTimeout(tapTimer.current)
     }
@@ -1914,27 +1920,73 @@ function TouchpadScreen({
   }
 
   const showFeedback = (value) => {
-    setFeedback('')
-    requestAnimationFrame(() => setFeedback(value))
-    window.setTimeout(() => setFeedback(''), 520)
+    window.clearTimeout(feedbackTimer.current)
+    setFeedback(value)
+    feedbackTimer.current = window.setTimeout(() => setFeedback(''), 520)
+  }
+
+  const cancelPointer = () => {
+    pointerStart.current = null
+    circularGesture.current = null
+    surfaceRectRef.current = null
+    window.clearTimeout(tapTimer.current)
+    lastTap.current = 0
+    setPressed(false)
+  }
+
+  useEffect(() => {
+    cancelPointer()
+    const hide = () => { if (document.hidden) cancelPointer() }
+    document.addEventListener('visibilitychange', hide)
+    window.addEventListener('blur', cancelPointer)
+    return () => {
+      document.removeEventListener('visibilitychange', hide)
+      window.removeEventListener('blur', cancelPointer)
+      window.clearTimeout(tapTimer.current)
+    }
+  }, [circularEnabled, playback?.itemId])
+
+  const emitSeek = (seconds) => {
+    if (!seconds || !circularEnabled) return
+    showFeedback(`${seconds > 0 ? '快进' : '快退'} ${Math.abs(seconds)} 秒`)
+    // Continuous seeking has no repeated vibration.
+    if (native) onCommand(`seek:${seconds}`, false)
   }
 
   const onPointerDown = (event) => {
+    if (!event.isPrimary || pointerStart.current) { cancelPointer(); return }
+    window.clearTimeout(tapTimer.current)
     event.currentTarget.setPointerCapture?.(event.pointerId)
     surfaceRectRef.current = null
     updateTarget(event)
-    pointerStart.current = { x: event.clientX, y: event.clientY, time: Date.now() }
+    pointerStart.current = { x: event.clientX, y: event.clientY, time: Date.now(), id: event.pointerId }
+    const ring = circularEnabled ? seekRingRef.current?.getBoundingClientRect() : null
+    circularGesture.current = ring ? new CircularSeekGesture(ring.left + ring.width / 2, ring.top + ring.height / 2, ring.width / 2) : null
+    circularGesture.current?.move(event.clientX, event.clientY, event.timeStamp)
     setPressed(true)
     setIntroVisible(false)
   }
 
   const onPointerMove = (event) => {
-    if (!pointerStart.current) return
+    if (pointerStart.current?.id !== event.pointerId) return
     updateTarget(event)
+    emitSeek(circularGesture.current?.move(event.clientX, event.clientY, event.timeStamp) ?? 0)
+    if (circularGesture.current?.active) {
+      window.clearTimeout(tapTimer.current)
+      lastTap.current = 0
+    }
   }
 
   const onPointerUp = (event) => {
-    if (!pointerStart.current) return
+    if (pointerStart.current?.id !== event.pointerId) return
+    const gesture = circularGesture.current
+    emitSeek(gesture?.move(event.clientX, event.clientY, event.timeStamp) ?? 0)
+    if (gesture?.active) {
+      emitSeek(gesture.flush())
+      cancelPointer()
+      return
+    }
+    circularGesture.current = null
     updateTarget(event)
     setPressed(false)
     const dx = event.clientX - pointerStart.current.x
@@ -1970,7 +2022,7 @@ function TouchpadScreen({
 
   const feedbackGlyph = useMemo(() => {
     const glyphs = { UP: '↑', DOWN: '↓', LEFT: '←', RIGHT: '→', BACK: '↩', CONFIRM: '·' }
-    return glyphs[feedback] ?? ''
+    return glyphs[feedback] ?? feedback
   }, [feedback])
 
   const playbackState = [
@@ -2007,11 +2059,8 @@ function TouchpadScreen({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={() => {
-        pointerStart.current = null
-        surfaceRectRef.current = null
-        setPressed(false)
-      }}
+      onPointerCancel={cancelPointer}
+      onLostPointerCapture={() => { if (pointerStart.current) cancelPointer() }}
     >
       {!pureBlack && <img className="touchpad-texture" src={assetUrl('luma-touchpad-void.png')} alt="" draggable="false" />}
       {!pureBlack && <div ref={glowRef} className="finger-glow"><i /></div>}
@@ -2084,6 +2133,12 @@ function TouchpadScreen({
         </aside>
       )}
 
+      {circularEnabled && (
+        <div ref={seekRingRef} className="touchpad-seek-ring" aria-label="环形调节播放进度">
+          <span>↶　　↷</span><strong>{feedback.startsWith('快') ? feedback : '转动调节进度'}</strong><small>顺时针快进 · 逆时针快退<br />转得越快，调整越多</small>
+        </div>
+      )}
+
       {showPlayback && !searchActive && (
         <aside
           className={`touchpad-playback is-${playbackState}`}
@@ -2103,9 +2158,9 @@ function TouchpadScreen({
         </aside>
       )}
 
-      <div className={`touch-feedback ${feedback ? 'is-visible' : ''}`}>
+      <div className={`touch-feedback ${feedback && !feedback.startsWith('快') ? 'is-visible' : ''}`}>
         <span>{feedbackGlyph}</span>
-        <small>{feedback === 'CONFIRM' ? '确认' : feedback === 'BACK' ? '返回' : feedback ? `向${{ UP: '上', DOWN: '下', LEFT: '左', RIGHT: '右' }[feedback]}` : ''}</small>
+        <small>{feedback === 'CONFIRM' ? '确认' : feedback === 'BACK' ? '返回' : feedback.startsWith('快') ? '环形调节' : feedback ? `向${{ UP: '上', DOWN: '下', LEFT: '左', RIGHT: '右' }[feedback]}` : ''}</small>
       </div>
 
       <div ref={introRef} className={`touchpad-intro ${introVisible && !searchActive ? 'is-visible' : ''}`}>
