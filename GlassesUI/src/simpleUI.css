@@ -149,3 +149,10 @@
 :root[data-ui-theme="simpleUI"] .detail-play-button.has-progress:is(:focus-visible, [data-spatial-focus="true"]) { color: #f1f6ec; background: #303a2a; }
 :root[data-ui-theme="simpleUI"] .focus-button__progress { background: #526542; border-right-color: #acbe96; }
 :root[data-ui-theme="simpleUI"] .episode-card__resume { color: #f1f6ec; background: #3b4b30; border-color: #8da37a; }
+
+
+:root[data-ui-theme="simpleUI"] .episode-card .media-status-badges .is-watched {
+  color: #f1f6ec;
+  background: #3b4b30;
+  border-color: #8da37a;
+}

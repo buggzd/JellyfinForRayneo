@@ -5318,3 +5318,20 @@ kbd {
   font-size: 11px;
   font-weight: 600;
 }
+
+
+.episode-card .media-status-badges {
+  top: 12px;
+  right: 12px;
+  bottom: auto;
+}
+
+.episode-card .media-status-badges .is-watched {
+  gap: 5px;
+  padding: 5px 9px;
+  border-color: #72b79a;
+  background: #204b3b;
+  color: #ecfff5;
+  font-size: 11px;
+  font-weight: 600;
+}

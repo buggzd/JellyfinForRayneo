@@ -43,7 +43,7 @@ export class WatchProgress {
     const position = duration ? Math.min(positionTicks, duration) : positionTicks
     const completed = Boolean(duration && position >= duration)
     const next = { ...item, runtimeTicks: duration, playbackPositionTicks: completed ? 0 : position,
-      watched: completed, lastPlayedDate: new Date().toISOString() }
+      watched: completed || Boolean(item.watched), lastPlayedDate: new Date().toISOString() }
     next.progress = completed ? undefined : resumeProgress(next)
     this.items.delete(item.id)
     this.items.set(item.id, next)
@@ -59,7 +59,7 @@ export class WatchProgress {
     const local = this.items.get(item.id)
     if (!local || (Date.parse(item.lastPlayedDate ?? '') || 0) > (this.confirmedAt.get(local) ?? Date.parse(local.lastPlayedDate!))) return item
     return { ...item, runtimeTicks: local.runtimeTicks, playbackPositionTicks: local.playbackPositionTicks,
-      progress: local.progress, watched: local.watched, lastPlayedDate: local.lastPlayedDate }
+      progress: local.progress, watched: Boolean(item.watched || local.watched), lastPlayedDate: local.lastPlayedDate }
   }
 
   latestFor(item: MediaItem) {

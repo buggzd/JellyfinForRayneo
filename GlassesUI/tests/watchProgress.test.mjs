@@ -107,3 +107,22 @@ test('late confirmation of an earlier episode cannot move it ahead of a newer wa
   assert.equal(history.patch({ ...episode('earlier'), lastPlayedDate: '2098-01-01T00:00:00Z' }).playbackPositionTicks, ticks(125))
   assert.equal(latestWatchedEpisode([history.patch(episode('earlier')), later]).id, 'later')
 })
+
+
+test('rewatching a completed episode preserves its watched badge and precise resume position', () => {
+  const history = new WatchProgress()
+  const item = episode('rewatch', { watched: true })
+  history.record(item, ticks(125), ticks(1500))
+  assert.equal(history.patch(item).watched, true)
+  assert.equal(history.patch(item).playbackPositionTicks, ticks(125))
+  history.forget(item.id)
+  assert.equal(history.patch({ ...item, watched: false }).watched, false)
+})
+
+test('server completion at its watched threshold takes precedence over a partial local record', () => {
+  const history = new WatchProgress()
+  const item = episode('threshold')
+  history.record(item, ticks(1450), ticks(1500))
+  assert.equal(history.patch({ ...item, watched: true }).watched, true)
+  assert.equal(history.patch(item).watched, false)
+})
