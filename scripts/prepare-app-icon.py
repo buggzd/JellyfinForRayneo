@@ -1,68 +1,106 @@
-"""Prepare Android launcher resources from the supplied glass-and-glasses artwork.
+"""Prepare Android launcher resources from the supplied TACHI mech artwork.
 
-Run with Python 3 and Pillow. Crop/feather coordinates describe source.png, not
-arbitrary replacement artwork; review the masks again when changing the source.
+Run with Python 3 and Pillow. Crop and monochrome contours describe source.png,
+not arbitrary replacement artwork; review them again when changing the source.
 """
 
-from collections import deque
+from math import hypot
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTWORK = ROOT / 'artwork/app-icon'
 RESOURCES = ROOT / 'AndroidApp/app/src/main/res'
-BACKGROUND = (2, 18, 29, 255)
-CROP = (21, 16, 345, 340)
+CROP = (10, 14, 546, 550)
 DENSITIES = {'mdpi': 1, 'hdpi': 1.5, 'xhdpi': 2, 'xxhdpi': 3, 'xxxhdpi': 4}
 LANCZOS = Image.Resampling.LANCZOS
 
 
-def glass_artwork(source):
+def mech_artwork(source):
     art = source.crop(CROP).convert('RGBA')
-    # Fade only the outer dark tile into the native background. The luminous
-    # glass panel stays intact; the screenshot's matte and baked corners vanish.
-    mask = Image.new('L', art.size, 0)
-    ImageDraw.Draw(mask).rounded_rectangle((10, 10, 313, 313), radius=74, fill=255)
-    art.putalpha(mask.filter(ImageFilter.GaussianBlur(5)))
+    # The source has baked rounded corners on a white presentation matte. Reflect
+    # adjacent artwork into those corners so each launcher can apply its own mask.
+    # Only the corner patches change; the lens, sensors and shell remain intact.
+    radius = 80
+    original = art.copy()
+    for x in range(art.width):
+        for y in range(art.height):
+            cx = radius if x < radius else art.width - 1 - radius
+            cy = radius if y < radius else art.height - 1 - radius
+            if (radius <= x < art.width - radius
+                    or radius <= y < art.height - radius):
+                continue
+            dx, dy = x - cx, y - cy
+            distance = hypot(dx, dy)
+            if distance > radius - 3:
+                reflected = 2 * (radius - 3) - distance
+                sample = (round(cx + dx * reflected / distance),
+                          round(cy + dy * reflected / distance))
+                art.putpixel((x, y), original.getpixel(sample))
     return art
 
 
-def monochrome_artwork(source):
-    # Extract the connected sunglasses silhouette, retaining the play cutout.
-    # Limit the region to the glasses so the surrounding dark tile is excluded.
-    region = source.crop((62, 140, 306, 233)).convert('L')
-    alpha = region.point(lambda value: max(0, min(255, (132 - value) * 255 // 32)))
-    seed = (90, 30)
-    visited = {seed}
-    pending = deque([seed])
-    while pending:
-        x, y = pending.popleft()
-        for xx, yy in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
-            if (0 <= xx < alpha.width and 0 <= yy < alpha.height
-                    and (xx, yy) not in visited and alpha.getpixel((xx, yy)) > 0):
-                visited.add((xx, yy))
-                pending.append((xx, yy))
-    connected = Image.new('L', region.size, 0)
-    for point in visited:
-        connected.putpixel(point, alpha.getpixel(point))
-    connected = connected.crop(connected.getbbox())
-    centered = Image.new('L', (324, 324), 0)
-    centered.paste(connected, ((324 - connected.width) // 2, (324 - connected.height) // 2))
-    result = Image.new('RGBA', centered.size, 'white')
-    result.putalpha(centered)
+def cubic_path(start, segments):
+    points = [start]
+    for control_one, control_two, end in segments:
+        for step in range(1, 65):
+            t = step / 64
+            points.append(tuple(
+                (1 - t) ** 3 * start[axis]
+                + 3 * (1 - t) ** 2 * t * control_one[axis]
+                + 3 * (1 - t) * t ** 2 * control_two[axis]
+                + t ** 3 * end[axis] for axis in (0, 1)))
+        start = end
+    return points
+
+
+def monochrome_artwork():
+    # Trace the supplied crop's silver panel, three sensors, lens and upper rim.
+    # A clean alpha silhouette survives launcher tinting better than photographic
+    # luminance, which would merge the blue shell with the silver panel.
+    alpha = Image.new('L', (536, 536), 0)
+    draw = ImageDraw.Draw(alpha)
+    panel = cubic_path((138, 536), [
+        ((116, 450), (120, 344), (206, 258)),
+        ((290, 174), (409, 161), (499, 207)),
+        ((514, 214), (526, 222), (536, 230)),
+    ])
+    draw.polygon(panel + [(536, 536)], fill=255)
+    for bounds in ((324, 265, 356, 294), (388, 269, 420, 299), (346, 310, 379, 341)):
+        draw.ellipse(bounds, fill=0)
+    rim = cubic_path((189, 151), [
+        ((173, 190), (204, 214), (246, 192)),
+        ((354, 146), (423, 124), (536, 180)),
+    ])
+    draw.line(rim, fill=255, width=11, joint='curve')
+    lens = Image.new('L', (76, 130), 0)
+    ImageDraw.Draw(lens).ellipse((6, 6, 69, 123), outline=255, width=10)
+    lens = lens.rotate(-15, resample=Image.Resampling.BICUBIC, expand=True)
+    alpha.paste(255, (101 - lens.width // 2, 355 - lens.height // 2), lens)
+    result = Image.new('RGBA', alpha.size, 'white')
+    result.putalpha(alpha)
     return result
 
 
 def adaptive_layer(art, size):
-    # 108 dp layer, with the artwork in the central 72 dp viewport and 18 dp
-    # bleed on every edge. The identifying glasses fit inside the 66 dp safe circle.
-    content_size = round(size * 72 / 108)
-    layer = Image.new('RGBA', (size, size))
-    offset = (size - content_size) // 2
-    layer.alpha_composite(art.resize((content_size, content_size), LANCZOS), (offset, offset))
-    return layer
+    # Keep the close-up in the central 72 dp viewport of a 108 dp layer. Extend
+    # edge pixels through the 18 dp bleed so launcher motion cannot reveal matte
+    # or duplicate the lens. Color artwork is opaque, monochrome preserves alpha.
+    edge = art.width
+    padding = edge // 4
+    layer = Image.new('RGBA', (edge + 2 * padding, edge + 2 * padding))
+    source_spans = ((0, 1), (0, edge), (edge - 1, edge))
+    target_spans = ((0, padding), (padding, padding + edge),
+                    (padding + edge, layer.width))
+    for row, (top, bottom) in enumerate(source_spans):
+        for column, (left, right) in enumerate(source_spans):
+            x0, x1 = target_spans[column]
+            y0, y1 = target_spans[row]
+            patch = art.crop((left, top, right, bottom))
+            layer.paste(patch.resize((x1 - x0, y1 - y0)), (x0, y0))
+    return layer.resize((size, size), LANCZOS)
 
 
 def shape_mask(size, circle=False):
@@ -92,19 +130,19 @@ def legacy_icon(square, size, circle=False):
 def save_preview(square, monochrome):
     sheet = Image.new('RGB', (840, 330), '#e9eef4')
     draw = ImageDraw.Draw(sheet)
-    draw.text((24, 18), 'Jellyfin for RayNeo | launcher icon', fill='#253c4b')
+    draw.text((24, 18), 'TACHI | launcher icon', fill='#253c4b')
     for index, label in enumerate(('Rounded', 'Circle', 'Themed')):
         size = 192
         if label == 'Themed':
             tile = Image.new('RGBA', square.size, '#d8ece2')
             tile.paste('#234637', (0, 0, *tile.size), monochrome.getchannel('A'))
         else:
-            tile = square
+            tile = square.copy()
         tile = tile.resize((size, size), LANCZOS)
         tile.putalpha(shape_mask(size, circle=label == 'Circle'))
         x = 24 + index * 280
         sheet.paste(tile, (x, 55), tile)
-        # Also show a realistic small launcher size to check the play symbol.
+        # Also show a realistic small launcher size to check the lens and sensors.
         small = tile.resize((48, 48), LANCZOS)
         sheet.paste(small, (x + 72, 263), small)
         draw.text((x, 317), label, fill='#253c4b')
@@ -114,20 +152,18 @@ def save_preview(square, monochrome):
 def main():
     with Image.open(ARTWORK / 'source.png') as image:
         source = image.convert('RGB')
-    if source.size != (370, 352):
+    if source.size != (571, 568):
         raise ValueError('Source dimensions changed; update the crop and silhouette coordinates.')
-    art = glass_artwork(source)
-    mono = monochrome_artwork(source)
-    square = Image.new('RGBA', art.size, BACKGROUND)
-    square.alpha_composite(art)
+    art = mech_artwork(source)
+    mono = monochrome_artwork()
     for density, scale in DENSITIES.items():
         output = RESOURCES / f'mipmap-{density}'
         output.mkdir(parents=True, exist_ok=True)
         adaptive_layer(art, round(108 * scale)).save(output / 'ic_launcher_foreground.png', optimize=True)
         adaptive_layer(mono, round(108 * scale)).save(output / 'ic_launcher_monochrome.png', optimize=True)
-        legacy_icon(square, round(48 * scale)).save(output / 'ic_launcher.png', optimize=True)
-        legacy_icon(square, round(48 * scale), circle=True).save(output / 'ic_launcher_round.png', optimize=True)
-    save_preview(square, mono)
+        legacy_icon(art, round(48 * scale)).save(output / 'ic_launcher.png', optimize=True)
+        legacy_icon(art, round(48 * scale), circle=True).save(output / 'ic_launcher_round.png', optimize=True)
+    save_preview(art, mono)
     print('Prepared five launcher densities, adaptive layers, monochrome masks and preview.')
 
 

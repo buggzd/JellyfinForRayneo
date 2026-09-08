@@ -840,7 +840,7 @@ public final class MainActivity extends Activity
         diagnosticLog.record(DiagnosticLog.Event.DIAGNOSTICS_SHARED);
         Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("text/plain");
-        share.putExtra(Intent.EXTRA_SUBJECT, "Jellyfin for RayNeo 诊断日志");
+        share.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.app_name) + " 诊断日志");
         share.putExtra(Intent.EXTRA_TEXT, buildDiagnosticReport());
         try
         {
@@ -855,7 +855,7 @@ public final class MainActivity extends Activity
     private String buildDiagnosticReport()
     {
         StringBuilder result = new StringBuilder();
-        result.append("Jellyfin for RayNeo diagnostics\n");
+        result.append(getString(R.string.app_name)).append(" diagnostics\n");
         appendDiagnostic(result, "format", "2");
         appendDiagnostic(result, "appVersion", BuildConfig.VERSION_NAME);
         appendDiagnostic(result, "appVersionCode", String.valueOf(BuildConfig.VERSION_CODE));

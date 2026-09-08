@@ -438,10 +438,10 @@ function FocusButton({
 
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <span className={cx('wordmark', compact && 'wordmark--compact')} aria-label="Lucent">
+    <span className={cx('wordmark', compact && 'wordmark--compact')} aria-label="塔奇TACHI">
       <span className="wordmark__spark" />
-      <span className="wordmark__name">LUCENT</span>
-      {!compact && <span className="wordmark__sub">MEDIA / LIGHT</span>}
+      <span className="wordmark__name">TACHI</span>
+      {!compact && <span className="wordmark__sub">塔奇 / MEDIA</span>}
     </span>
   )
 }
@@ -594,7 +594,7 @@ function PageHeader({ active, onNavigate, onRefresh, onExit, serverName, userNam
         <FocusButton
           variant="ghost"
           className="logo-button side-navigation__brand"
-          icon={<span className="side-navigation__brand-mark">L</span>}
+          icon={<span className="side-navigation__brand-mark">T</span>}
           label="回到首页"
           onClick={() => onNavigate('home')}
         >
@@ -735,7 +735,7 @@ function HomePage({
       <PageHeader active="home" serverName={serverName} userName={userName} refreshing={refreshing} onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
       <section className="hero-section">
         <div className="hero-section__copy">
-          <div className="hero-eyebrow"><Sparkles size={17} /> LUCENT 为你推荐</div>
+          <div className="hero-eyebrow"><Sparkles size={17} /> TACHI 为你推荐</div>
           <p className="hero-original">{featured.original}</p>
           <h1 className={cx('hero-title', `hero-title--${titleDensity}`)}>{featured.title}</h1>
           {featured.tagline && <p className="hero-tagline">「{featured.tagline}」</p>}

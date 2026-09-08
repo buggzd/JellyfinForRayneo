@@ -1,4 +1,4 @@
-# Jellyfin for RayNeo Air
+# 塔奇TACHI
 
 > 面向 RayNeo Air 系列眼镜的第三方 Jellyfin 客户端：手机负责连接与遥控，眼镜负责浏览与播放，一个应用提供 2D 镜像和 SBS 立体虚拟屏幕。
 
@@ -7,8 +7,8 @@
 [快速开始](#快速开始) · [核心能力](#核心能力) · [当前边界](#当前边界) · [文档](#文档)
 
 <p align="center">
-  <img src="docs/images/glasses-home.png" width="73%" alt="Jellyfin for RayNeo 眼镜端首页">
-  <img src="docs/images/companion-home.png" width="23%" alt="Jellyfin for RayNeo 手机伴侣端">
+  <img src="docs/images/glasses-home.png" width="73%" alt="塔奇TACHI 眼镜端首页">
+  <img src="docs/images/companion-home.png" width="23%" alt="塔奇TACHI 手机伴侣端">
 </p>
 
 <p align="center"><sub>眼镜端媒体首页与手机伴侣端 · 截图使用演示数据</sub></p>

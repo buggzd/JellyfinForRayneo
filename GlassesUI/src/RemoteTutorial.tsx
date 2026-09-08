@@ -102,7 +102,7 @@ export default function RemoteTutorial({ onExit, onComplete, simpleUi = false }:
       <div className="tutorial-floor" aria-hidden="true" />
       <div className="tutorial-shell" inert={state.exitOpen}>
         <header className="tutorial-header">
-          <div className="tutorial-brand"><span><Compass size={25} /></span><strong>LUCENT</strong><i /><span>遥控入门</span></div>
+          <div className="tutorial-brand"><span><Compass size={25} /></span><strong>TACHI</strong><i /><span>遥控入门</span></div>
         </header>
 
         {state.phase === 'welcome' ? (
