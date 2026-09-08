@@ -13,7 +13,7 @@ TaChi（塔奇）的名字源自《攻壳机动队》的塔奇克马（TaChikoma
   <img src="docs/images/companion-home.png" width="23%" alt="TaChi（塔奇） 手机伴侣端">
 </p>
 
-<p align="center"><sub>眼镜端展示《攻壳机动队 STAND ALONE COMPLEX》，媒体来自测试服务器；手机端使用演示身份，账号信息已隐去。</sub></p>
+<p align="center"><sub>眼镜端展与手机端使用演示</sub></p>
 
 ## 快速开始
 
