@@ -22,7 +22,7 @@ https://github.com/user-attachments/assets/5dd75ead-3682-4bb2-9181-6368b4049c73
   <img src="docs/images/dual-screen-showcase.png" width="96%" alt="TaChi（塔奇）双端界面：眼镜端攻壳机动队剧集详情与手机伴侣端，等高并排展示">
 </p>
 
-<p align="center"><sub>眼镜端展与手机端使用演示</sub></p>
+<p align="center"><sub>眼镜端与手机端使用演示</sub></p>
 
 ## 快速开始
 
