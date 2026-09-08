@@ -21,10 +21,10 @@
 
 ```text
 AndroidApp/                         # 原生 Android Gradle application
-└── app/src/
-    ├── main/java/.../client/       # Activity、WebView、会话、显示与桥接
-    ├── main/assets/                # 两套已构建的 production bundle
-    └── test/java/.../client/       # JVM 单元测试
+└── app/
+    ├── src/main/java/.../client/   # Activity、WebView、会话、显示与桥接
+    ├── src/test/java/.../client/   # JVM 单元测试
+    └── build/generated/webAssets/ # 两套 production bundle（不提交）
 GlassesUI/                          # 眼镜 React/TypeScript 客户端与播放器
 CompanionUI/                        # 手机 React 登录、设置与触控板
 docs/                               # 使用、架构、路线图和复现规格
@@ -36,11 +36,11 @@ scripts/verify-android.sh           # 源码与 APK 边界检查
 运行时是一个原生 Android 应用和两个本地 React/Vite 前端。生产 bundle 会生成到：
 
 ```text
-AndroidApp/app/src/main/assets/GlassesUI/
-AndroidApp/app/src/main/assets/CompanionUI/
+AndroidApp/app/build/generated/webAssets/GlassesUI/
+AndroidApp/app/build/generated/webAssets/CompanionUI/
 ```
 
-这两个目录中的生产资源随源码提交。修改前端后，应有意检查并提交对应 bundle 的变化。
+这两个目录被 Git 忽略，由 Gradle 注册为 APK assets，运行时仍使用 `file:///android_asset/GlassesUI/` 和 `CompanionUI/`。只提交前端源码、`public/` 原始资源、构建配置与依赖锁文件，不提交压缩 JS/CSS、生成的 HTML 或复制的图片/音效。
 
 ## 环境准备
 
@@ -49,6 +49,7 @@ AndroidApp/app/src/main/assets/CompanionUI/
 - JDK 17 或更高版本；
 - Android SDK platform 35、build tools 34.0.0 和 platform-tools；
 - Node.js 与 npm；
+- Python 3（APK 前端资源校验）；
 - `curl`、`unzip`、`zipinfo`、`rg`、`strings`；
 - `md5` 或 `md5sum`，以及 `shasum` 或 `sha256sum`。
 
@@ -100,9 +101,9 @@ npm --prefix CompanionUI ci
 
 构建脚本会依次：
 
-1. 对两个前端运行 `npm ci`；
-2. 检查眼镜端 TypeScript 并运行搜索回归测试；
-3. 生成两套 production bundle；
+1. 运行 APK 资源校验器回归测试，并对两个前端运行 `npm ci`；
+2. 检查眼镜端 TypeScript 并运行两套前端回归测试；
+3. 通过 Gradle 任务生成两套 production bundle（外层脚本不重复构建）；
 4. 运行 JVM 测试和对应的 Android lint；
 5. 组装所选 APK；
 6. 校验 APK 的运行时依赖、前端入口、ARM64 ABI 和敏感信息隔离。
@@ -117,7 +118,9 @@ npm --prefix CompanionUI ci
 
 Debug 包自动添加 `.debug` application ID 后缀，可以与正式包并存。Release 保留正式 application ID；没有配置签名时只生成 unsigned APK。
 
-Gradle 的 `preBuild` 会重新构建两个前端、确认 production bundle 存在，并拒绝把开发用 Jellyfin 配置打入 APK。
+Gradle 的 assets 任务依赖两套前端构建和入口校验，`preBuild` 也执行校验。源码、共享 UI、原始资源、依赖锁文件、Vite 配置或版本改变时会重建；输入和输出均未改变时复用产物。`clean` 会删除生成资源，下次构建自动恢复。直接从 Android Studio/Gradle 构建前，先为两套前端运行 `npm ci`。构建拒绝把开发用 Jellyfin 配置打入 APK。
+
+`verify-android.sh` 会核对 APK 中两套前端的完整文件集合和字节内容与本地生成目录一致，检查入口引用，并拒绝重新跟踪旧的 production bundle。独立验证下载的旧 APK 时，可用 `--apk-only` 只检查入口引用和安全边界，不与当前源码产物比较。
 
 ## 前端开发
 
@@ -286,4 +289,10 @@ Debug 包开启 WebView 调试。日志只应筛选通用 Activity、WebView、�
 - `local.properties`、绝对 SDK 路径；
 - `node_modules`、Gradle/Android 构建输出或 IDE 状态。
 
-保留无关的工作区修改，按需审阅并提交生成的前端 bundle，使用聚焦的 Conventional Commit。
+保留无关的工作区修改，只提交源码与原始资源，使用聚焦的 Conventional Commit。
+
+### 分支合并与工作区清理
+
+新分支只合并源码、配置和锁文件，然后运行完整构建；生成目录不会参与 Git 合并。旧分支仍可能携带 `app/src/main/assets/{GlassesUI,CompanionUI}` 的历史产物，首次合入时移除这两个旧目录的生成文件，再从合并后的源码构建。不要选择某一分支的压缩包代替重建。
+
+功能完成并合入 `main` 后，检查对应 worktree 的未提交/未跟踪文件，以及被忽略的本地配置；确认无需保留后，先用 `git worktree remove <path>` 移除工作目录，再用 `git branch -d <branch>` 删除本地分支。远端旧分支也应确认已合入并无人继续使用后删除。保留有未提交工作、凭据或独立本地资料的目录，不使用强制删除。

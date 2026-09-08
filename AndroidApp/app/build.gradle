@@ -3,6 +3,7 @@ plugins {
 }
 
 def repositoryRoot = rootProject.projectDir.parentFile
+def generatedWebAssets = layout.buildDirectory.dir("generated/webAssets")
 def versionPropertiesFile = new File(repositoryRoot, "version.properties")
 if (!versionPropertiesFile.isFile()) {
     throw new GradleException("Missing version.properties at the repository root.")
@@ -132,8 +133,9 @@ tasks.register("buildGlassesUi", Exec) {
             file("${repositoryRoot}/GlassesUI/tsconfig.json"),
             file("${repositoryRoot}/GlassesUI/tsconfig.app.json"),
             file("${repositoryRoot}/GlassesUI/tsconfig.node.json"),
-            file("${repositoryRoot}/GlassesUI/vite.config.ts"))
-    outputs.dir("src/main/assets/GlassesUI")
+            file("${repositoryRoot}/GlassesUI/vite.config.ts"),
+            versionPropertiesFile)
+    outputs.dir(generatedWebAssets.map { it.dir("GlassesUI") })
 }
 
 tasks.register("buildCompanionUi", Exec) {
@@ -148,25 +150,29 @@ tasks.register("buildCompanionUi", Exec) {
             file("${repositoryRoot}/CompanionUI/vite.config.mjs"),
             versionPropertiesFile,
             file("${repositoryRoot}/CompanionUI/package-lock.json"))
-    outputs.dir("src/main/assets/CompanionUI")
+    outputs.dir(generatedWebAssets.map { it.dir("CompanionUI") })
 }
 
 tasks.register("verifyProductionAssets") {
     dependsOn "buildGlassesUi", "buildCompanionUi"
     doLast {
-        def forbidden = fileTree("src/main/assets") {
+        def forbidden = files(fileTree("src/main/assets"), fileTree(generatedWebAssets)).asFileTree.matching {
             include "**/.jellyfin-dev.json", "**/*jellyfin-dev*"
         }.files
         if (!forbidden.isEmpty()) {
             throw new GradleException("Development Jellyfin configuration must not enter APK assets.")
         }
         ["GlassesUI/index.html", "CompanionUI/index.html"].each { relativePath ->
-            if (!file("src/main/assets/${relativePath}").isFile()) {
+            if (!generatedWebAssets.get().file(relativePath).asFile.isFile()) {
                 throw new GradleException("Missing production asset: ${relativePath}")
             }
         }
     }
 }
+
+// Keep generated assets in the task graph for Android Studio and direct Gradle builds.
+android.sourceSets.main.assets.srcDir(
+        files(generatedWebAssets).builtBy("verifyProductionAssets"))
 
 tasks.named("preBuild").configure {
     dependsOn "verifyProductionAssets"

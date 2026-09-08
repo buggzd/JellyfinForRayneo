@@ -4,7 +4,7 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-for command_name in awk git rg strings unzip wc; do
+for command_name in awk git python3 rg strings unzip wc; do
     if ! command -v "${command_name}" >/dev/null 2>&1; then
         echo "Missing required command: ${command_name}" >&2
         exit 1
@@ -88,11 +88,26 @@ if [[ "${apk_only}" == false ]]; then
     if [[ -n "${tracked_binaries}" ]]; then
         fail "generated SDK, application, or signing binaries are tracked"
     fi
+
+    tracked_web_assets="$(git -C "${PROJECT_DIR}" ls-files \
+        'AndroidApp/app/src/main/assets/GlassesUI' \
+        'AndroidApp/app/src/main/assets/CompanionUI' \
+        'AndroidApp/app/build/generated/webAssets')"
+    if [[ -n "${tracked_web_assets}" ]]; then
+        fail "generated frontend assets must not be tracked; merge sources and rebuild"
+    fi
 fi
 
 if [[ ! -f "${apk_path}" ]]; then
     fail "APK not found: ${apk_path}"
 else
+    web_verification_args=("${apk_path}")
+    if [[ "${apk_only}" == true ]]; then
+        web_verification_args+=(--apk-only)
+    fi
+    if ! python3 "${SCRIPT_DIR}/verify-web-assets.py" "${web_verification_args[@]}"; then
+        fail "APK frontend assets failed verification"
+    fi
     apk_entries="$(unzip -Z1 "${apk_path}")"
 
     if printf '%s\n' "${apk_entries}" | rg -i \

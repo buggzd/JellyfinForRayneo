@@ -26,7 +26,7 @@ npm --prefix GlassesUI version <versionName> --no-git-tag-version
 ## Git 标签
 
 - Release 标签只能使用与 `versionName` 完全一致的带注释标签 `v<versionName>`，例如 `v0.2.0`。
-- 标签必须指向 `main` 上已通过完整验证、生产 bundle 已提交且工作区干净的提交。
+- 标签必须指向 `main` 上已通过完整验证、生产 bundle 可从源码生成且工作区干净的提交。
 - 已发布标签和 Release 不得移动、覆盖或复用；修正发布内容时提升 PATCH 与 `versionCode`。
 - 发布提交不得包含 APK/AAB、SDK、签名文件、凭据、本机地址或开发配置。
 

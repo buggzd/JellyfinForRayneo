@@ -27,8 +27,9 @@ Rebuild the APK assets after changing the frontend:
 npm run build
 ```
 
-The generated production output is written to
-`AndroidApp/app/src/main/assets/GlassesUI` and loaded locally by the one glasses
+The generated production output is Git-ignored; commit source/public assets only.
+Gradle builds and packages it automatically. Output is written to
+`AndroidApp/app/build/generated/webAssets/GlassesUI` and loaded locally by the one glasses
 WebView inside Android's external-display `Presentation`. In stereo mode the
 native `StereoMirrorLayout` draws that same WebView frame into both SBS halves;
 do not create a second player WebView.

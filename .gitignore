@@ -59,3 +59,7 @@ Thumbs.db
 *.apk
 *.aab
 *.idsig
+
+# Legacy frontend output locations; current bundles live under app/build/.
+/AndroidApp/app/src/main/assets/GlassesUI/
+/AndroidApp/app/src/main/assets/CompanionUI/

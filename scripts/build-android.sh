@@ -22,13 +22,12 @@ if [[ -z "${ANDROID_HOME:-}" \
 fi
 
 cd "${PROJECT_DIR}"
+python3 -B -m unittest discover -s scripts/tests
 npm --prefix GlassesUI ci
 npm --prefix CompanionUI ci
 npm --prefix GlassesUI run check
 npm --prefix GlassesUI test
 npm --prefix CompanionUI test
-npm --prefix GlassesUI run build
-npm --prefix CompanionUI run build
 cd AndroidApp
 
 case "${BUILD_VARIANT}" in
@@ -49,7 +48,7 @@ case "${BUILD_VARIANT}" in
 esac
 
 if [[ "${BUILD_VARIANT}" == debug || "${BUILD_VARIANT}" == all ]]; then
-    "${SCRIPT_DIR}/verify-android.sh" --apk-only \
+    "${SCRIPT_DIR}/verify-android.sh" \
         "AndroidApp/app/build/outputs/apk/debug/app-debug.apk"
 fi
 
@@ -62,5 +61,5 @@ if [[ "${BUILD_VARIANT}" == release || "${BUILD_VARIANT}" == all ]]; then
                 && -n "${ANDROID_KEY_PASSWORD:-}" ) ]]; then
         release_apk="AndroidApp/app/build/outputs/apk/release/app-release.apk"
     fi
-    "${SCRIPT_DIR}/verify-android.sh" --apk-only "${release_apk}"
+    "${SCRIPT_DIR}/verify-android.sh" "${release_apk}"
 fi

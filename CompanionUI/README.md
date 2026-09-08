@@ -18,8 +18,9 @@ Rebuild the APK assets after changing the frontend:
 npm run build
 ```
 
-The production output is written to
-`AndroidApp/app/src/main/assets/CompanionUI`. The UI is fully local at runtime;
+The production output is Git-ignored; commit source/public assets only.
+Gradle builds and packages it automatically. Output is written to
+`AndroidApp/app/build/generated/webAssets/CompanionUI`. The UI is fully local at runtime;
 it does not load a remote web application and the phone state payload
 deliberately excludes passwords and access tokens. The settings page can ask
 Android to share an in-memory redacted diagnostic report; the report omits the

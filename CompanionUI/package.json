@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "test": "node --test tests/*.test.mjs",
-    "build": "vite build --base=./ --outDir ../AndroidApp/app/src/main/assets/CompanionUI --emptyOutDir",
+    "build": "vite build --base=./ --outDir ../AndroidApp/app/build/generated/webAssets/CompanionUI --emptyOutDir",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

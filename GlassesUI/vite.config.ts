@@ -52,7 +52,7 @@ export default defineConfig({
     port: 4175,
   },
   build: {
-    outDir: '../AndroidApp/app/src/main/assets/GlassesUI',
+    outDir: '../AndroidApp/app/build/generated/webAssets/GlassesUI',
     emptyOutDir: true,
     sourcemap: false,
   },

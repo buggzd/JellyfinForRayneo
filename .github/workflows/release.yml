@@ -108,7 +108,7 @@ jobs:
         shell: bash
         run: ./scripts/build-android.sh release
 
-      - name: Verify generated sources and APK signature
+      - name: Verify source tree remains clean and APK signature
         shell: bash
         run: |
           set -euo pipefail
