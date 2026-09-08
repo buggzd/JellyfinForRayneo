@@ -56,6 +56,17 @@ def cubic_path(start, segments):
     return points
 
 
+def smooth_stroke(mask, points, width):
+    # Rasterize above source resolution to avoid uneven stroke edges when the
+    # sampled curve crosses pixel boundaries, then composite its smooth alpha.
+    scale = 4
+    stroke = Image.new('L', (mask.width * scale, mask.height * scale), 0)
+    ImageDraw.Draw(stroke).line(
+        [(x * scale, y * scale) for x, y in points],
+        fill=255, width=width * scale, joint='curve')
+    mask.paste(255, (0, 0), stroke.resize(mask.size, LANCZOS))
+
+
 def monochrome_artwork():
     # Trace the supplied crop's shell contour, silver panel, sensors and lens.
     # A clean alpha silhouette survives launcher tinting better than photographic
@@ -70,18 +81,17 @@ def monochrome_artwork():
     draw.polygon(panel + [(536, 536)], fill=255)
     for bounds in ((324, 265, 356, 294), (388, 269, 420, 299), (346, 310, 379, 341)):
         draw.ellipse(bounds, fill=0)
-    # The blue shell's outer edge continues from the lower left into the top
-    # crop. Keep it distinct from the inner rim so the lens sits inside a body.
+    # One continuous curve follows the shell from the lower left into the top
+    # crop, passing the inner rim at (189, 151) without a segment-join kink.
     shell = cubic_path((-8, 452), [
-        ((42, 337), (120, 226), (189, 151)),
-        ((258, 87), (346, 35), (456, -8)),
+        ((100, 204), (255, 51), (456, -8)),
     ])
-    draw.line(shell, fill=255, width=11, joint='curve')
+    smooth_stroke(alpha, shell, width=11)
     rim = cubic_path((189, 151), [
         ((173, 190), (204, 214), (246, 192)),
         ((354, 146), (423, 124), (536, 180)),
     ])
-    draw.line(rim, fill=255, width=11, joint='curve')
+    smooth_stroke(alpha, rim, width=11)
     lens = Image.new('L', (76, 130), 0)
     ImageDraw.Draw(lens).ellipse((6, 6, 69, 123), outline=255, width=10)
     lens = lens.rotate(-15, resample=Image.Resampling.BICUBIC, expand=True)
