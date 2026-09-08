@@ -1,8 +1,10 @@
+import { WatchProgress, latestWatchedEpisode } from './watchProgress'
 import type { MediaItem, MediaKind, MediaShelf } from './data'
 import { getNativeHardwareVideoCodecs, type JellyfinSession } from './runtime'
 
 type JellyfinUserData = {
   PlaybackPositionTicks?: number
+  LastPlayedDate?: string
   PlayedPercentage?: number
   UnplayedItemCount?: number
   IsFavorite?: boolean
@@ -611,6 +613,9 @@ export class JellyfinClient {
   private readonly deviceProfile: ReturnType<typeof createWebViewDeviceProfile>
   private readonly onUnauthorized: () => void
   private unauthorizedPublished = false
+  private readonly watchProgress = new WatchProgress()
+  private readonly playbackItems = new Map<string, MediaItem>()
+  private readonly startedPlayback = new Set<string>()
 
   constructor(session: JellyfinSession, onUnauthorized: () => void = () => undefined) {
     this.session = session
@@ -851,6 +856,7 @@ export class JellyfinClient {
         ? source.CommunityRating.toFixed(1)
         : undefined,
       progress,
+      lastPlayedDate: source.UserData?.LastPlayedDate,
       art: hash(id) % 12,
       favorite: Boolean(source.UserData?.IsFavorite),
       watched: Boolean(source.UserData?.Played),
@@ -1034,13 +1040,14 @@ export class JellyfinClient {
   }
 
   async loadDetail(itemId: string, requestedSeasonId?: string): Promise<DetailSnapshot> {
+    await this.watchProgress.settle()
     const userId = encodeURIComponent(this.session.userId)
     const encodedItemId = encodeURIComponent(itemId)
     const detail = await this.request<JellyfinItemDto>(
       `/Users/${userId}/Items/${encodedItemId}`,
       { Fields: itemFields },
     )
-    const item = this.mapItem(detail)
+    const item = this.watchProgress.patch(this.mapItem(detail))
     const seriesId = detail.Type === 'Series' ? detail.Id : detail.SeriesId
 
     const optionalItems = async (path: string, query: Record<string, string | number | boolean | undefined>) => {
@@ -1052,7 +1059,7 @@ export class JellyfinClient {
       }
     }
 
-    const [seasonDtos, similarDtos, specialFeatureDtos, trailerDtos] = await Promise.all([
+    const [seasonDtos, similarDtos, specialFeatureDtos, trailerDtos, recentDtos] = await Promise.all([
       seriesId
         ? optionalItems(`/Shows/${encodeURIComponent(seriesId)}/Seasons`, {
             UserId: this.session.userId,
@@ -1072,14 +1079,25 @@ export class JellyfinClient {
         UserId: this.session.userId,
         Fields: itemFields,
       }),
+      seriesId && !requestedSeasonId
+        ? optionalItems(`/Users/${userId}/Items`, {
+            ParentId: seriesId, Recursive: true, IncludeItemTypes: 'Episode',
+            SortBy: 'DatePlayed', SortOrder: 'Descending', Limit: 1, Fields: itemFields,
+          })
+        : Promise.resolve([]),
     ])
 
+    const recent = latestWatchedEpisode([
+      ...recentDtos.map((recent) => this.watchProgress.patch(this.mapItem(recent))),
+      ...[this.watchProgress.latestFor(item)].filter((value): value is MediaItem => Boolean(value)),
+    ])
+    const preferredSeasonId = requestedSeasonId
+      ?? (detail.Type === 'Season' ? detail.Id : undefined)
+      ?? recent?.seasonId ?? detail.SeasonId
     const seasons = seasonDtos.map(this.mapItem)
-    const selectedSeason = requestedSeasonId
-      ? seasons.find((season) => season.id === requestedSeasonId)
-      : detail.SeasonId
-        ? seasons.find((season) => season.id === detail.SeasonId)
-        : seasons.find((season) => !season.watched) ?? seasons[0]
+    const selectedSeason = seasons.find((season) => season.id === preferredSeasonId)
+      ?? (detail.Type === 'Season' ? seasons.find((season) => season.id === detail.Id) : undefined)
+      ?? seasons.find((season) => !season.watched) ?? seasons[0]
     const episodes = seriesId && selectedSeason
       ? (await optionalItems(`/Shows/${encodeURIComponent(seriesId)}/Episodes`, {
           UserId: this.session.userId,
@@ -1097,7 +1115,7 @@ export class JellyfinClient {
       seriesId,
       selectedSeasonId: selectedSeason?.id,
       seasons,
-      episodes,
+      episodes: episodes.map((episode) => this.watchProgress.patch(episode)),
       similar: similarDtos.map(this.mapItem),
       extras: unique([...specialFeatureDtos, ...trailerDtos].map(this.mapItem)),
     }
@@ -1109,6 +1127,8 @@ export class JellyfinClient {
     selection: PlaybackSelection = {},
   ): Promise<PlaybackPlan> {
     if (!item.id || !item.canPlay) throw new Error('这个项目没有可播放的媒体源。')
+    this.playbackItems.set(item.id, item)
+    if (this.playbackItems.size > 64) this.playbackItems.delete(this.playbackItems.keys().next().value!)
 
     const startTicks = Math.max(0, Math.round(startPositionTicks))
     const path = `/Items/${encodeURIComponent(item.id)}/PlaybackInfo`
@@ -1260,6 +1280,7 @@ export class JellyfinClient {
   }
 
   async reportPlaybackStarted(plan: PlaybackPlan, paused: boolean, positionTicks: number) {
+    this.startedPlayback.add(`${plan.itemId}:${plan.playSessionId}:${plan.playMethod}`)
     await this.reportPlayback('/Sessions/Playing', plan, paused, positionTicks)
   }
 
@@ -1268,7 +1289,10 @@ export class JellyfinClient {
   }
 
   async reportPlaybackStopped(plan: PlaybackPlan, positionTicks: number, failed = false) {
-    await this.request<unknown>(
+    const item = this.playbackItems.get(plan.itemId)
+    const started = this.startedPlayback.delete(`${plan.itemId}:${plan.playSessionId}:${plan.playMethod}`)
+    const record = item && started ? this.watchProgress.record(item, positionTicks, plan.durationTicks) : undefined
+    await this.watchProgress.track(this.request<unknown>(
       '/Sessions/Playing/Stopped',
       {},
       {
@@ -1282,7 +1306,10 @@ export class JellyfinClient {
         }),
         keepalive: true,
       },
-    )
+    ).then((result) => {
+      if (record) this.watchProgress.confirm(record)
+      return result
+    }))
   }
 
   private async reportPlayback(
@@ -1329,5 +1356,6 @@ export class JellyfinClient {
       {},
       { method: played ? 'POST' : 'DELETE' },
     )
+    this.watchProgress.forget(itemId)
   }
 }

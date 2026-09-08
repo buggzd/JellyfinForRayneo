@@ -2075,34 +2075,6 @@ kbd {
   font-size: 9px;
 }
 
-.detail-progress {
-  display: grid;
-  grid-template-columns: minmax(280px, 440px) auto;
-  align-items: center;
-  margin: 20px 0 19px;
-  gap: 13px;
-}
-
-.detail-progress > span {
-  height: 3px;
-  overflow: hidden;
-  border-radius: 3px;
-  background: rgba(218, 241, 249, .14);
-}
-
-.detail-progress i {
-  display: block;
-  height: 100%;
-  background: #dcfaff;
-  box-shadow: 0 0 12px #67dcff;
-}
-
-.detail-progress small {
-  color: rgba(215, 235, 242, .41);
-  font-size: 9px;
-  white-space: nowrap;
-}
-
 .detail-actions {
   display: flex;
   align-items: center;
@@ -4287,38 +4259,6 @@ kbd {
   font-size: 10px;
 }
 
-.detail-progress {
-  display: block;
-  width: min(610px, 100%);
-  margin: 0 0 19px;
-}
-
-.detail-progress > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.detail-progress small,
-.detail-progress strong {
-  color: rgba(218, 236, 243, .45);
-  font-size: 9px;
-  font-weight: 430;
-}
-
-.detail-progress strong {
-  color: rgba(236, 247, 250, .62);
-}
-
-.detail-progress > span {
-  display: block;
-  height: 3px;
-  overflow: hidden;
-  border-radius: 3px;
-  background: rgba(218, 241, 249, .15);
-}
-
 .detail-actions {
   flex-wrap: nowrap;
   margin-top: 0;
@@ -4493,11 +4433,7 @@ kbd {
     margin-bottom: 12px;
   }
 
-  .detail-progress {
-    margin-bottom: 14px;
-  }
-
-  .detail-tabs {
+    .detail-tabs {
     min-height: 70px;
   }
 }
@@ -5334,4 +5270,51 @@ kbd {
   z-index: 3;
   pointer-events: none;
   visibility: hidden;
+}
+
+.detail-resume-episode {
+  max-width: 610px;
+  margin: 0 0 14px;
+  overflow: hidden;
+  color: rgba(231, 246, 252, .78);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-play-button.has-progress {
+  color: #f0fbff;
+  background: #193848;
+}
+
+.focus-button__progress {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(118, 213, 239, .32);
+  border-right: 1px solid rgba(211, 247, 255, .65);
+  pointer-events: none;
+}
+
+.detail-play-button__copy {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+
+.detail-play-button__copy strong { font-weight: 650; }
+.detail-play-button__copy small { font-size: 10px; font-variant-numeric: tabular-nums; }
+.detail-play-button.has-progress .key-hint { color: inherit; background: rgba(255, 255, 255, .12); }
+
+.episode-card__resume {
+  position: absolute;
+  z-index: 2;
+  bottom: 14px;
+  left: 12px;
+  padding: 5px 9px;
+  border: 1px solid rgba(202, 247, 255, .55);
+  border-radius: 7px;
+  background: #183e50;
+  color: #effcff;
+  font-size: 11px;
+  font-weight: 600;
 }

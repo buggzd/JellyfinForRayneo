@@ -35,6 +35,7 @@ export type MediaItem = {
   indexNumber?: number
   parentIndexNumber?: number
   runtimeTicks?: number
+  lastPlayedDate?: string
   playbackPositionTicks?: number
   imageUrl?: string
   coverUrl?: string

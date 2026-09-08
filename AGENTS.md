@@ -72,7 +72,10 @@ Never commit credentials, LAN addresses, `.jellyfin-dev.json`, SDK binaries,
 APK/AAB files, signing files, `local.properties`, build output, or absolute SDK
 paths. Preserve unrelated edits; never stage generated frontend bundles. Merge
 frontend source and lockfiles, then rebuild and verify the APK. Use focused
-Conventional Commits. Delete finished branches/worktrees only after checking
+Conventional Commits. After completing and verifying requested changes, commit
+them to Git unless the user explicitly asks to leave them uncommitted. When on
+a detached HEAD, create a new `codex/` branch before committing. Delete finished
+branches/worktrees only after checking
 that their commits are merged and no uncommitted work remains.
 
 ## Documentation Maintenance

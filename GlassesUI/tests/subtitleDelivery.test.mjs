@@ -7,7 +7,12 @@ const { code } = await transformWithEsbuild(
   await readFile(new URL('../src/jellyfin.ts', import.meta.url), 'utf8'),
   'jellyfin.ts', { target: 'es2022' },
 )
-const isolated = code.replace(
+const { code: progressCode } = await transformWithEsbuild(
+  await readFile(new URL('../src/watchProgress.ts', import.meta.url), 'utf8'),
+  'watchProgress.ts', { target: 'es2022' },
+)
+const progressUrl = `data:text/javascript;base64,${Buffer.from(progressCode).toString('base64')}`
+const isolated = code.replace(/from ["']\.\/watchProgress["']/, `from "${progressUrl}"`).replace(
   /import \{ getNativeHardwareVideoCodecs \} from ["']\.\/runtime["'];?/,
   'const getNativeHardwareVideoCodecs = () => ["h264"]; const window = globalThis; const __APP_VERSION__ = "0.0.0-test";',
 )

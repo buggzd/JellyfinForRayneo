@@ -1,3 +1,4 @@
+import { latestWatchedEpisode, resumeProgress, watchedTime } from './watchProgress'
 import AssSubtitles from './AssSubtitles'
 import {
   ArrowDownUp,
@@ -169,7 +170,12 @@ function moveFocus(direction: Direction) {
   const navigationNodes = nodes.filter((node) => Boolean(node.closest('.side-navigation')))
   const contentNodes = nodes.filter((node) => !node.closest('.side-navigation'))
 
-  const focusTarget = (node: HTMLElement) => {
+  const focusTarget = (candidate: HTMLElement) => {
+    const rail = candidate.closest<HTMLElement>('.episode-rail')
+    const entry = rail?.dataset.resumeEntry === 'pending' && !current.closest('.episode-rail')
+      ? rail.querySelector<HTMLElement>('[data-episode-entry="true"]') : null
+    const node = entry ?? candidate
+    if (rail) rail.dataset.resumeEntry = 'done'
     focusSpatialElement(node)
     if (node.closest('.side-navigation')) return
 
@@ -415,6 +421,7 @@ type FocusButtonProps = {
   label?: string
   disabled?: boolean
   busy?: boolean
+  progress?: number
   onClick?: () => void
   onFocus?: () => void
 }
@@ -431,6 +438,7 @@ function FocusButton({
   label,
   disabled,
   busy = false,
+  progress,
   onClick,
   onFocus,
 }: FocusButtonProps) {
@@ -449,6 +457,7 @@ function FocusButton({
       onClick={() => { if (!disabled && !busy) onClick?.() }}
       onFocus={onFocus}
     >
+      {progress !== undefined && <span className="focus-button__progress" aria-hidden="true" style={{ width: `${progress}%` }} />}
       <span className="focus-button__lens" aria-hidden="true" />
       {icon && <span className="focus-button__icon">{icon}</span>}
       <span className="focus-button__label">{children}</span>
@@ -1366,8 +1375,10 @@ function DetailPage({
   onRefresh: () => void
   onExit: () => void
 }) {
-  const resolvedItem = detail?.item ?? item
+  const detailItem = detail?.item ?? item
   const episodes = detail?.episodes ?? []
+  const recentEpisode = latestWatchedEpisode(episodes)
+  const resolvedItem = detailItem.sourceType === 'Episode' && recentEpisode ? recentEpisode : detailItem
   const similar = detail?.similar ?? []
   const extras = detail?.extras ?? []
   const [favorite, setFavorite] = useState(Boolean(resolvedItem.favorite))
@@ -1392,11 +1403,24 @@ function DetailPage({
   const hintedEpisode = initialEpisodeNumber
     ? episodes.find((episode) => episode.indexNumber === initialEpisodeNumber)
     : undefined
-  const playTarget = hintedEpisode ?? (resolvedItem.canPlay
+  const resumeEpisode = recentEpisode && (recentEpisode.playbackPositionTicks ?? 0) > 0 ? recentEpisode : undefined
+  const playTarget = hintedEpisode ?? resumeEpisode ?? (resolvedItem.canPlay
     ? resolvedItem
-    : episodes.find((episode) => episode.progress && episode.progress > 0)
-      ?? episodes.find((episode) => !episode.watched)
-      ?? episodes[0])
+    : episodes.find((episode) => !episode.watched) ?? episodes[0])
+  const entryEpisode = hintedEpisode ?? recentEpisode ?? playTarget
+  const playProgress = resumeProgress(playTarget)
+  const hasResume = (playTarget?.playbackPositionTicks ?? 0) > 0
+  const episodeRailRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const rail = episodeRailRef.current
+    const target = rail?.querySelector<HTMLElement>('[data-episode-entry="true"]')
+    if (loading || !rail || !target) return
+    rail.dataset.resumeEntry = 'pending'
+    const targetRect = target.getBoundingClientRect()
+    const railRect = rail.getBoundingClientRect()
+    rail.scrollTo({ left: rail.scrollLeft + targetRect.left + targetRect.width / 2
+      - railRect.left - railRect.width / 2, behavior: 'instant' })
+  }, [detail?.selectedSeasonId, detailSection, entryEpisode?.id, loading])
   const directors = resolvedItem.people?.filter((person) => person.type === 'Director').map((person) => person.name) ?? []
   const writers = resolvedItem.people?.filter((person) => ['Writer', 'Screenplay'].includes(person.type)).map((person) => person.name) ?? []
   const actors = resolvedItem.people?.filter((person) => person.type === 'Actor').map((person) => person.name) ?? []
@@ -1489,14 +1513,13 @@ function DetailPage({
               <p>{resolvedItem.overview || 'Jellyfin 暂未提供这项内容的剧情简介。'}</p>
               {resolvedItem.overview && resolvedItem.overview.length > 120 && <FocusButton variant="ghost" trailing={<ChevronRight size={17} />} onClick={() => setExpanded((value) => !value)}>{expanded ? '收起剧情' : '完整剧情'}</FocusButton>}
             </div>
-            {playTarget?.progress !== undefined && playTarget.progress > 0 && (
-              <div className="detail-progress">
-                <div><small>上次看到 {playTarget.subtitle}</small><strong>已观看 {playTarget.progress}%</strong></div>
-                <span><i style={{ width: `${playTarget.progress}%` }} /></span>
-              </div>
+            {playTarget?.sourceType === 'Episode' && (
+              <p className="detail-resume-episode">{hasResume ? '上次看到' : '即将播放'} · {playTarget.subtitle}</p>
             )}
             <div className="detail-actions">
-              <FocusButton variant="primary" autoFocusTarget={!initialEpisodeNumber} disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">单击</span>} onClick={() => playTarget && onPlay(playTarget)}>{hintedEpisode ? `${hintedEpisode.progress ? '继续' : '播放'}第 ${initialEpisodeNumber} 集` : playTarget?.progress ? '继续播放' : '立即播放'}</FocusButton>
+              <FocusButton variant="primary" className={cx('detail-play-button', hasResume && 'has-progress')} progress={hasResume ? playProgress : undefined} autoFocusTarget={!initialEpisodeNumber} disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">单击</span>} onClick={() => playTarget && onPlay(playTarget)}>
+                <span className="detail-play-button__copy"><strong>{playTarget?.sourceType === 'Episode' && playTarget.indexNumber !== undefined ? `${hasResume ? '继续' : '播放'}第 ${playTarget.indexNumber} 集` : hasResume ? '继续播放' : '立即播放'}</strong>{hasResume && <small>已看到 {watchedTime(playTarget)}</small>}</span>
+              </FocusButton>
               <FocusButton variant="glass" disabled={!playTarget || loading} icon={<RotateCcw size={20} />} onClick={() => playTarget && onPlay(playTarget, true)}>从头播放</FocusButton>
               {extras[0] && <FocusButton variant="round" label="播放预告片" onClick={() => onPlay(extras[0], true)}><MonitorPlay size={20} /></FocusButton>}
               <FocusButton variant="round" className="detail-state-action" disabled={Boolean(actionBusy)} busy={actionBusy === 'favorite'} active={favorite} label={actionBusy === 'favorite' ? '正在更新收藏' : favorite ? '取消收藏' : '收藏'} onClick={() => { void toggleFavorite() }}>{actionBusy === 'favorite' ? <LoaderCircle className="is-spinning" size={20} /> : <Heart size={20} fill={favorite ? 'currentColor' : 'none'} />}</FocusButton>
@@ -1524,18 +1547,19 @@ function DetailPage({
                   {detail?.seasons.map((season) => <FocusButton key={season.id} variant="chip" disabled={loading} busy={loading} active={detail.selectedSeasonId === season.id} onClick={() => { onPreview(resolvedItem); onSelectSeason(season.id) }}>{season.original || season.title}</FocusButton>)}
                 </div>
               </header>
-              {loading ? <LoadingCards label="正在读取剧集…" rail /> : <div className="episode-rail">
+              {loading ? <LoadingCards label="正在读取剧集…" rail /> : <div ref={episodeRailRef} className="episode-rail">
                 {episodes.map((episode, index) => {
                   const episodeNumber = episode.indexNumber ?? index + 1
                   const episodeTitle = `${episodeNumber}.${episode.original || episode.title}`
                   return (
-                    <button key={episode.id} type="button" data-focusable="true" data-autofocus={initialEpisodeNumber === episode.indexNumber ? 'true' : undefined} data-episode-number={episode.indexNumber} className="episode-card" onClick={() => onPlay(episode)} onFocus={() => onPreview(episode)}>
+                    <button key={episode.id} type="button" data-focusable="true" data-autofocus={initialEpisodeNumber === episode.indexNumber ? 'true' : undefined} data-episode-number={episode.indexNumber} data-episode-entry={entryEpisode?.id === episode.id ? 'true' : undefined} className="episode-card" onClick={() => onPlay(episode)} onFocus={() => onPreview(episode)}>
                       <ArtFrame item={episode} wide>
                         <span className="episode-card__number">{String(episodeNumber).padStart(2, '0')}</span>
                         <span className="episode-card__play"><Play size={19} fill="currentColor" /></span>
                         <MediaIndicators item={episode} />
+                        {recentEpisode?.id === episode.id && <span className="episode-card__resume">看到这</span>}
                       </ArtFrame>
-                      <span className="episode-card__copy"><strong title={episodeTitle}>{episodeTitle}</strong><small>{episode.duration || episode.subtitle}</small></span>
+                      <span className="episode-card__copy"><strong title={episodeTitle}>{episodeTitle}</strong><small>{(episode.playbackPositionTicks ?? 0) > 0 ? `已看到 ${watchedTime(episode)}` : episode.duration || episode.subtitle}</small></span>
                     </button>
                   )
                 })}
@@ -2200,6 +2224,10 @@ function PlayerPage({
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [planKey, positionTicks, reportPlaybackProgress])
 
+  useLayoutEffect(() => () => {
+    stopPlan(planRef.current, statusRef.current === 'error')
+  }, [stopPlan])
+
   useEffect(() => {
     const onPageHide = () => stopPlan(planRef.current, statusRef.current === 'error')
     window.addEventListener('pagehide', onPageHide)
@@ -2781,6 +2809,7 @@ export default function App() {
     }).finally(() => {
       if (generation === detailGeneration.current) setDetailLoading(false)
     })
+    return () => { detailGeneration.current += 1 }
   }, [jellyfin.loadDetail, page, searchEpisodeHint, selected.id])
 
   const navigate = useCallback((next: Page) => {
@@ -2911,6 +2940,7 @@ export default function App() {
   }, [jellyfin.loadDetail, selected.id])
 
   const playItem = useCallback((item: MediaItem, fromStart = false) => {
+    setSearchEpisodeHint(null)
     setPlayback({
       item,
       startPositionTicks: fromStart ? 0 : item.playbackPositionTicks ?? 0,

@@ -530,6 +530,17 @@ abort and critical worker failures terminate the worker, cancel frame callbacks,
 clear pixels and revoke blob URLs. Worker log text and arbitrary window actions
 are not forwarded. See the [subtitle regression fixture](DEVELOPMENT.md#ass-字幕回归).
 
+Playback teardown captures the media clock before the video ref and HLS source
+are detached. Detail reloads wait for pending stop reports, then read fresh user
+data. The account-scoped Jellyfin client retains at most 64 local watch positions
+to preserve short sessions below the server's resume threshold; it does not
+persist them. Newer server history and explicit watched-state edits supersede
+these positions. Series details choose the latest watched season unless a season
+was explicitly selected; the hero resume button and first entry into the episode
+rail use the latest watch date. Search episode hints remain explicit until playback
+begins. The rail is positioned without scrolling the hero away or moving initial
+focus, and displays one recent-watch marker per season.
+
 The glasses player's optional video-information overlay reads the existing
 playback plan, HTML video dimensions/quality/buffered ranges, and the current
 HLS rendition and demuxed codecs. It distinguishes output parameters from the
@@ -569,7 +580,7 @@ minimum device regression set for any device-facing change.
 | Virtual screen controls | Fixed 90% size at all four depth levels, then fixed depth at 80–95%; rapid edits; pause/resume; cold restart | Left/right offsets are ±d/2, average center and vertical alignment stay fixed, size is independent, full image stays in each eye and saved settings restore |
 | Eye reference overlay | Close each eye alternately; compare baseline and increased disparity; leave settings, switch mode, disconnect, logout and kill renderer | Left eye sees L, right sees R; cyan plane moves closer relative to white reference, no persistent overlay after exit/recovery |
 | Stereo video composition | Moving frame-number video with DOM controls and text subtitles in both modes, while changing depth/size | Both eyes receive the same frame, video/subtitles/DOM receive identical transforms, no frozen video, duplicate sound/reporting, clipped edge or cross-eye leakage |
-| Browse and focus | Home, search, filters, folders, details, long lists, dialogs, remote back | Exactly one visible spatial focus target exists and overlays prevent background input |
+| Browse and focus | Home, search, filters, folders, details, long lists, dialogs, remote back; partial episode exit, short session, multiple unfinished episodes, cross-season resume, first downward episode entry in both themes | Exactly one visible spatial focus target exists and overlays prevent background input |
 | UI themes | Default install, saved simpleUI cold launch, rapid switches during browse/direct play/HLS/tutorial in both 2D and SBS, disconnect/reconnect, renderer recovery, logout, reset preferences | Both surfaces and phone system bars agree; focus, document, video, audio and reporting remain single-instance; theme survives logout/recovery and reset restores liquid-glass; simpleUI has no decorative loops or blur |
 | Phone settings | Import/replace/cancel/reset wallpaper, malformed/oversized files, rotated photos, all crop ratios, zoom/position/opacity extremes, drag, save/cancel/Back, stale revision, cold launch, renderer recovery, theme changes, About links and installed version | Failed imports/cancelled edits retain the image and layout; saved crop restores; clear resets layout; only Liquid phone pages render it; wallpaper edits preserve glasses/video; source metadata stays private; links open fixed public pages outside the WebView; version matches the APK |
 | Remote background | Both themes, texture/black selection, cold launch, gestures, search/IME, playback panels and returning to settings | Choice persists without changing session/video; blank black regions and system-bar backgrounds measure RGB 0,0,0 in a lossless screenshot; no glow/texture/overscroll scrim; controls remain visible |
