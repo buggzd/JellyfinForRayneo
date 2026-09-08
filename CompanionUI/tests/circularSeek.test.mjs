@@ -55,3 +55,27 @@ test('seek command accepts only nonzero bounded integer updates', () => {
   for (const seconds of [1, -1, 60, -60, 25]) assert.equal(parseSeekCommand(`seek:${seconds}`),seconds)
   for (const value of ['seek:0','seek:-0','seek:61','seek:-61','seek:1.5','seek:+1','seek:01','seek:1;alert(1)',null]) assert.equal(parseSeekCommand(value),null)
 })
+
+// Every move belongs to one finger-down stroke; no flush/re-arm between legs.
+test('an uninterrupted stroke reverses immediately, including fine correction and a pause', () => {
+  for (const offset of [0, Math.PI - .1]) {
+    const gesture = new CircularSeekGesture(150, 250, 100)
+    let time = 0
+    const move = (angle, interval = 30) => {
+      time += interval
+      return gesture.move(150 + 100 * Math.cos(offset + angle), 250 + 100 * Math.sin(offset + angle), time)
+    }
+    const forward = []
+    for (let i = 0; i <= 20; i++) forward.push(move(i * .08))
+    assert.ok(forward.some(value => value > 0))
+    // Less than the normal 150 ms update interval since the last forward send.
+    assert.ok(move(1.48) < 0, 'reverse before lifting or waiting for the throttle')
+    assert.ok(move(1.60) > 0, 'switch back within the same stroke')
+    assert.equal(move(1.57), 0, 'sub-second correction accumulates')
+    assert.ok(move(1.51) < 0, 'first whole reverse second is emitted without a throttle delay')
+    assert.ok(move(1.39, 650) < 0, 'a pause must not discard the first reverse movement')
+    assert.ok(gesture.flush() <= 0, 'no forward remainder after reversal')
+    assert.equal(gesture.active, true)
+    assert.equal(gesture.cancelled, false)
+  }
+})

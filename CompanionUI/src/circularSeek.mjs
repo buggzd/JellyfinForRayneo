@@ -19,6 +19,7 @@ export class CircularSeekGesture {
     this.active = false
     this.cancelled = false
     this.lastEmit = 0
+    this.reversalPending = false
   }
 
   move(x, y, time) {
@@ -45,14 +46,18 @@ export class CircularSeekGesture {
       return 0
     }
     if (elapsed > 500) {
-      this.previous = next
       this.heading = null
       this.turn = 0
       this.arc = 0
       this.pending = 0
       this.speed = 0
-      this.lastEmit = time
-      return 0
+      // An armed dial stays armed while the finger rests. Account for the
+      // first movement after the pause at its measured (low) speed.
+      if (!this.active) {
+        this.previous = next
+        this.lastEmit = time
+        return 0
+      }
     }
     const heading = Math.atan2(y - previous.y, x - previous.x)
     if (this.heading !== null) this.turn += wrap(heading - this.heading)
@@ -70,21 +75,28 @@ export class CircularSeekGesture {
     if (this.direction && direction && this.direction !== direction) {
       this.pending = 0
       this.speed = 0
+      this.reversalPending = true
     }
     if (direction) this.direction = direction
     const speed = Math.min(8, Math.abs(angle) * 1000 / elapsed)
     this.speed += (speed - this.speed) * .35
     const gain = 10 * (1 + Math.min(5, this.speed * .7))
     this.pending = Math.max(-60, Math.min(60, this.pending + angle * gain))
-    if (time - this.lastEmit < 150) return 0
-    this.lastEmit = time
-    return this.flush()
+    // Deliver the first whole second in the new direction immediately, even
+    // when it takes several small moves to accumulate. Never round jitter up.
+    if (!this.reversalPending && time - this.lastEmit < 150) return 0
+    const seconds = this.flush()
+    if (seconds) {
+      this.lastEmit = time
+      this.reversalPending = false
+    }
+    return seconds
   }
 
   flush() {
     if (!this.active || this.cancelled) return 0
     const seconds = Math.max(-60, Math.min(60, Math.trunc(this.pending)))
     this.pending -= seconds
-    return seconds
+    return seconds || 0
   }
 }
