@@ -71,6 +71,7 @@ import GlassesSettings from './GlassesSettings'
 import { uiSounds, type UiSound } from './uiSounds'
 import RemoteTutorial from './RemoteTutorial'
 import VideoInfoOverlay from './VideoInfoOverlay'
+import SystemClock from './SystemClock'
 import type { PlaybackInfoSource } from './playbackInfo'
 import { hasSeenRemoteTutorial, rememberRemoteTutorial, type TutorialOutcome } from './tutorialState'
 import { LoadingCards, Toast, usePresence, type FeedbackTone, type ToastMessage } from './feedback'
@@ -2414,6 +2415,7 @@ function PlayerPage({
           <FocusButton className="player-back" variant="round" sound="back" label="退出播放器" onClick={onBack}><ArrowLeft size={22} /></FocusButton>
           <div className="player-title"><small>正在播放 · {episodeLabel}</small><strong>{item.title} <span>·</span> {titleDetail}</strong></div>
           {plan && <div className="player-direct"><span /> {playbackMethod} <i /> {plan.transcoding ? '源格式 ' : ''}{formatLabel}</div>}
+          <SystemClock active={chrome !== 'hidden'} />
         </header>
       </div>
 
@@ -3103,6 +3105,7 @@ export default function App() {
         />
       )}
       {pageNode}
+      {page !== 'player' && <SystemClock overlay />}
       <Toast message={toast} />
       <svg className="svg-filters" aria-hidden="true">
         <filter id="liquid-edge" x="-30%" y="-30%" width="160%" height="160%">

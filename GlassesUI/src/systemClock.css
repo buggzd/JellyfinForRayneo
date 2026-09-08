@@ -1,0 +1,33 @@
+.system-clock {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  color: #f5fbff;
+  border: 1px solid rgba(222, 241, 250, .14);
+  border-radius: 12px;
+  background: rgba(3, 10, 16, .62);
+  font-size: clamp(20px, 1.65vw, 30px);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.system-clock--overlay {
+  position: fixed;
+  z-index: 50;
+  top: max(24px, env(safe-area-inset-top));
+  right: var(--safe-x);
+}
+
+:root[data-ui-theme="simpleUI"] .system-clock {
+  color: #f0eee6;
+  border-color: #434c3d;
+  border-radius: 8px;
+  background: #232920;
+}
