@@ -3,16 +3,16 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  padding: 8px 14px;
+  padding: 5px 9px;
   color: #f5fbff;
   border: 1px solid rgba(222, 241, 250, .14);
-  border-radius: 12px;
-  background: rgba(3, 10, 16, .62);
-  font-size: clamp(20px, 1.65vw, 30px);
-  font-weight: 500;
+  border-radius: 8px;
+  background: rgba(3, 10, 16, .46);
+  font-size: clamp(13px, .95vw, 18px);
+  font-weight: 450;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
-  letter-spacing: .04em;
+  letter-spacing: .02em;
   white-space: nowrap;
   pointer-events: none;
   user-select: none;
@@ -30,4 +30,15 @@
   border-color: #434c3d;
   border-radius: 8px;
   background: #232920;
+}
+
+.player-topbar .system-clock {
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: clamp(11px, .8vw, 15px);
+  font-weight: 400;
+}
+
+:root[data-ui-theme="simpleUI"] .player-topbar .system-clock {
+  border-radius: 6px;
 }
