@@ -130,9 +130,9 @@ export function useJellyfin() {
     void loadCatalog()
   }, [catalogGeneration, client, loadCatalog, runtime?.error, runtime?.source])
 
-  const loadFolder = useCallback(async (parentId: string) => {
+  const loadFolder = useCallback(async (parent: MediaItem) => {
     if (!client) return []
-    return client.loadFolder(parentId)
+    return client.loadFolder(parent)
   }, [client])
 
   const loadSeriesIndex = useCallback(async () => {

@@ -539,6 +539,8 @@ function mediaKind(item: JellyfinItemDto): MediaKind {
 
 function libraryLabel(collectionType: string | undefined) {
   switch (collectionType?.toLocaleLowerCase()) {
+    case 'boxsets':
+      return '合集组'
     case 'movies':
       return '电影库'
     case 'tvshows':
@@ -861,7 +863,7 @@ export class JellyfinClient {
       favorite: Boolean(source.UserData?.IsFavorite),
       watched: Boolean(source.UserData?.Played),
       unwatched: source.UserData?.UnplayedItemCount || undefined,
-      folder: ['CollectionFolder', 'Folder', 'UserView'].includes(source.Type ?? ''),
+      folder: ['CollectionFolder', 'Folder', 'UserView', 'BoxSet'].includes(source.Type ?? ''),
       resolution: resolutionFor(mediaSource),
       overview: source.Overview?.trim() || undefined,
       tagline: source.Taglines?.find(Boolean)?.trim() || undefined,
@@ -905,7 +907,7 @@ export class JellyfinClient {
       width: video?.Width,
       height: video?.Height,
       bitrate: mediaSource?.Bitrate ?? video?.BitRate,
-      canPlay: playableTypes.includes(source.Type ?? '') || source.MediaType === 'Video',
+      canPlay: source.Type !== 'BoxSet' && (playableTypes.includes(source.Type ?? '') || source.MediaType === 'Video'),
     }
   }
 
@@ -979,11 +981,13 @@ export class JellyfinClient {
     return { featured, shelves, libraries, allItems, favorites }
   }
 
-  async loadFolder(parentId: string) {
+  async loadFolder(parent: MediaItem) {
     const response = await this.request<JellyfinItemsResponse>(
       `/Users/${encodeURIComponent(this.session.userId)}/Items`,
       {
-        ParentId: parentId,
+        ParentId: parent.id,
+        Recursive: false,
+        IncludeItemTypes: parent.collectionType?.toLowerCase() === 'boxsets' && parent.sourceType !== 'BoxSet' ? 'BoxSet' : undefined,
         Fields: itemFields,
         ImageTypeLimit: 1,
         EnableImageTypes: 'Primary,Backdrop,Logo',

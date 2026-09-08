@@ -699,7 +699,7 @@ const MediaCard = memo(function MediaCard({
       <span className="media-card__glow" />
       <ArtFrame item={item} wide={wide || library}><MediaIndicators item={item} /></ArtFrame>
       <span className="media-card__badges">
-        {item.folder && <span><Folder size={14} /> 文件夹</span>}
+        {item.folder && <span><Folder size={14} /> {item.sourceType === 'BoxSet' ? '合集' : item.collectionType === 'boxsets' ? '合集组' : '文件夹'}</span>}
         {!item.folder && <span>{item.kind}</span>}
         {item.unwatched && <span className="count-badge">{item.unwatched} 未看</span>}
       </span>
@@ -817,12 +817,15 @@ function HomePage({
 }
 
 type BrowseMode = 'library' | 'favorites'
+type BrowsePath = Array<{ item: MediaItem; children: MediaItem[] }>
 
 function BrowsePage({
   mode,
   items,
   favorites,
   initialFolder,
+  initialPath,
+  onRememberPath,
   serverName,
   userName,
   refreshing,
@@ -838,10 +841,12 @@ function BrowsePage({
   items: MediaItem[]
   favorites: MediaItem[]
   initialFolder?: MediaItem | null
+  initialPath?: BrowsePath
+  onRememberPath: (path: BrowsePath) => void
   serverName: string
   userName: string
   refreshing: boolean
-  onLoadFolder: (parentId: string) => Promise<MediaItem[]>
+  onLoadFolder: (parent: MediaItem) => Promise<MediaItem[]>
   onNavigate: (page: Page) => void
   onOpen: (item: MediaItem) => void
   onPreview: (item: MediaItem) => void
@@ -849,13 +854,13 @@ function BrowsePage({
   onExit: () => void
   onResetLibrary: () => void
 }) {
-  const [path, setPath] = useState<Array<{ item: MediaItem; children: MediaItem[] }>>(() => (
+  const [path, setPath] = useState<BrowsePath>(() => initialPath?.length ? initialPath : (
     mode === 'library' && initialFolder ? [{ item: initialFolder, children: [] }] : []
   ))
   const [filter, setFilter] = useState<'all' | 'unwatched' | 'continue' | 'favorite'>('all')
   const [sort, setSort] = useState<'最近加入' | '名称' | '评分最高'>('最近加入')
   const [visibleCount, setVisibleCount] = useState(BROWSE_BATCH_SIZE)
-  const [folderLoading, setFolderLoading] = useState(mode === 'library' && Boolean(initialFolder))
+  const [folderLoading, setFolderLoading] = useState(mode === 'library' && Boolean(initialFolder) && !initialPath?.length)
   const [folderError, setFolderError] = useState<{ item: MediaItem; replace: boolean } | null>(null)
   const folderGeneration = useRef(0)
   const browseRef = useRef<HTMLDivElement>(null)
@@ -866,7 +871,7 @@ function BrowsePage({
     setFolderLoading(true)
     setFolderError(null)
     try {
-      const children = await onLoadFolder(item.id)
+      const children = await onLoadFolder(item)
       if (generation !== folderGeneration.current) return
       setPath((current) => replace ? [{ item, children }] : [...current, { item, children }])
       setVisibleCount(BROWSE_BATCH_SIZE)
@@ -878,6 +883,9 @@ function BrowsePage({
   }, [onLoadFolder])
 
   useEffect(() => {
+    if (mode === 'library' && initialPath?.length) {
+      return () => { folderGeneration.current += 1 }
+    }
     if (mode !== 'library' || !initialFolder) {
       setPath([])
       setFolderLoading(false)
@@ -889,7 +897,7 @@ function BrowsePage({
     return () => {
       folderGeneration.current += 1
     }
-  }, [initialFolder, loadFolder, mode])
+  }, [initialFolder, initialPath, loadFolder, mode])
 
   const baseItems = useMemo(() => {
     if (mode === 'favorites') return favorites
@@ -963,6 +971,7 @@ function BrowsePage({
       void loadFolder(item)
       return
     }
+    if (mode === 'library') onRememberPath(path)
     onOpen(item)
   }
 
@@ -2634,6 +2643,7 @@ export default function App() {
   const [selected, setSelected] = useState<MediaItem>(demoFeatured)
   const [backdropItem, setBackdropItem] = useState<MediaItem>(demoFeatured)
   const [homeFocusRegion, setHomeFocusRegion] = useState<HomeFocusRegion>('hero')
+  const browsePath = useRef<BrowsePath>([])
   const [browseEntry, setBrowseEntry] = useState<MediaItem | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchPane, setSearchPane] = useState<SearchPane>('keyboard')
@@ -2673,6 +2683,7 @@ export default function App() {
     setPlayback(null)
     setVideoInfoVisible(false)
     setBrowseEntry(null)
+    browsePath.current = []
     setToast(null)
     setSearchQuery('')
     setSearchPane('keyboard')
@@ -2820,7 +2831,7 @@ export default function App() {
   }, [page])
 
   const navigateDirect = useCallback((next: Page) => {
-    if (next === 'browse') setBrowseEntry(null)
+    if (next === 'browse') { setBrowseEntry(null); browsePath.current = [] }
     setHistory([])
     setPage(next)
     window.scrollTo({ top: 0, behavior: 'instant' })
@@ -2897,6 +2908,7 @@ export default function App() {
     setDetail(null)
     setDetailError('')
     if (item.folder) {
+      browsePath.current = []
       setBrowseEntry(item)
       navigate('browse')
     } else {
@@ -2920,7 +2932,7 @@ export default function App() {
   }, [navigate])
 
   const navigateFromMenu = useCallback((next: Page) => {
-    if (next === 'browse') setBrowseEntry(null)
+    if (next === 'browse') { setBrowseEntry(null); browsePath.current = [] }
     navigate(next)
   }, [navigate])
 
@@ -3003,11 +3015,13 @@ export default function App() {
 
       if (key === 'escape' || key === 'backspace') {
         event.preventDefault()
-        if (page !== 'player') uiSounds.play('back')
+        if (page !== 'player' && page !== 'browse') uiSounds.play('back')
         if (page === 'player') {
           window.dispatchEvent(new CustomEvent('lucent-player-key', { detail: 'back' }))
         } else if (page === 'settings') {
           closeSettings()
+        } else if (page === 'browse') {
+          document.querySelector<HTMLButtonElement>('.breadcrumbs button[aria-label="返回上一级"]')?.click()
         } else if (page === 'search') {
           const active = currentSpatialFocus()
           const searchPage = active?.closest<HTMLElement>('.series-search-page')
@@ -3102,7 +3116,7 @@ export default function App() {
     </div>
     if (page === 'home') return <HomePage featured={snapshot.featured} shelves={snapshot.shelves} focusRegion={homeFocusRegion} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onFocusRegionChange={setHomeFocusRegion} onRefresh={refreshLibrary} onExit={manageLogin} />
     if (page === 'browse' || page === 'favorites') {
-      return <BrowsePage key={`${page}:${page === 'browse' ? browseEntry?.id ?? 'root' : 'root'}`} mode={page === 'browse' ? 'library' : 'favorites'} items={snapshot.libraries} favorites={snapshot.favorites} initialFolder={page === 'browse' ? browseEntry : null} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} onResetLibrary={() => setBrowseEntry(null)} />
+      return <BrowsePage key={`${page}:${page === 'browse' ? browseEntry?.id ?? 'root' : 'root'}`} mode={page === 'browse' ? 'library' : 'favorites'} items={snapshot.libraries} favorites={snapshot.favorites} initialFolder={page === 'browse' ? browseEntry : null} initialPath={page === 'browse' ? browsePath.current : undefined} onRememberPath={(path) => { browsePath.current = path }} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onLoadFolder={jellyfin.loadFolder} onNavigate={navigateFromMenu} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} onResetLibrary={() => { setBrowseEntry(null); browsePath.current = [] }} />
     }
     if (page === 'search') {
       const searchableSeries = jellyfin.seriesIndexStatus === 'ready'

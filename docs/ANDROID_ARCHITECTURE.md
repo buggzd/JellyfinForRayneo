@@ -197,6 +197,13 @@ phone keyboard's search action focuses the first matching Series. Full pinyin,
 pinyin initials, English titles, and optional season/episode hints are resolved
 locally from the bounded Series index.
 
+Collection browsing keeps Jellyfin's container hierarchy: a `boxsets` library
+lists `BoxSet` containers, and each collection loads only its direct children.
+Films and series still open their respective details. The glasses frontend
+retains the in-memory breadcrumb path while visiting details; remote Back and
+the breadcrumb back button both leave one container level at a time. A fresh
+library entry or account change clears the saved path.
+
 ## UI appearance preference
 
 `SessionRepository` stores `ui_theme` independently of accounts and display mode.
