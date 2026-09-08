@@ -6,7 +6,13 @@ TaChi（塔奇）的名字源自《攻壳机动队》的塔奇克马（TaChikoma
 
 本项目不是 Jellyfin 或 RayNeo 的官方产品，与这些公司不存在隶属或背书关系。
 
-[快速开始](#快速开始) · [核心能力](#核心能力) · [当前边界](#当前边界) · [文档](#文档)
+[产品演示](#产品演示) · [快速开始](#快速开始) · [核心能力](#核心能力) · [当前边界](#当前边界) · [文档](#文档)
+
+## 产品演示
+
+90 秒体验 TACHI：手机就是遥控器，眼镜负责浏览与播放。
+
+https://github.com/user-attachments/assets/5dd75ead-3682-4bb2-9181-6368b4049c73
 
 <p align="center">
   <img src="docs/images/glasses-series.png" width="73%" alt="TaChi（塔奇）眼镜端《攻壳机动队》剧集详情">
