@@ -19,8 +19,7 @@ TaChi（塔奇）的名字源自《攻壳机动队》的塔奇克马（TaChikoma
 https://github.com/user-attachments/assets/5dd75ead-3682-4bb2-9181-6368b4049c73
 
 <p align="center">
-  <img src="docs/images/glasses-series.png" width="73%" alt="TaChi（塔奇）眼镜端《攻壳机动队》剧集详情">
-  <img src="docs/images/companion-home.png" width="23%" alt="TaChi（塔奇） 手机伴侣端">
+  <img src="docs/images/dual-screen-showcase.png" width="96%" alt="TaChi（塔奇）双端界面：眼镜端攻壳机动队剧集详情与手机伴侣端，等高并排展示">
 </p>
 
 <p align="center"><sub>眼镜端展与手机端使用演示</sub></p>
