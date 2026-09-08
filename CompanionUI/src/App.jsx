@@ -1519,7 +1519,7 @@ function SettingsScreen({
             {SUBTITLE_SIZES.map(option => <button key={option.value} type="button" data-liquid-surface="" data-wallpaper-text="glass"
               aria-pressed={subtitleSize === option.value} onClick={() => onSubtitleSizeChange(option.value)}>{option.label}</button>)}
           </div>
-          <p className="stereo-help" data-wallpaper-text="glass">与眼镜同步，自动保存。适用于文字字幕，已固定在画面里的字幕不受影响。</p>
+          <p className="stereo-help" data-wallpaper-text="glass">与眼镜同步，自动保存。适用于普通文字字幕；ASS/SSA 保留原有字号和排版，烧录字幕不受影响。</p>
         </div>
       </SettingsGroup>
 

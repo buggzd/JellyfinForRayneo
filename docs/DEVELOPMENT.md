@@ -258,6 +258,28 @@ npm --prefix CompanionUI run build
 
 JVM 测试覆盖会话白名单与清理、IPv6 URL 规范化、消息边界、URL 导航、遥控队列、Display 选择、显示模式转换和固定容量诊断事件。设备侧变更还必须执行 [Android 架构说明中的真机回归矩阵](ANDROID_ARCHITECTURE.md#device-regression-matrix)。
 
+### ASS 字幕回归
+
+`GlassesUI` 按需加载 `libass-wasm` 4.1.0 的 worker/WASM 与思源黑体。
+这些资源由 Vite 打包到 APK，字体来源、校验值及许可证见
+[第三方声明](../THIRD_PARTY_NOTICES.md#source-han-sans-思源黑体)。
+更换 renderer 或字体后须重新构建，不能只更新前端 JS。
+
+启动 GlassesUI 开发服务器后，打开 `/tests/ass-renderer.html`：
+
+- Load ASS 使用合成的 `ass-features.ass`，不需要测试账号；1/3/5/10 秒覆盖定位、
+  描边、图层、移动、淡入淡出、变换、卡拉 OK、矢量绘图与裁切。
+- Play / pause video clock 使用单个 12 秒合成视频检查时间同步、暂停与黑边几何；
+  Turn off 应清空透明画布，并终止 worker、取消回调及释放 blob。
+- Subtitle URL / Time 可检查另一个本地样本。真实媒体字幕及附件只能保存在被忽略的
+  本地目录，不得提交；不要在 URL、截图或日志中暴露测试账号、Token 或服务器地址。
+
+合成视频可用 FFmpeg 重建：`color=c=0x162030:s=640x360:r=24:d=12`，
+H.264、yuv420p、无音频、MP4 faststart。测试 HTML 和 fixtures 不作为 production 入口。
+`assVideo.test.mjs` 覆盖续播、帧时间戳、暂停、seek、隐藏页面和销毁；
+`assRenderer.test.mjs` 覆盖 file 资源、取消、限制、失败和 blob/worker 清理。
+设备验收还必须覆盖 APK 内 file 资源、附带/缺失字体、HLS/直放与 2D/SBS 的同帧显示。
+
 ## 真机调试
 
 查看 Android 显示拓扑：

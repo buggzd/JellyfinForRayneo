@@ -1,3 +1,4 @@
+import AssSubtitles from './AssSubtitles'
 import {
   ArrowDownUp,
   ArrowLeft,
@@ -1753,7 +1754,7 @@ function PlayerPage({
     const url = plan?.subtitleUrl
     setSubtitleCues([])
     setSubtitleLoadError(false)
-    if (!url || (plan?.subtitleStreamIndex ?? -1) < 0) return
+    if (!url || (plan?.subtitleStreamIndex ?? -1) < 0 || plan?.subtitleFormat === 'ass') return
 
     const controller = new AbortController()
     void fetch(url, { signal: controller.signal })
@@ -1762,17 +1763,18 @@ function PlayerPage({
         return response.text()
       })
       .then((source) => {
+        if (controller.signal.aborted) return
         const cues = parseWebVtt(source)
         if (!cues.length) throw new Error('WebVTT 没有可显示的字幕内容')
         setSubtitleCues(cues)
       })
       .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === 'AbortError') return
+        if (controller.signal.aborted || (reason instanceof DOMException && reason.name === 'AbortError')) return
         setSubtitleLoadError(true)
       })
 
     return () => controller.abort()
-  }, [plan?.playSessionId, plan?.subtitleStreamIndex, plan?.subtitleUrl])
+  }, [plan?.playSessionId, plan?.subtitleStreamIndex, plan?.subtitleUrl, plan?.subtitleFormat])
 
   const planKey = useCallback((value: PlaybackPlan) => (
     `${value.itemId}:${value.playSessionId}:${value.playMethod}`
@@ -2358,10 +2360,10 @@ function PlayerPage({
   }, [stopPlan, updateChrome, updateStatus])
 
   const progress = total > 0 ? Math.min(100, Math.max(0, current / total * 100)) : 0
-  const subtitleText = useMemo(() => subtitleCues
+  const subtitleText = useMemo(() => plan?.subtitleFormat === 'ass' ? '' : subtitleCues
     .filter((cue) => current >= cue.start && current < cue.end)
     .map((cue) => cue.text)
-    .join('\n'), [current, subtitleCues])
+    .join('\n'), [current, subtitleCues, plan?.subtitleFormat])
   const titleDetail = item.original && item.original !== item.title ? item.original : item.subtitle
   const episodeLabel = item.sourceType === 'Episode'
     ? `S${String(item.parentIndexNumber ?? 0).padStart(2, '0')} E${String(item.indexNumber ?? 0).padStart(2, '0')}`
@@ -2479,6 +2481,8 @@ function PlayerPage({
           </div>
         </div>
       )}
+
+      {status !== 'preparing' && plan?.subtitleFormat === 'ass' && plan.subtitleUrl && <AssSubtitles key={`${plan.playSessionId}:${plan.subtitleStreamIndex}`} videoRef={videoRef} url={plan.subtitleUrl} fontUrls={plan.subtitleFontUrls} onError={setSubtitleLoadError} />}
 
       <div ref={bottomChromeRef} className={cx('player-chrome player-chrome--bottom', !controls && 'is-hidden')} inert={!controls} aria-hidden={!controls}>
         {panel && controls && (

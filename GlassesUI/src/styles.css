@@ -5327,3 +5327,11 @@ kbd {
     gap: 2px;
   }
 }
+
+/* ASS positions are authored relative to the video image, independent of chrome. */
+.ass-subtitle-canvas {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  visibility: hidden;
+}

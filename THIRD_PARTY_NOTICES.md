@@ -22,6 +22,7 @@ including:
 - React and React DOM — MIT License
 - Vite and `@vitejs/plugin-react` — MIT License
 - hls.js — Apache License 2.0
+- libass-wasm 4.1.0 — JavascriptSubtitlesOctopus/libass and its font/shaping dependencies; see below
 - Lucide React — ISC License
 - TypeScript — Apache License 2.0
 
@@ -53,3 +54,34 @@ RayNeo Air 3S official product artwork supplied by the user. It preserves the
 product's original appearance and transparency. The product artwork and RayNeo
 marks remain the property of their respective owners and are not covered by
 this repository's MIT license.
+
+## Local ASS subtitle rendering
+
+`libass-wasm` 4.1.0 supplies the WebAssembly renderer and worker for ASS/SSA.
+Its original worker source is wrapped with local blob resource resolution; the
+WASM binary is unchanged. `GlassesUI/src/assRenderer.ts` supplies canvas drawing,
+resource limits and cleanup. No remote renderer or font CDN is loaded.
+
+- Upstream source and build instructions: <https://github.com/libass/JavascriptSubtitlesOctopus/tree/f5ead60c287fd6b84d4561a3b4fcc65dcd0d1f54>
+- Exact npm package and integrity: `GlassesUI/package-lock.json` (`libass-wasm` 4.1.0)
+- Bundled notices and full dependency license texts: `GlassesUI/public/licenses/libass-wasm-COPYRIGHT.txt`
+- Wrapper license: `GlassesUI/public/licenses/libass-wasm-LICENSE.txt` (MIT)
+
+The renderer includes libass, FreeType, HarfBuzz, FriBidi, Fontconfig, Expat and
+Brotli under their respective licenses, including LGPL-2.1-or-later components.
+To replace/relink the renderer, rebuild the upstream worker/WASM from the pinned
+source and replace the matching files in `GlassesUI/node_modules/libass-wasm/dist/js/`,
+then run `npm --prefix GlassesUI run build` and the Android assembly tasks.
+The application imposes no restriction on reverse engineering for debugging
+modifications to these LGPL components.
+
+## Source Han Sans (思源黑体)
+
+`GlassesUI/src/assets/fonts/SourceHanSansSC-Regular.otf` is Adobe's Source Han
+Sans SC Regular 2.005, bundled unmodified as the fallback for missing ASS fonts.
+It covers Simplified Chinese, Japanese and other CJK glyphs; media-provided
+fonts take priority when available.
+
+- Source: <https://github.com/adobe-fonts/source-han-sans/tree/release/OTF/SimplifiedChinese>
+- License: SIL Open Font License 1.1, bundled in `GlassesUI/public/licenses/OFL-SourceHanSans.txt`
+- SHA-256: `f1d8611151880c6c336aabeac4640ef434fa13cbfbf1ffe82d0a71b2a5637256`

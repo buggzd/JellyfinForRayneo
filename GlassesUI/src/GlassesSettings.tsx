@@ -67,7 +67,7 @@ export default function GlassesSettings({ theme, subtitleSize, onThemeChange, on
             <p style={{ fontSize: subtitleFontSize(subtitleSize) }}>每一帧，都值得看清。<br />Every frame tells a story.</p>
           </div>
           <SubtitleSizeOptions value={subtitleSize} onChange={onSubtitleSizeChange} />
-          <p className="subtitle-size-note">选择后应用于播放字幕。已固定在视频画面里的字幕不受此设置影响。</p>
+          <p className="subtitle-size-note">应用于普通文字字幕。ASS/SSA 使用字幕原有字号和排版；已烧录到视频的字幕不受此设置影响。</p>
         </section>
         <section className="glasses-setting glasses-sound-setting glass-panel" aria-labelledby="glasses-sound-heading">
           <header><Volume2 size={24} /><div><h2 id="glasses-sound-heading">UI 音效</h2>

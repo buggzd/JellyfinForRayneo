@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "hls.js": "^1.7.2",
+    "libass-wasm": "4.1.0",
     "lucide-react": "^0.544.0",
     "pinyin-pro": "^3.29.3",
     "react": "^19.1.1",

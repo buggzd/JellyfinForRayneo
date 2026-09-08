@@ -155,7 +155,7 @@ export function playbackInfoRows(plan: PlaybackPlan, stats: PlaybackStats, hardw
   const outputBitrate = stats.bitrate ?? (originalStream ? source.bitrate : undefined)
   const selectedSubtitle = plan.subtitleTracks.find((track) => track.index === plan.subtitleStreamIndex)
   const subtitle = plan.subtitleStreamIndex < 0 ? '关闭'
-    : joined(codecLabel(selectedSubtitle?.codec), plan.subtitleBurnedIn ? '烧录到视频' : '文字字幕')
+    : joined(codecLabel(selectedSubtitle?.codec), plan.subtitleBurnedIn ? '烧录到视频' : plan.subtitleFormat === 'ass' ? '本地样式字幕' : '文字字幕')
   const frames = stats.totalFrames === undefined ? '当前 WebView 未提供'
     : `${stats.droppedFrames ?? 0} / ${stats.totalFrames} 帧${stats.totalFrames > 0 ? ` · ${decimal((stats.droppedFrames ?? 0) / stats.totalFrames * 100)}%` : ''}`
   const current = [

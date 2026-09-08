@@ -18,12 +18,14 @@ const session = {
   userId: 'user', deviceId: 'subtitle-test',
 }
 
-function playbackFixture(t, { codec = 'ass', external = false, container = 'mkv', delivery = '/original/Stream.ass' } = {}) {
+function playbackFixture(t, { codec = 'ass', external = false, container = 'mkv', delivery = '/original/Stream.ass', failFallback = false, directUrl } = {}) {
   t.mock.method(globalThis, 'fetch', async (_url, init) => {
     requests.push(JSON.parse(init.body))
+    if (failFallback && !requests.at(-1).EnableDirectPlay) return new Response('{}', {status:500})
     return new Response(JSON.stringify({ PlaySessionId: 'play-session', MediaSources: [{
-      Id: 'source', Container: container, Bitrate: 5_000_000, SupportsDirectPlay: true,
-      TranscodingUrl: '/Videos/item/master.m3u8', DefaultSubtitleStreamIndex: 4,
+      Id: 'source', Container: container, Bitrate: 5_000_000, SupportsDirectPlay: true, DirectStreamUrl: directUrl,
+      TranscodingUrl: '/Videos/item/master.m3u8?SubtitleStreamIndex=4&SubtitleMethod=Encode', DefaultSubtitleStreamIndex: 4,
+      MediaAttachments: [{ Index: 6, FileName: 'font.ttf' }, { Index: 7, FileName: 'poster.jpg' }, { Index: -1, FileName: 'bad.otf' }],
       MediaStreams: [
         { Type: 'Video', Index: 0, Codec: 'h264', Width: 1920, Height: 1080, BitDepth: 8 },
         { Type: 'Audio', Index: 1, Codec: 'aac' },
@@ -37,50 +39,61 @@ function playbackFixture(t, { codec = 'ass', external = false, container = 'mkv'
   return { requests, prepare: (selection = {}, ticks = 0) => client.preparePlayback({ id: 'item', canPlay: true }, ticks, selection) }
 }
 
-function expectWebVtt(plan, index) {
+function expectSubtitle(plan, index, format = 'ass') {
   const url = new URL(plan.subtitleUrl)
-  assert.equal(url.pathname, `/jellyfin/Videos/item/source/Subtitles/${index}/Stream.vtt`)
+  assert.equal(url.pathname, `/jellyfin/Videos/item/source/Subtitles/${index}/Stream.${format}`)
   assert.equal(url.searchParams.get('api_key'), session.accessToken)
   assert.equal(url.searchParams.get('startPositionTicks'), '0')
   assert.equal(url.searchParams.get('copyTimestamps'), 'false')
   assert.equal(url.searchParams.get('addVttTimeMap'), 'false')
+  assert.equal(plan.subtitleFormat, format)
   assert.equal(plan.subtitleBurnedIn, false)
+  const video = new URL(plan.url)
+  assert.equal(video.searchParams.get('SubtitleStreamIndex') ?? video.searchParams.get('subtitleStreamIndex'), '-1')
+  assert.notEqual(video.searchParams.get('SubtitleMethod'), 'Encode')
 }
 
-test('converts embedded ASS to WebVTT during HLS playback instead of fetching the original delivery', async (t) => {
+test('delivers original ASS to libass and excludes subtitles from the HLS video', async (t) => {
   const { prepare, requests } = playbackFixture(t)
   const plan = await prepare()
   assert.equal(plan.playMethod, 'Transcode')
-  expectWebVtt(plan, 4)
+  expectSubtitle(plan, 4)
   for (const request of requests) {
-    assert.deepEqual(request.DeviceProfile.SubtitleProfiles.filter(p => p.Method === 'External').map(p => p.Format), ['vtt', 'webvtt'])
+    assert.deepEqual(request.DeviceProfile.SubtitleProfiles.filter(p => p.Method === 'External').map(p => p.Format), ['ass', 'ssa', 'vtt', 'webvtt'])
     assert.equal(request.AlwaysBurnInSubtitleWhenTranscoding, false)
+    assert.equal(request.DeviceProfile.TranscodingProfiles[0].EnableSubtitlesInManifest, false)
   }
+  assert.equal(requests[1].SubtitleStreamIndex, -1)
+  assert.deepEqual(plan.subtitleFontUrls.map(url => new URL(url).pathname), ['/jellyfin/Videos/item/source/Attachments/6'])
 })
 
-test('converts external SSA while preserving direct video playback', async (t) => {
+test('delivers external SSA as ASS while preserving direct video playback', async (t) => {
   const { prepare } = playbackFixture(t, { codec: 'ssa', external: true, container: 'mp4', delivery: 'https://media.example.invalid/raw.ssa' })
   const plan = await prepare()
   assert.equal(plan.playMethod, 'DirectPlay')
-  expectWebVtt(plan, 4)
+  expectSubtitle(plan, 4)
 })
 
 test('switching subtitle tracks at a resume position requests the selected track on the full media timeline', async (t) => {
   const { prepare } = playbackFixture(t)
-  expectWebVtt(await prepare(), 4)
+  expectSubtitle(await prepare(), 4)
   const plan = await prepare({ subtitleStreamIndex: 5 }, 3_000_000_000)
-  expectWebVtt(plan, 5)
+  expectSubtitle(plan, 5)
   assert.equal(plan.startPositionTicks, 3_000_000_000)
   assert.equal(plan.subtitleStreamIndex, 5)
   const disabled = await prepare({ subtitleStreamIndex: -1 })
   assert.equal(disabled.subtitleUrl, undefined)
   assert.equal(disabled.subtitleStreamIndex, -1)
+  assert.equal(disabled.subtitleFormat, undefined)
+  assert.equal(disabled.subtitleFontUrls, undefined)
 })
 
 for (const codec of ['srt', 'subrip', 'vtt', 'webvtt', 'mov_text']) {
   test(`${codec} text subtitles use the same WebVTT delivery with or without a server URL`, async (t) => {
     const { prepare } = playbackFixture(t, { codec, delivery: codec === 'mov_text' ? null : `/original/Stream.${codec}` })
-    expectWebVtt(await prepare(), 4)
+    const plan = await prepare()
+    expectSubtitle(plan, 4, 'vtt')
+    assert.equal(plan.subtitleFontUrls, undefined)
   })
 }
 
@@ -92,4 +105,17 @@ test('bitmap subtitles still request burn-in and have no local text URL', async 
   assert.equal(plan.subtitleUrl, undefined)
   assert.equal(requests[1].AlwaysBurnInSubtitleWhenTranscoding, true)
   assert.ok(requests[1].DeviceProfile.SubtitleProfiles.some(p => p.Format === 'pgssub' && p.Method === 'Encode'))
+})
+
+
+test('a failed fallback negotiation cannot reuse a server burn-in URL for local ASS', async (t) => {
+  const { prepare } = playbackFixture(t, { failFallback: true })
+  expectSubtitle(await prepare(), 4)
+})
+
+test('server direct URLs also clear case-insensitive subtitle selection for local ASS', async (t) => {
+  const { prepare } = playbackFixture(t, { container: 'mp4', directUrl: '/Videos/item/stream.mp4?subtitleStreamIndex=4&subtitleMethod=Encode' })
+  const plan = await prepare()
+  expectSubtitle(plan, 4)
+  assert.equal(new URL(plan.url).searchParams.has('subtitleMethod'), false)
 })

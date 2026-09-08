@@ -47,6 +47,7 @@ type JellyfinMediaSource = {
   Size?: number
   RunTimeTicks?: number
   MediaStreams?: JellyfinMediaStream[]
+  MediaAttachments?: { Index?: number; FileName?: string; MimeType?: string }[]
   SupportsTranscoding?: boolean
   SupportsDirectStream?: boolean
   SupportsDirectPlay?: boolean
@@ -175,6 +176,8 @@ export type PlaybackPlan = PlaybackEndpoint & {
   audioStreamIndex?: number
   subtitleStreamIndex: number
   subtitleUrl?: string
+  subtitleFormat?: 'ass' | 'vtt'
+  subtitleFontUrls?: string[]
   fallback?: PlaybackEndpoint
 }
 
@@ -329,7 +332,7 @@ function createWebViewDeviceProfile(hardwareVideoCodecs: ReadonlySet<string>) {
         MaxAudioChannels: '2',
         MinSegments: 2,
         SegmentLength: 6,
-        EnableSubtitlesInManifest: true,
+        EnableSubtitlesInManifest: false,
       },
     ],
     ContainerProfiles: [],
@@ -348,7 +351,9 @@ function createWebViewDeviceProfile(hardwareVideoCodecs: ReadonlySet<string>) {
       }] : []),
     ],
     SubtitleProfiles: [
-      // The local text renderer parses WebVTT; Jellyfin converts other text codecs.
+      // ASS/SSA use local libass; other text codecs are converted to WebVTT.
+      { Format: 'ass', Method: 'External' },
+      { Format: 'ssa', Method: 'External' },
       { Format: 'vtt', Method: 'External' },
       { Format: 'webvtt', Method: 'External' },
       { Format: 'pgssub', Method: 'Encode' },
@@ -758,7 +763,7 @@ export class JellyfinClient {
     playSessionId: string,
   ) {
     if (source.DirectStreamUrl) {
-      return this.authenticatedUrl(source.DirectStreamUrl)
+      return this.videoUrl(source.DirectStreamUrl, subtitleStreamIndex < 0)
     }
 
     const container = normalizeContainer(source.Container)
@@ -769,9 +774,22 @@ export class JellyfinClient {
       mediaSourceId: source.Id,
       startTimeTicks: startPositionTicks > 0 ? startPositionTicks : undefined,
       audioStreamIndex,
-      subtitleStreamIndex: subtitleStreamIndex >= 0 ? subtitleStreamIndex : undefined,
+      subtitleStreamIndex,
       playSessionId,
     })
+  }
+
+  private videoUrl(path: string, localSubtitles: boolean) {
+    const url = new URL(this.authenticatedUrl(path))
+    if (localSubtitles) {
+      // Even a stale fallback URL must not burn or multiplex the local track.
+      for (const key of [...url.searchParams.keys()]) {
+        if (['subtitlestreamindex', 'subtitlemethod'].includes(key.toLowerCase())) url.searchParams.delete(key)
+      }
+      url.searchParams.set('SubtitleStreamIndex', '-1')
+      url.searchParams.set('SubtitleMethod', 'External')
+    }
+    return url.toString()
   }
 
   private subtitleUrl(
@@ -780,10 +798,10 @@ export class JellyfinClient {
     stream: JellyfinMediaStream | undefined,
   ) {
     if (!stream || stream.Index === undefined || !source.Id) return undefined
-    // DeliveryUrl can point to the original ASS/SSA file. Explicitly request
-    // WebVTT on the full media timeline, including when resuming or using HLS.
+    const format = ['ass', 'ssa'].includes(normalizeCodec(stream.Codec)) ? 'ass' : 'vtt'
+    // Keep ASS styling intact; all subtitle formats use the full media timeline.
     return this.authenticatedUrl(
-      `/Videos/${encodeURIComponent(itemId)}/${encodeURIComponent(source.Id)}/Subtitles/${stream.Index}/Stream.vtt`,
+      `/Videos/${encodeURIComponent(itemId)}/${encodeURIComponent(source.Id)}/Subtitles/${stream.Index}/Stream.${format}`,
       {
         copyTimestamps: false,
         addVttTimeMap: false,
@@ -1131,6 +1149,8 @@ export class JellyfinClient {
     const nonDefaultAudioSelection = selection.audioStreamIndex !== undefined
       && selection.audioStreamIndex !== firstAudioIndex
     const subtitleRequiresBurnIn = Boolean(selectedSubtitle && !isTextSubtitle(selectedSubtitle.Codec))
+    const assSubtitle = Boolean(selectedSubtitle && ['ass', 'ssa'].includes(normalizeCodec(selectedSubtitle.Codec)))
+    const videoSubtitleIndex = subtitleRequiresBurnIn ? subtitleStreamIndex : -1
     const canDirectPlay = !selection.forceTranscode
       && !nonDefaultAudioSelection
       && !subtitleRequiresBurnIn
@@ -1145,7 +1165,7 @@ export class JellyfinClient {
         ...selection,
         mediaSourceId: source.Id,
         audioStreamIndex,
-        subtitleStreamIndex,
+        subtitleStreamIndex: videoSubtitleIndex,
       }
       const transcodeRequest = this.playbackRequest(startTicks, forcedSelection, true)
       transcodeRequest.AlwaysBurnInSubtitleWhenTranscoding = subtitleRequiresBurnIn
@@ -1165,7 +1185,7 @@ export class JellyfinClient {
       ?? (!canDirectPlay ? source.TranscodingUrl : undefined)
     const transcodeEndpoint: PlaybackEndpoint | undefined = transcodePath
       ? {
-          url: this.authenticatedUrl(transcodePath),
+          url: this.videoUrl(transcodePath, !subtitleRequiresBurnIn),
           playSessionId: transcodeResponse?.PlaySessionId || directResponse.PlaySessionId || '',
           playMethod: 'Transcode',
           transcoding: true,
@@ -1179,7 +1199,7 @@ export class JellyfinClient {
             source,
             startTicks,
             audioStreamIndex,
-            subtitleStreamIndex,
+            videoSubtitleIndex,
             directResponse.PlaySessionId ?? '',
           ),
           playSessionId: directResponse.PlaySessionId ?? '',
@@ -1225,6 +1245,13 @@ export class JellyfinClient {
       subtitleTracks,
       audioStreamIndex,
       subtitleStreamIndex,
+      subtitleFormat: subtitleStreamIndex < 0 || endpoint.subtitleBurnedIn ? undefined : assSubtitle ? 'ass' : 'vtt',
+      subtitleFontUrls: assSubtitle && source.Id ? (source.MediaAttachments ?? [])
+        .filter((font) => Number.isSafeInteger(font.Index) && font.Index! >= 0
+          && (/\.(?:ttf|otf|woff2?)$/i.test(font.FileName ?? '')
+            || /^(?:font\/(?:ttf|otf|woff2?)|application\/(?:x-truetype-font|x-font-ttf|vnd.ms-opentype))$/i.test(font.MimeType ?? '')))
+        .slice(0, 24)
+        .map((font) => this.authenticatedUrl(`/Videos/${encodeURIComponent(item.id)}/${encodeURIComponent(source.Id!)}/Attachments/${font.Index}`)) : undefined,
       subtitleUrl: !endpoint.subtitleBurnedIn && selectedSubtitle && isTextSubtitle(selectedSubtitle.Codec)
         ? this.subtitleUrl(item.id, source, selectedSubtitle)
         : undefined,

@@ -226,8 +226,9 @@ generation, client, video element, playback plan, or reporting lifecycle.
 
 Size choices are available only on the Settings pages; the player uses the saved
 size without adding font controls to its playback or subtitle menus.
-Sizing applies to local text subtitles; burned-in/bitmap subtitles already in
-the video cannot be resized by this preference. Logout preserves both appearance
+Sizing applies to ordinary WebVTT text subtitles; ASS/SSA retain authored
+font sizes and positioning. Burned-in/bitmap subtitles already in the video
+cannot be resized by this preference. Logout preserves both appearance
 preferences, and standalone previews persist only their dedicated preference keys.
 
 Glasses UI sounds are a separate, glasses-only localStorage preference
@@ -495,14 +496,39 @@ at 3840×2160 and 120 Mbps; H.264/VP8 are limited to 8-bit and HEVC/VP9/AV1 to
 24 Mbps, two-channel H.264/AAC HLS fallback. `hls.js` handles transport and MSE
 demuxing; Chromium still selects the actual Android decoder.
 
-The local subtitle renderer accepts WebVTT only. The device profile advertises
-only VTT/WebVTT for external text delivery; ASS/SSA, SubRip and other supported
-text sources are converted by Jellyfin. Subtitle requests explicitly use the
-selected source/track's `Stream.vtt` endpoint instead of trusting `DeliveryUrl`,
-which can return original ASS content. Requests use the full media timeline
-(`startPositionTicks=0`, `copyTimestamps=false`, `addVttTimeMap=false`) for both
-direct play and HLS, including resume and track changes. ASS styling is flattened
-to text with the user's subtitle size; bitmap tracks retain server-side burn-in.
+ASS/SSA are delivered as original ASS to the local `libass-wasm` worker,
+loaded only when such a track is selected. Other text codecs use WebVTT.
+The device profile advertises ASS/SSA/VTT/WebVTT as external delivery. Video
+requests explicitly select subtitle index `-1` for local tracks, omit subtitles
+from HLS manifests, and strip burn-in selection from stale fallback URLs. Only
+bitmap tracks request server burn-in. A failed ASS renderer shows a local error;
+it never silently converts to plain text or requests server burn-in.
+
+The one transparent canvas follows the actual `object-fit: contain` image rect,
+including letterboxing, below playback controls. The worker uses libass's ASS
+styles, layers, positioning, transforms, karaoke, alpha and vector clipping;
+no override tags or animations are stripped. It receives video frame timestamps
+(`requestVideoFrameCallback`, falling back to the video clock on rAF), and stops
+callbacks while paused or hidden. Seek, resize and resume resynchronize the same
+media timeline. The source request starts at zero, including during resumed HLS.
+Stereo copies the same WebView/canvas; there is still only one video and audio stream.
+
+Media font attachments take priority; bundled Source Han Sans SC (思源黑体,
+SIL OFL) supplies missing glyphs/fonts without an online font service. ASS uses
+its authored sizes, independent of the ordinary subtitle-size preference.
+The canvas backing size is bounded to 1920×1080. Subtitle text is limited to
+16 MiB; optional fonts to 24 attachments, 20 MiB each and 48 MiB total with a
+15-second aggregate loading budget. Unavailable optional fonts use the fallback.
+Libass bitmap/glyph caches are limited to 32/8 MiB. These are resource budgets,
+not a guarantee that every extreme ASS script is inexpensive.
+
+APK resources are loaded with bounded XHR (`file://` status zero is accepted),
+then exposed to the WASM worker as temporary blob URLs. The worker receives
+subtitle content and font blobs, never authenticated server URLs. No new native
+bridge or file-origin permission is introduced. Track changes, logout, unmount,
+abort and critical worker failures terminate the worker, cancel frame callbacks,
+clear pixels and revoke blob URLs. Worker log text and arbitrary window actions
+are not forwarded. See the [subtitle regression fixture](DEVELOPMENT.md#ass-字幕回归).
 
 The glasses player's optional video-information overlay reads the existing
 playback plan, HTML video dimensions/quality/buffered ranges, and the current
@@ -551,7 +577,7 @@ minimum device regression set for any device-facing change.
 | Glasses settings and subtitle size | Enter/exit glasses Settings, both themes and four sizes, phone/glasses edits, paused/direct/HLS playback, text versus burned-in subtitles, cold launch/logout/reset in 2D and SBS | One focus returns to Settings; both surfaces acknowledge the same saved preference; playback uses the chosen text size with no font controls in player menus, duplicate video or reporting |
 | Remote tutorial | First ready catalog, skip/relaunch, six phone gestures, wrong/rapid input, pause/resume/exit, sidebar replay, logout, 2D/SBS switch and renderer recovery | Each real gesture advances once; exactly one focus stays inside practice/dialog; completion or skipping is remembered; no media playback or background navigation; SVG motion and text remain readable in both eyes |
 | Glasses UI sounds | Direction/confirm/back, held input at a focus boundary, panels, volume, tutorial and feedback; mute/unmute during a cue; cold launch, logout, detach/reattach, renderer recovery, both themes and display modes, direct/HLS playback | Each ordinary gesture triggers at most one immediate cue and a held direction sounds once at the same boundary; mute persists and stops active/pending cues; the player is silent except for volume; no startup/restoration cue or phone UI sounds; video soundtrack/volume/reporting are unchanged and stereo does not duplicate cues |
-| Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, text and bitmap subtitle | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |
+| Playback | Direct play, H.264/AAC HLS fallback, pause, seek, previous/next item, audio track, WebVTT, ASS/SSA and bitmap subtitles; ASS animated positioning/karaoke, attached/missing fonts, rapid ASS→text→off, paused seek, worker failure and logout in 2D/SBS | Playback remains controllable, progress is reported once, and the selected track is reflected in UI |
 | Single-instance invariants | Mirror and stereo during representative playback | One glasses WebView, one HTML `<video>`, one audio stream, and one Jellyfin reporting stream remain active |
 | Renderer recovery | Kill or crash the glasses WebView renderer during browse and playback | The WebView is rebuilt, session bootstrap is republished, and the phone receives a safe state |
 | Codec selection | Representative H.264, HEVC/VP9/AV1 where hardware advertises support, plus an unsupported source | The actual Chromium `MediaCodec` component matches expectations; incompatible media requests the bounded HLS fallback |
