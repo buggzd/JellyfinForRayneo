@@ -1,4 +1,8 @@
-# TaChi（塔奇）
+<p align="center">
+  <img src="artwork/app-icon/tachi-icon-rounded.png" width="128" height="128" alt="TaChi（塔奇）应用图标">
+</p>
+
+<h1 align="center">TaChi（塔奇）</h1>
 
 > 面向 RayNeo Air 系列眼镜的第三方 Jellyfin 客户端：手机负责连接与遥控，眼镜负责浏览与播放，一个应用提供 2D 镜像和 SBS 立体虚拟屏幕。
 
