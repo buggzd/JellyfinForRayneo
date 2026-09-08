@@ -27,7 +27,7 @@ AndroidApp/                         # 原生 Android Gradle application
     └── build/generated/webAssets/ # 两套 production bundle（不提交）
 GlassesUI/                          # 眼镜 React/TypeScript 客户端与播放器
 CompanionUI/                        # 手机 React 登录、设置与触控板
-docs/                               # 使用、架构、路线图和复现规格
+docs/                               # 现行指南、路线图、历史研究与实测
 scripts/install-rayneo-sdk.sh       # 历史 SDK 分析辅助，不参与构建
 scripts/build-android.sh            # 可复现构建入口
 scripts/verify-android.sh           # 源码与 APK 边界检查
@@ -228,7 +228,7 @@ keyPassword=<local-only>
 
 这条命令覆盖前端检查、两套 production bundle、JVM 测试、Debug lint、APK 组装和 APK 边界检查。
 
-搜索性能基准与保持视觉效果的优化记录见 [性能审阅](PERFORMANCE_REVIEW.md)。
+搜索基准、已采用的优化和实测依据见 [性能维护](PERFORMANCE.md)；其他入口见 [文档导航](README.md)。
 
 前端相关变更还应明确运行：
 

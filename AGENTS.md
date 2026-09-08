@@ -24,8 +24,10 @@ frontends:
 
 Read `README.md` for setup and release workflows. Before changing sessions,
 bridges, playback, diagnostics, remote input, or display modes, read
-`docs/ANDROID_ARCHITECTURE.md`. Product scope lives in
-`docs/JELLYFIN_FEATURE_ROADMAP.md` and `docs/Jellyfin-Web-Reproduction-Spec.md`.
+`docs/ANDROID_ARCHITECTURE.md`. Current product scope lives in
+`docs/JELLYFIN_FEATURE_ROADMAP.md`; `docs/README.md` indexes current guides,
+research archives, and dated measurements. Archived proposals are not current
+requirements or a to-do list.
 
 ## Architecture Guardrails
 
@@ -72,3 +74,11 @@ paths. Preserve unrelated edits; never stage generated frontend bundles. Merge
 frontend source and lockfiles, then rebuild and verify the APK. Use focused
 Conventional Commits. Delete finished branches/worktrees only after checking
 that their commits are merged and no uncommitted work remains.
+
+## Documentation Maintenance
+
+Update the relevant current guide and roadmap when a feature lands; remove
+completed to-dos instead of appending another implementation diary. Put dated
+research and superseded designs in `docs/archive/`, with baseline and evidence
+limits. Keep device measurements in `docs/performance/`. Update links and anchors
+when moving documents; preserve source images and measurement data.

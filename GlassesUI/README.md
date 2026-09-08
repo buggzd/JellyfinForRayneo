@@ -19,7 +19,7 @@ For a standalone remote-tutorial preview, open `http://localhost:4175/?tutorial`
 after starting Vite. This development-only entry does not load Jellyfin
 credentials or contact a server. Use arrow keys (or WASD), Enter for a single
 tap, and Escape for a double tap. Previewing does not change the onboarding
-flag used by the app. Interaction and SVG details: [remote tutorial](../docs/REMOTE_TUTORIAL.md).
+flag used by the app. Interaction and SVG details: [remote tutorial](../docs/UI_GUIDE.md#遥控教学).
 
 Rebuild the APK assets after changing the frontend:
 

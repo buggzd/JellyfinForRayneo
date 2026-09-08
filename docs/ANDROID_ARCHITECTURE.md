@@ -213,7 +213,7 @@ copy of the native preference in localStorage. Standalone browser previews and t
 dual-UI harness may save only the appearance choice under a preview-specific key.
 `SharedUI` supplies the exact enum normalization and simpleUI rendering rules;
 both Gradle frontend tasks include that directory in their build inputs.
-See [UI themes](UI_THEMES.md) for the visual design and verification boundary.
+See [UI themes](UI_GUIDE.md) for the visual design and verification boundary.
 
 The glasses side navigation includes Settings, with the same theme choices and
 a live subtitle-size preview. Both surfaces can edit the device-wide
@@ -330,7 +330,7 @@ through Android USB Host APIs. The APK has no RayNeo SDK, XR Space binding,
 package query or launcher integration. The historical SDK/official control
 implementation was used only to establish the two mode reports; no vendor
 binary is bundled. Protocol provenance is recorded in
-[SBS geometry analysis](SBS_GEOMETRY_ANALYSIS.md#16-移除-xr-空间依赖直接控制-usb2026-09-06).
+[SBS geometry analysis](SBS_GEOMETRY.md#usb-模式控制).
 
 `RayNeoUsbDisplayClient` accepts only USB VID/PID `1bbb:af50`, interface 0,
 HID class 3/subclass 0/protocol 0, and the verified interrupt endpoints
@@ -484,7 +484,7 @@ enabling also requires the phone settings surface, a ready glasses WebView and
 applied stereo. White frames have zero added disparity, L/R identify eye channels,
 and cyan targets share the content transform. The overlay leaves video visible.
 Leaving settings, mode exit/failure, pause, disconnect, logout or renderer loss
-clears it. See [SBS geometry analysis](SBS_GEOMETRY_ANALYSIS.md) for derivation,
+clears it. See [SBS geometry analysis](SBS_GEOMETRY.md) for derivation,
 official parameter sources and optical/device limitations.
 
 The native bridge enumerates hardware-accelerated `MediaCodec` decoders.

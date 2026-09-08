@@ -8,7 +8,7 @@ Air SDK or XR Space application.
 
 - Documentation: <https://rayneo.gitbook.io/rayneo-devdoc/>
 - Historical SDK reference: the pinned download in `scripts/install-rayneo-sdk.sh`
-- Protocol analysis and scope: `docs/SBS_GEOMETRY_ANALYSIS.md`
+- Protocol analysis and scope: [SBS geometry and USB scope](docs/SBS_GEOMETRY.md#usb-模式控制)
 
 Vendor binaries are not redistributed in this repository or included in the
 current APK. The historical SDK download helper remains for reproducible
