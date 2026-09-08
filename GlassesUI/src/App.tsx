@@ -897,9 +897,10 @@ function BrowsePage({
 
   const visibleItems = shownItems.slice(0, visibleCount)
   const hasMore = visibleItems.length < shownItems.length
-  const showsSeriesPosters = mode === 'library'
-    && path.length > 0
-    && shownItems.some((item) => item.sourceType === 'Series')
+  const showsLibraries = mode === 'library' && path.length === 0
+  const usesWideCard = (item: MediaItem) => mode === 'library'
+    && (showsLibraries || (item.sourceType !== 'Movie' && item.sourceType !== 'Series'))
+  const showsWideGrid = mode === 'library' && baseItems.every(usesWideCard)
   const title = mode === 'favorites' ? '我的收藏' : path.at(-1)?.item.title ?? '媒体库'
   const eyebrow = mode === 'favorites' ? 'SAVED MOMENTS' : path.length ? 'FOLDER VIEW' : 'ALL LIBRARIES'
 
@@ -975,7 +976,7 @@ function BrowsePage({
 
         <header className="browse-title-row">
           <div><small>{eyebrow}</small><h1>{title}</h1><p>{folderLoading ? '正在读取内容…' : folderError ? '内容尚未载入' : `${baseItems.length} 个项目`} · Jellyfin / {serverName}</p></div>
-          <div className="layout-indicator"><Grid3X3 size={18} /><span>{path.length && !showsSeriesPosters ? '横向缩略图' : '海报网格'}</span></div>
+          <div className="layout-indicator"><Grid3X3 size={18} /><span>{showsWideGrid ? '横向缩略图' : '海报网格'}</span></div>
         </header>
 
         <section className="browse-toolbar glass-panel">
@@ -1012,14 +1013,14 @@ function BrowsePage({
         ) : shownItems.length ? (
           <section className={cx(
             'media-grid',
-            path.length > 0 && !showsSeriesPosters && 'media-grid--wide',
-            showsSeriesPosters && 'media-grid--series-posters',
+            showsWideGrid && 'media-grid--wide',
           )}>
             {visibleItems.map((item, index) => (
               <MediaCard
                 key={item.id}
                 item={item}
-                wide={path.length > 0 && item.sourceType !== 'Series'}
+                wide={usesWideCard(item)}
+                library={showsLibraries}
                 onOpen={openItem}
                 onPreview={onPreview}
                 autoFocusTarget={index === 0 && filter !== 'all'}
