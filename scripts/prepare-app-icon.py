@@ -57,7 +57,7 @@ def cubic_path(start, segments):
 
 
 def monochrome_artwork():
-    # Trace the supplied crop's silver panel, three sensors, lens and upper rim.
+    # Trace the supplied crop's shell contour, silver panel, sensors and lens.
     # A clean alpha silhouette survives launcher tinting better than photographic
     # luminance, which would merge the blue shell with the silver panel.
     alpha = Image.new('L', (536, 536), 0)
@@ -70,6 +70,13 @@ def monochrome_artwork():
     draw.polygon(panel + [(536, 536)], fill=255)
     for bounds in ((324, 265, 356, 294), (388, 269, 420, 299), (346, 310, 379, 341)):
         draw.ellipse(bounds, fill=0)
+    # The blue shell's outer edge continues from the lower left into the top
+    # crop. Keep it distinct from the inner rim so the lens sits inside a body.
+    shell = cubic_path((-8, 452), [
+        ((42, 337), (120, 226), (189, 151)),
+        ((258, 87), (346, 35), (456, -8)),
+    ])
+    draw.line(shell, fill=255, width=11, joint='curve')
     rim = cubic_path((189, 151), [
         ((173, 190), (204, 214), (246, 192)),
         ((354, 146), (423, 124), (536, 180)),
