@@ -57,6 +57,7 @@ https://github.com/user-attachments/assets/5dd75ead-3682-4bb2-9181-6368b4049c73
 - **兼顾直放与兼容性**：优先使用 HTML 视频直放，不兼容时回退到 Jellyfin 的 H.264/AAC HLS；支持音轨、文字字幕和服务端烧录字幕。
 - **两种眼镜显示方式**：可在 Mirror 2D 与 SBS 虚拟银幕之间切换；银幕支持四档靠近程度和独立大小调节，并保持单路视频、声音和播放上报。
 - **无需 ADB 也能排查问题**：手机端显示连接阶段和安全诊断，可分享经过脱敏的诊断报告。
+- **中英文界面**：默认跟随系统，也可在手机连接页或两端设置中选择简体中文 / English，自动保存并同步。
 - **观看偏好**：手机与眼镜设置都能切换液态玻璃（liquid-glass）／simpleUI 和四档字幕大小，自动保存、两端同步；播放器沿用设置中选择的文字字号。
 
 <p align="center"><img src="docs/images/glasses-episodes.png" width="96%" alt="tachi 眼镜端《攻壳机动队》分集浏览"></p>

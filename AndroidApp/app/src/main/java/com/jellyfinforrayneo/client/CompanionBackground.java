@@ -32,6 +32,7 @@ final class CompanionBackground
     private static final int PICK_IMAGE = 4102;
     private final Activity activity;
     private final Runnable changed;
+    private final java.util.function.Function<String, String> localize;
     private final AtomicFile image;
     private final ThreadPoolExecutor worker = new ThreadPoolExecutor(
             1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(1));
@@ -39,10 +40,11 @@ final class CompanionBackground
     private volatile boolean busy;
     private volatile boolean closed;
 
-    CompanionBackground(Activity activity, Runnable changed)
+    CompanionBackground(Activity activity, Runnable changed, java.util.function.Function<String, String> localize)
     {
         this.activity = activity;
         this.changed = changed;
+        this.localize = localize;
         image = new AtomicFile(new File(activity.getFilesDir(), "companion-background.jpg"));
         revision = image.getBaseFile().isFile() ? newRevision() : "";
     }
@@ -72,7 +74,7 @@ final class CompanionBackground
         picker.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/jpeg", "image/png", "image/webp"});
         try
         {
-            activity.startActivityForResult(Intent.createChooser(picker, "选择手机背景"), PICK_IMAGE);
+            activity.startActivityForResult(Intent.createChooser(picker, localize.apply("选择手机背景")), PICK_IMAGE);
         }
         catch (RuntimeException ignored)
         {
@@ -172,7 +174,7 @@ final class CompanionBackground
             changed.run();
             if (notice != null)
             {
-                Toast.makeText(activity, notice, Toast.LENGTH_LONG).show();
+                Toast.makeText(activity, localize.apply(notice), Toast.LENGTH_LONG).show();
             }
         }
     }

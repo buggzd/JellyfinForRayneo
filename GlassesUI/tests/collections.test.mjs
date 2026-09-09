@@ -1,3 +1,4 @@
+import { resolveI18nImport } from './i18n-test-helper.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
@@ -5,7 +6,7 @@ import { transformWithEsbuild } from 'vite'
 
 const moduleUrl = async (name, replace = value => value) => {
   const { code } = await transformWithEsbuild(await readFile(new URL(`../src/${name}.ts`, import.meta.url), 'utf8'), `${name}.ts`, { target: 'es2022' })
-  return `data:text/javascript;base64,${Buffer.from(replace(code)).toString('base64')}`
+  return `data:text/javascript;base64,${Buffer.from(resolveI18nImport(replace(code))).toString('base64')}`
 }
 const progressUrl = await moduleUrl('watchProgress')
 const { JellyfinClient } = await import(await moduleUrl('jellyfin', code => code

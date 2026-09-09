@@ -1,3 +1,4 @@
+import { resolveI18nImport } from './i18n-test-helper.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
@@ -8,7 +9,7 @@ const { code } = await transformWithEsbuild(
   'playbackInfo.ts', { target: 'es2022' },
 )
 const { playbackInfoRows, samplePlaybackStats, playbackMethodLabel } =
-  await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
+  await import(`data:text/javascript;base64,${Buffer.from(resolveI18nImport(code)).toString('base64')}`)
 
 const sourcePlan = {
   url: 'https://media.example.invalid/video', playMethod: 'DirectPlay', transcoding: false,

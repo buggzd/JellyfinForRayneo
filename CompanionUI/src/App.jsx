@@ -1,3 +1,5 @@
+import { useLanguage } from './useLanguage'
+import { applyLanguage, getLanguage, isLanguage, savePreviewLanguage, nativeMessage, t } from '../../SharedUI/i18n.mjs'
 import { CircularSeekGesture } from './circularSeek.mjs'
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { applyUiTheme, normalizeUiTheme, readPreviewTheme, savePreviewTheme } from '../../SharedUI/theme.mjs'
@@ -31,6 +33,7 @@ import {
   LockKeyhole,
   Monitor,
   MessageSquare,
+  Languages,
   MoreHorizontal,
   Plus,
   Palette,
@@ -56,7 +59,7 @@ import {
 const DEMO_SERVERS = [
   {
     id: 'jellyfin-home',
-    name: '家庭媒体库',
+    get name() { return t("家庭媒体库") },
     host: 'jellyfin.local:8096',
     detail: 'Jellyfin 10.10',
     latency: '8 ms',
@@ -73,7 +76,7 @@ const DEMO_SERVERS = [
 ]
 
 const DEFAULT_STEREO_SCREEN = { depthLevel: 1, sizePercent: 90 }
-const DEPTH_LABELS = ['基准', '轻微', '适中', '较近']
+const DEPTH_LABELS = ["基准", "轻微", "适中", "较近"]
 
 function validStereoScreen(value) {
   return value && Number.isInteger(value.depthLevel) && value.depthLevel >= 0 && value.depthLevel <= 3
@@ -113,10 +116,10 @@ function serverFromNative(state) {
   if (!state?.serverUrl) return null
   return {
     id: state.serverId || state.serverUrl,
-    name: state.serverName || 'Jellyfin 媒体库',
+    name: state.serverName || t("Jellyfin 媒体库"),
     host: state.serverUrl,
-    detail: state.serverVersion ? `Jellyfin ${state.serverVersion}` : 'Jellyfin 服务器',
-    latency: '已保存',
+    detail: state.serverVersion ? `Jellyfin ${state.serverVersion}` : t("Jellyfin 服务器"),
+    get latency() { return t("已保存") },
     strength: 3,
   }
 }
@@ -185,6 +188,7 @@ function useStoredState(key, initialValue, enabled = true) {
 }
 
 function App() {
+  useLanguage()
   const isNative = useMemo(() => hasNativeBridge(), [])
   const [screenAspect, setScreenAspect] = useState(() => phoneScreenAspect(isNative))
   useEffect(() => {
@@ -353,6 +357,7 @@ function App() {
         setGlassTransparency(nextTransparency)
       }
       setSubtitleSize(normalizeSubtitleSize(next.subtitleSize))
+      applyLanguage(next.language, next.systemLanguage)
       setDisplayMode(next.displayMode === 'stereo_screen' ? 'stereo' : 'mirror')
       // Ignore an older acknowledgement while the latest slider/button edit is still in flight.
       if (validStereoScreen(next.stereoScreen)
@@ -396,7 +401,7 @@ function App() {
 
       if (next.isError && next.message && next.message !== lastNativeErrorRef.current) {
         lastNativeErrorRef.current = next.message
-        notify(next.message, 'error')
+        notify(nativeMessage(next.message), 'error')
       } else if (!next.isError) {
         lastNativeErrorRef.current = ''
       }
@@ -476,7 +481,7 @@ function App() {
   const finishLogin = (username = 'demo', remember = true) => {
     const existing = demoAccounts.find((account) => account.server.host === selectedServer.host && account.username === username)
     if (!existing && demoAccounts.length >= 12) {
-      notify('最多保留 12 个账号，请先移除一个不再使用的账号', 'error')
+      notify(t("最多保留 12 个账号，请先移除一个不再使用的账号"), 'error')
       return
     }
     const nextSession = {
@@ -489,7 +494,7 @@ function App() {
     setDemoAccounts((current) => [...current.filter((account) => account.id !== nextSession.id), nextSession])
     setSession(nextSession)
     go('home')
-    notify(remember ? '连接就绪，账号已保存' : '连接就绪，仅本次运行保留', 'success')
+    notify(remember ? t("连接就绪，账号已保存") : t("连接就绪，仅本次运行保留"), 'success')
   }
 
   const activateAccount = (account) => {
@@ -573,6 +578,15 @@ function App() {
     } else savePreviewGlassTransparency(value)
   }
 
+  const changeLanguage = (language) => {
+    if (!isLanguage(language)) return
+    if (isNative) callNative('selectLanguage', language)
+    else {
+      savePreviewLanguage(language)
+      applyLanguage(language)
+    }
+  }
+
   const changeSubtitleSize = (size) => {
     if (!isSubtitleSize(size)) return
     if (isNative) callNative('selectSubtitleSize', size)
@@ -601,16 +615,17 @@ function App() {
   const openTouchpad = () => {
     if (isNative && !nativeState?.touchpadReady) {
       notify(nativeState?.glassesRuntimeState === 'error'
-        ? nativeState.message || '眼镜端媒体库连接失败，请先检查服务器地址和网络'
+        ? nativeMessage(nativeState.message) || t("眼镜端媒体库连接失败，请先检查服务器地址和网络")
         : nativeState?.glassesConnected
-          ? '眼镜画面或媒体库仍在启动，请稍候'
-          : '连接 RayNeo Air 后即可使用触控板')
+          ? t("眼镜画面或媒体库仍在启动，请稍候")
+          : t("连接 RayNeo Air 后即可使用触控板"))
       return
     }
     go('touchpad')
   }
 
   const resetPreferences = async () => {
+    changeLanguage('system')
     if (background.busy || !(await background.clear())) return
     changeUiTheme('liquid-glass')
     changeTouchpadBackground('texture')
@@ -620,7 +635,7 @@ function App() {
     changeStereoScreen(DEFAULT_STEREO_SCREEN)
     changeDisplayMode('mirror')
     setHaptics(true)
-    notify('偏好已恢复默认', 'success')
+    notify(t("偏好已恢复默认"), 'success')
   }
 
   const moveButtonOptics = (event) => {
@@ -699,7 +714,8 @@ function App() {
               session={session}
               servers={servers}
               scanning={Boolean(nativeState?.discoveryScanning)}
-              discoveryMessage={nativeState?.discoveryMessage || ''}
+              onLanguageChange={changeLanguage}
+              discoveryMessage={nativeState?.nativeMessage(discoveryMessage) || ''}
               onRestore={() => go('home')}
               onBack={accounts.length ? () => go('accounts') : null}
               onAccounts={accounts.length ? () => go('accounts') : null}
@@ -752,6 +768,7 @@ function App() {
               onGlassTransparencyChange={changeGlassTransparency}
               touchpadBackground={touchpadBackground}
               onTouchpadBackgroundChange={changeTouchpadBackground}
+              onLanguageChange={changeLanguage}
               subtitleSize={subtitleSize}
               onSubtitleSizeChange={changeSubtitleSize}
               session={session}
@@ -769,7 +786,7 @@ function App() {
               onReset={resetPreferences}
               onShareDiagnostics={() => {
                 if (isNative) callNative('shareDiagnostics')
-                else notify('原生应用会打开系统分享面板')
+                else notify(t("原生应用会打开系统分享面板"))
               }}
               nativeState={nativeState}
             />
@@ -905,7 +922,7 @@ function Brand({ compact = false }) {
       </span>
       <span data-wallpaper-text="">
         <strong>tachi</strong>
-        <small>塔奇</small>
+        <small>{t("塔奇")}</small>
       </span>
     </div>
   )
@@ -917,6 +934,7 @@ function ConnectScreen({
   servers,
   scanning: nativeScanning,
   discoveryMessage,
+  onLanguageChange,
   onRestore,
   onBack,
   onAccounts,
@@ -939,25 +957,28 @@ function ConnectScreen({
     window.setTimeout(() => {
       setDemoScanning(false)
       setScanRound((round) => round + 1)
-      notify('扫描完成，找到 2 台服务器', 'success')
+      notify(t("扫描完成，找到 2 台服务器"), 'success')
     }, 1350)
   }
 
   return (
     <section className="screen connect-screen">
       <header className="top-row">
-        {onBack ? <button className="icon-button glass-soft" onClick={onBack} aria-label="返回服务器与账号"><ArrowLeft size={20} /></button> : <Brand />}
-        <button className="icon-button glass-soft" aria-label="更多选项" onClick={() => notify('tachi（塔奇） · 手机伴侣')}>
+        {onBack ? <button className="icon-button glass-soft" onClick={onBack} aria-label={t("返回服务器与账号")}><ArrowLeft size={20} /></button> : <Brand />}
+        <select className="language-select" aria-label={t('语言')} value={getLanguage()} onChange={event => onLanguageChange(event.target.value)}>
+          <option value="system">{t('跟随系统')}</option><option value="zh-CN">简体中文</option><option value="en">English</option>
+        </select>
+        <button className="icon-button glass-soft" aria-label={t("更多选项")} onClick={() => notify(t("tachi（塔奇） · 手机伴侣"))}>
           <MoreHorizontal size={20} />
         </button>
       </header>
 
       <div className="art-hero glass-panel">
-        {!simpleUi && <img src={assetUrl('liquid-blue.png')} alt="冰蓝色流体抽象艺术" />}
+        {!simpleUi && <img src={assetUrl('liquid-blue.png')} alt={t("冰蓝色流体抽象艺术")} />}
         <div className="art-hero__refraction" />
         <div className="art-hero__copy">
           <span className="eyebrow light">tachi COMPANION</span>
-          <h1>{simpleUi ? <>随身影院<br />静享光影</> : <>让影像<br />穿过玻璃</>}</h1>
+          <h1>{simpleUi ? <>{t("随身影院")}<br />{t("静享光影")}</> : <>{t("让影像")}<br />{t("穿过玻璃")}</>}</h1>
           <p>Jellyfin × RayNeo Air</p>
         </div>
         <div className="art-hero__glint" />
@@ -965,7 +986,7 @@ function ConnectScreen({
 
       {onAccounts && (
         <button className="saved-accounts-link glass-panel" onClick={onAccounts}>
-          <UserRound size={18} /><span>已登录的服务器与账号</span><ChevronRight size={18} />
+          <UserRound size={18} /><span>{t("已登录的服务器与账号")}</span><ChevronRight size={18} />
         </button>
       )}
 
@@ -973,9 +994,9 @@ function ConnectScreen({
         <button className="restore-card glass-panel pressable" onClick={onRestore}>
           <span className="server-orb server-orb--ready"><Zap size={18} /></span>
           <span className="restore-card__copy">
-            <small>当前连接</small>
-            <strong>{session.server?.name ?? 'Jellyfin 媒体库'}</strong>
-            <em>{session.username} · 继续使用，无需登录</em>
+            <small>{t("当前连接")}</small>
+            <strong>{session.server?.name ?? t("Jellyfin 媒体库")}</strong>
+            <em>{session.username}  {t("· 继续使用，无需登录")}</em>
           </span>
           <ChevronRight size={20} />
         </button>
@@ -984,11 +1005,11 @@ function ConnectScreen({
       <div className="section-heading" data-wallpaper-text="">
         <div>
           <span className="eyebrow">LOCAL NETWORK</span>
-          <h2>选择媒体服务器</h2>
+          <h2>{t("选择媒体服务器")}</h2>
         </div>
         <button className={`scan-button ${scanning ? 'is-scanning' : ''}`} onClick={scan} disabled={scanning} aria-busy={scanning}>
           <RefreshCw size={15} />
-          {scanning ? '发现中' : '重新扫描'}
+          {scanning ? t("发现中") : t("重新扫描")}
         </button>
       </div>
 
@@ -1011,10 +1032,10 @@ function ConnectScreen({
             <span className="server-card__body">
               <span className="server-card__title">
                 <strong>{server.name}</strong>
-                <small><Radio size={11} /> {server.latency || '局域网'}</small>
+                <small><Radio size={11} /> {nativeMessage(server.latency) || t("局域网")}</small>
               </span>
               <span className="server-card__host">{server.host}</span>
-              <span className="server-card__meta">{server.detail || 'Jellyfin 服务器'} · 局域网</span>
+              <span className="server-card__meta">{nativeMessage(server.detail) || t("Jellyfin 服务器")}  {t("· 局域网")}</span>
             </span>
             <ChevronRight className="muted-icon" size={20} />
           </button>
@@ -1023,30 +1044,29 @@ function ConnectScreen({
           <div className={`scan-empty glass-panel ${scanning ? 'is-scanning' : ''}`} role="status">
             <span className="server-orb"><Radar size={20} /></span>
             <span>
-              <strong>{scanning ? '正在发现 Jellyfin' : '尚未发现服务器'}</strong>
-              <small>{discoveryMessage || '确认手机与服务器处于同一 Wi-Fi，或手动填写地址。'}</small>
+              <strong>{scanning ? t("正在发现 Jellyfin") : t("尚未发现服务器")}</strong>
+              <small>{nativeMessage(discoveryMessage) || t("确认手机与服务器处于同一 Wi-Fi，或手动填写地址。")}</small>
             </span>
           </div>
         )}
       </div>
 
       {servers.length > 0 && discoveryMessage && (
-        <p className="discovery-message">{discoveryMessage}</p>
+        <p className="discovery-message">{nativeMessage(discoveryMessage)}</p>
       )}
 
       <button className="manual-card pressable" onClick={onManual}>
         <span className="manual-card__icon"><Plus size={20} /></span>
         <span>
-          <strong>手动填写地址</strong>
-          <small>使用域名、IP 或反向代理地址</small>
+          <strong>{t("手动填写地址")}</strong>
+          <small>{t("使用域名、IP 或反向代理地址")}</small>
         </span>
         <ArrowRight size={18} />
       </button>
 
       <div className="privacy-note" data-wallpaper-text="">
         <ShieldCheck size={15} />
-        发现过程仅在当前局域网内进行
-      </div>
+         {t("发现过程仅在当前局域网内进行")} </div>
     </section>
   )
 }
@@ -1076,7 +1096,7 @@ function AuthScreen({
   const login = () => {
     if (loading || nativeState?.busy) return
     if (!username.trim()) {
-      notify('请填写 Jellyfin 用户名', 'error')
+      notify(t("请填写 Jellyfin 用户名"), 'error')
       return
     }
     if (!isNative) setLoading(true)
@@ -1089,14 +1109,14 @@ function AuthScreen({
   return (
     <section className="screen auth-screen">
       <header className="subpage-header">
-        <button className="icon-button glass-soft" onClick={onBack} aria-label="返回">
+        <button className="icon-button glass-soft" onClick={onBack} aria-label={t("返回")}>
           <ArrowLeft size={20} />
         </button>
         <div className="subpage-header__title" data-wallpaper-text="">
-          <strong>连接 Jellyfin</strong>
+          <strong>{t("连接 Jellyfin")}</strong>
           <span>{server.host}</span>
         </div>
-        <span className="secure-pill"><LockKeyhole size={12} /> 安全</span>
+        <span className="secure-pill"><LockKeyhole size={12} />  {t("安全")}</span>
       </header>
 
       <div className="auth-art glass-panel">
@@ -1104,17 +1124,16 @@ function AuthScreen({
         <div className="auth-art__glass">
           <span className="server-orb server-orb--light"><Link2 size={21} /></span>
           <div>
-            <small>正在登录</small>
+            <small>{t("正在登录")}</small>
             <strong>{server.name}</strong>
           </div>
           <i className="connection-wave" />
         </div>
       </div>
 
-      <div className="auth-tabs glass-soft" role="group" aria-label="登录方式">
+      <div className="auth-tabs glass-soft" role="group" aria-label={t("登录方式")}>
         <button aria-pressed={mode === 'password'} className={mode === 'password' ? 'is-active' : ''} disabled={busy} onClick={() => setMode('password')}>
-          账号密码
-        </button>
+           {t("账号密码")} </button>
         <button aria-pressed={mode === 'quick'} className={mode === 'quick' ? 'is-active' : ''} disabled={busy} onClick={() => setMode('quick')}>
           Quick Connect
         </button>
@@ -1125,30 +1144,30 @@ function AuthScreen({
         <form className="auth-content mode-enter" key="password" onSubmit={(event) => { event.preventDefault(); login() }}>
           <div className="form-heading" data-wallpaper-text="">
             <span className="eyebrow">WELCOME BACK</span>
-            <h2>登录你的媒体库</h2>
-            <p>凭据只会发送至你选择的 Jellyfin 服务器。</p>
+            <h2>{t("登录你的媒体库")}</h2>
+            <p>{t("凭据只会发送至你选择的 Jellyfin 服务器。")}</p>
           </div>
 
           <label className="field glass-panel">
             <UserRound size={19} />
             <span>
-              <small>用户名</small>
-              <input value={username} onChange={(event) => setUsername(event.target.value)} aria-label="用户名" autoComplete="username" />
+              <small>{t("用户名")}</small>
+              <input value={username} onChange={(event) => setUsername(event.target.value)} aria-label={t("用户名")} autoComplete="username" />
             </span>
           </label>
 
           <label className="field glass-panel">
             <KeyRound size={19} />
             <span>
-              <small>密码</small>
+              <small>{t("密码")}</small>
               <input
                 type={passwordVisible ? 'text' : 'password'}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                aria-label="密码" autoComplete="current-password"
+                aria-label={t("密码")} autoComplete="current-password"
               />
             </span>
-            <button type="button" onClick={() => setPasswordVisible((visible) => !visible)} aria-label={passwordVisible ? '隐藏密码' : '显示密码'} aria-pressed={passwordVisible}>
+            <button type="button" onClick={() => setPasswordVisible((visible) => !visible)} aria-label={passwordVisible ? t("隐藏密码") : t("显示密码")} aria-pressed={passwordVisible}>
               {passwordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </label>
@@ -1158,17 +1177,17 @@ function AuthScreen({
               {remember && <Check size={13} strokeWidth={3} />}
             </span>
             <span>
-              <strong>保存登录会话</strong>
-              <small>下次自动恢复，无需重新输入</small>
+              <strong>{t("保存登录会话")}</strong>
+              <small>{t("下次自动恢复，无需重新输入")}</small>
             </span>
           </button>
 
           <button className={`primary-button pressable ${busy ? 'is-loading' : ''}`} type="submit" disabled={busy} aria-busy={busy}>
-            <span>{busy ? '正在建立安全连接' : '登录并连接'}</span>
+            <span>{busy ? t("正在建立安全连接") : t("登录并连接")}</span>
             {busy ? <i className="button-loader" /> : <ArrowRight size={19} />}
           </button>
           {isNative && nativeState?.message && (
-            <p className={`native-status ${nativeState.isError ? 'is-error' : ''}`} role="status">{nativeState.message}</p>
+            <p className={`native-status ${nativeState.isError ? 'is-error' : ''}`} role="status">{nativeMessage(nativeState.message)}</p>
           )}
         </form>
       ) : (
@@ -1216,7 +1235,7 @@ function QuickConnect({
       // Clipboard access can be restricted in embedded previews; visual feedback still demonstrates the action.
     }
     setCopied(true)
-    notify('登录码已复制', 'success')
+    notify(t("登录码已复制"), 'success')
     window.setTimeout(() => setCopied(false), 1600)
   }
 
@@ -1224,28 +1243,28 @@ function QuickConnect({
     <div className="quick-content mode-enter" key="quick">
       <div className="form-heading" data-wallpaper-text="">
         <span className="eyebrow">PASSWORDLESS</span>
-        <h2>在已登录设备上确认</h2>
-        <p>打开 Jellyfin 授权页面，然后输入这组一次性登录码。</p>
+        <h2>{t("在已登录设备上确认")}</h2>
+        <p>{t("打开 Jellyfin 授权页面，然后输入这组一次性登录码。")}</p>
       </div>
 
       <div className="quick-code glass-panel">
         <div className="quick-code__label">
-          <span><Radar size={15} /> 登录码</span>
-          <i>{waitingForCode ? '正在申请' : '等待确认'}</i>
+          <span><Radar size={15} />  {t("登录码")}</span>
+          <i>{waitingForCode ? t("正在申请") : t("等待确认")}</i>
         </div>
-        <button className="quick-code__value" onClick={copyCode} aria-label="复制登录码">
+        <button className="quick-code__value" onClick={copyCode} aria-label={t("复制登录码")}>
           {waitingForCode ? <i className="button-loader dark" /> : code}
         </button>
         <button className="copy-button" onClick={copyCode} disabled={waitingForCode}>
           {copied ? <Check size={17} /> : <Copy size={17} />}
-          {copied ? '已复制' : '复制登录码'}
+          {copied ? t("已复制") : t("复制登录码")}
         </button>
         <div className="quick-code__halo" />
       </div>
 
       <ol className="quick-steps" data-wallpaper-text="">
-        <li><i>1</i><span>在手机或电脑上打开 Jellyfin</span></li>
-        <li><i>2</i><span>进入 Quick Connect 并输入上方代码</span></li>
+        <li><i>1</i><span>{t("在手机或电脑上打开 Jellyfin")}</span></li>
+        <li><i>2</i><span>{t("进入 Quick Connect 并输入上方代码")}</span></li>
       </ol>
 
       <button
@@ -1253,23 +1272,22 @@ function QuickConnect({
         onClick={() => {
           if (isNative) {
             onOpenAuthorization()
-            notify('已打开 Jellyfin 授权页面')
+            notify(t("已打开 Jellyfin 授权页面"))
           } else {
-            notify('授权页已打开 · 浏览器预览中模拟确认成功')
+            notify(t("授权页已打开 · 浏览器预览中模拟确认成功"))
             window.setTimeout(onComplete, 900)
           }
         }}
         disabled={waitingForCode}
       >
-        <span>打开授权页面</span>
+        <span>{t("打开授权页面")}</span>
         <ExternalLink size={18} />
       </button>
 
       <button className="text-button" onClick={onCancel}>
-        <X size={16} /> 取消快速登录
-      </button>
+        <X size={16} />  {t("取消快速登录")} </button>
       {isNative && nativeState?.message && (
-        <p className={`native-status ${nativeState.isError ? 'is-error' : ''}`} role="status">{nativeState.message}</p>
+        <p className={`native-status ${nativeState.isError ? 'is-error' : ''}`} role="status">{nativeMessage(nativeState.message)}</p>
       )}
     </div>
   )
@@ -1298,17 +1316,17 @@ function HomeScreen({
     response: 'RESPONSE',
     unknown: 'UNKNOWN',
   }[deviceState?.glassesRuntimeErrorCode] || 'UNKNOWN'
-  let welcomeTitle = '等待连接 RayNeo Air'
-  if (connected) welcomeTitle = '正在准备眼镜画面'
-  if (displayReady) welcomeTitle = '画面已启动，正在连接媒体库'
-  if (mediaError) welcomeTitle = '媒体库连接失败，请重试连接'
-  if (mediaReady) welcomeTitle = '一切就绪，开始你的观影时光'
+  let welcomeTitle = t("等待连接 RayNeo Air")
+  if (connected) welcomeTitle = t("正在准备眼镜画面")
+  if (displayReady) welcomeTitle = t("画面已启动，正在连接媒体库")
+  if (mediaError) welcomeTitle = t("媒体库连接失败，请重试连接")
+  if (mediaReady) welcomeTitle = t("一切就绪，开始你的观影时光")
 
   return (
     <section className={`screen home-screen with-nav ${mediaError ? 'has-runtime-error' : ''}`}>
       <header className="top-row home-top">
         <Brand compact />
-        <button className="profile-button glass-soft" onClick={onSettings} aria-label="账户与设置">
+        <button className="profile-button glass-soft" onClick={onSettings} aria-label={t("账户与设置")}>
           <span>{profileInitials(username)}</span>
           <i />
         </button>
@@ -1317,32 +1335,31 @@ function HomeScreen({
       <div className="welcome-line">
         <div>
           <span className="eyebrow" data-wallpaper-text="">MY DEVICES</span>
-          <h1 data-wallpaper-text="">我的设备</h1>
+          <h1 data-wallpaper-text="">{t("我的设备")}</h1>
           <p data-wallpaper-text="">{welcomeTitle}</p>
         </div>
       </div>
 
       <div className="device-hero glass-panel" data-liquid-surface="">
         <div className="device-hero__head">
-          <span className={`connected-pill ${connected ? '' : 'is-offline'}`}><i /> {connected ? '眼镜已连接' : '等待连接眼镜'}</span>
-          <button data-wallpaper-text="glass" onClick={() => notify(deviceState?.displayMessage || 'RayNeo Air 3S · USB-C 空间显示')} aria-label="设备详情"><MoreHorizontal size={19} /></button>
+          <span className={`connected-pill ${connected ? '' : 'is-offline'}`}><i /> {connected ? t("眼镜已连接") : t("等待连接眼镜")}</span>
+          <button data-wallpaper-text="glass" onClick={() => notify(nativeMessage(deviceState?.displayMessage) || t("RayNeo Air 3S · USB-C 空间显示"))} aria-label={t("设备详情")}><MoreHorizontal size={19} /></button>
         </div>
-        <img className="device-hero__product" src={assetUrl('rayneo-air-3s.webp')} alt="RayNeo Air 3S，深色一体式镜片与白色镜腿" />
+        <img className="device-hero__product" src={assetUrl('rayneo-air-3s.webp')} alt={t("RayNeo Air 3S，深色一体式镜片与白色镜腿")} />
         <div className="device-hero__info" data-wallpaper-text="glass">
           <strong>RayNeo Air 3S</strong>
-          <span><Zap size={13} /> {connected ? 'USB-C 已连接' : '通过 USB-C 连接眼镜'}</span>
+          <span><Zap size={13} /> {connected ? t("USB-C 已连接") : t("通过 USB-C 连接眼镜")}</span>
         </div>
       </div>
 
       {mediaError && (
         <div className="runtime-status-card is-error" role="alert">
           <span className="runtime-status-card__copy">
-            <strong>眼镜端诊断 · {runtimeErrorLabel}</strong>
-            <span>{deviceState?.message || '眼镜端加载媒体库失败，请检查服务器地址和当前网络。'}</span>
+            <strong>{t("眼镜端诊断 ·")} {runtimeErrorLabel}</strong>
+            <span>{nativeMessage(deviceState?.message) || t("眼镜端加载媒体库失败，请检查服务器地址和当前网络。")}</span>
           </span>
           <button className="runtime-status-card__retry" onClick={onRetry}>
-            <RefreshCw size={12} /> 重试
-          </button>
+            <RefreshCw size={12} />  {t("重试")} </button>
         </div>
       )}
 
@@ -1350,21 +1367,21 @@ function HomeScreen({
         <span className="touchpad-launch__orb"><span /></span>
         <span className="touchpad-launch__copy">
           <small>REMOTE SURFACE</small>
-          <strong>进入触控板</strong>
-          <em>滑动 · 点击 · 双击</em>
+          <strong>{t("进入触控板")}</strong>
+          <em>{t("滑动 · 点击 · 双击")}</em>
         </span>
         <span className="touchpad-launch__arrow"><ArrowRight size={19} /></span>
         <i className="touchpad-launch__glow" />
       </button>
 
-      <button className="connection-card glass-panel pressable" data-liquid-surface="" onClick={onAccounts} aria-label="管理服务器与账号">
+      <button className="connection-card glass-panel pressable" data-liquid-surface="" onClick={onAccounts} aria-label={t("管理服务器与账号")}>
         <span className="server-orb server-orb--small"><Server size={17} /></span>
         <span data-wallpaper-text="glass">
-          <small>当前媒体库</small>
-          <strong>{activeServer?.name ?? 'Jellyfin 媒体库'}</strong>
-          <em>{username} · 当前账号</em>
+          <small>{t("当前媒体库")}</small>
+          <strong>{activeServer?.name ?? t("Jellyfin 媒体库")}</strong>
+          <em>{username}  {t("· 当前账号")}</em>
         </span>
-        <span className="connection-card__action" data-wallpaper-text="glass">管理 <ChevronRight size={16} /></span>
+        <span className="connection-card__action" data-wallpaper-text="glass">{t("管理")} <ChevronRight size={16} /></span>
       </button>
     </section>
   )
@@ -1372,15 +1389,15 @@ function HomeScreen({
 
 function ModeSelector({ value, onChange }) {
   return (
-    <div className="mode-selector" role="group" aria-label="画面输出模式">
+    <div className="mode-selector" role="group" aria-label={t("画面输出模式")}>
       <button data-liquid-surface="" aria-pressed={value === 'mirror'} className={value === 'mirror' ? 'is-active' : ''} onClick={() => onChange('mirror')}>
         <span><Monitor size={19} /></span>
-        <div data-wallpaper-text="glass"><strong>镜像 2D</strong><small>双眼相同画面</small></div>
+        <div data-wallpaper-text="glass"><strong>{t("镜像 2D")}</strong><small>{t("双眼相同画面")}</small></div>
         <i className="radio-check">{value === 'mirror' && <Check size={11} />}</i>
       </button>
       <button data-liquid-surface="" aria-pressed={value === 'stereo'} className={value === 'stereo' ? 'is-active' : ''} onClick={() => onChange('stereo')}>
         <span><Box size={19} /></span>
-        <div data-wallpaper-text="glass"><strong>虚拟银幕</strong><small>可调远近与大小</small></div>
+        <div data-wallpaper-text="glass"><strong>{t("虚拟银幕")}</strong><small>{t("可调远近与大小")}</small></div>
         <i className="radio-check">{value === 'stereo' && <Check size={11} />}</i>
       </button>
     </div>
@@ -1397,12 +1414,12 @@ function DisplayModeStatus({ value, state, onRetry }) {
   const Icon = transitioning ? LoaderCircle : active && !displayDisabled ? Check : Info
   return (
     <div className={`display-mode-status ${pending ? 'is-pending' : active ? 'is-ready' : 'is-idle'}`} role="status">
-      <strong><Icon size={16} className={transitioning ? 'is-spinning' : ''} aria-hidden="true" />{displayDisabled ? '系统尚未启用眼镜输出' : transitioning ? '正在切换眼镜输出…' : stereoActive ? '当前：虚拟银幕已启用' : state?.glassesConnected ? '当前：镜像 2D' : '等待眼镜输出'}</strong>
-      <p>{displayDisabled ? '眼镜已连接。请在手机系统中开启“屏幕镜像”，允许眼镜显示画面。HyperOS 在连接或切换模式后可能需要再次手动开启。' : state?.displayMessage || '等待眼镜连接。'}</p>
-      {waiting && !transitioning && <p>虚拟银幕尚未启用，远近与大小设置目前只会保存。</p>}
+      <strong><Icon size={16} className={transitioning ? 'is-spinning' : ''} aria-hidden="true" />{displayDisabled ? t("系统尚未启用眼镜输出") : transitioning ? t("正在切换眼镜输出…") : stereoActive ? t("当前：虚拟银幕已启用") : state?.glassesConnected ? t("当前：镜像 2D") : t("等待眼镜输出")}</strong>
+      <p>{displayDisabled ? t("眼镜已连接。请在手机系统中开启“屏幕镜像”，允许眼镜显示画面。HyperOS 在连接或切换模式后可能需要再次手动开启。") : nativeMessage(state?.displayMessage) || t("等待眼镜连接。")}</p>
+      {waiting && !transitioning && <p>{t("虚拟银幕尚未启用，远近与大小设置目前只会保存。")}</p>}
       {waiting && !transitioning && state?.glassesConnected && (
         <div className="display-mode-actions">
-          <button type="button" onClick={onRetry}>重新启用</button>
+          <button type="button" onClick={onRetry}>{t("重新启用")}</button>
         </div>
       )}
     </div>
@@ -1412,11 +1429,11 @@ function DisplayModeStatus({ value, state, onRetry }) {
 function ThemeSelector({ value, onChange }) {
   return (
     <fieldset className="theme-selector">
-      <legend className="theme-selector__intro" data-wallpaper-text="glass">为手机与眼镜，选择同一种氛围</legend>
+      <legend className="theme-selector__intro" data-wallpaper-text="glass">{t("为手机与眼镜，选择同一种氛围")}</legend>
       <div className="theme-selector__options">
         {[
-          { id: 'liquid-glass', name: '液态玻璃', tag: '默认', detail: '通透光影 · 流动质感' },
-          { id: 'simpleUI', name: 'simpleUI', tag: '轻简', detail: '静谧展厅 · 轻盈省电' },
+          { id: 'liquid-glass', get name() { return t("液态玻璃") }, get tag() { return t("默认") }, get detail() { return t("通透光影 · 流动质感") } },
+          { id: 'simpleUI', name: 'simpleUI', get tag() { return t("轻简") }, get detail() { return t("静谧展厅 · 轻盈省电") } },
         ].map((theme) => (
           <label data-liquid-surface="" className={`theme-option ${value === theme.id ? 'is-selected' : ''}`} key={theme.id}>
             <input type="radio" name="ui-theme" value={theme.id} checked={value === theme.id}
@@ -1432,12 +1449,13 @@ function ThemeSelector({ value, onChange }) {
           </label>
         ))}
       </div>
-      <p className="theme-selector__note" data-wallpaper-text="glass">自动保存，两端同步生效；眼镜重新连接后沿用。</p>
+      <p className="theme-selector__note" data-wallpaper-text="glass">{t("自动保存，两端同步生效；眼镜重新连接后沿用。")}</p>
     </fieldset>
   )
 }
 
 function SettingsScreen({
+  onLanguageChange,
   uiTheme,
   background,
   screenAspect,
@@ -1475,32 +1493,40 @@ function SettingsScreen({
       <header className="settings-header">
         <div data-wallpaper-text="">
           <span className="eyebrow">MAKE IT YOURS</span>
-          <h1>设置</h1>
-          <p>你的设备，你的观影方式。</p>
+          <h1>{t("设置")}</h1>
+          <p>{t("你的设备，你的观影方式。")}</p>
         </div>
         <span className="settings-header__mark glass-soft" aria-hidden="true"><Settings2 size={23} /></span>
       </header>
 
-      <button className="account-card glass-panel settings-account" data-liquid-surface="" onClick={onChangeAccount} aria-label="管理服务器与账号">
+      <button className="account-card glass-panel settings-account" data-liquid-surface="" onClick={onChangeAccount} aria-label={t("管理服务器与账号")}>
         <div className="account-avatar">{profileInitials(username)}<i /></div>
         <div className="account-card__copy" data-wallpaper-text="glass">
-          <small>服务器与账号</small>
+          <small>{t("服务器与账号")}</small>
           <strong>{username}</strong>
-          <span>{activeServer?.name ?? 'Jellyfin 媒体库'} · {sessionSaved ? '登录已保存' : '仅本次运行'}</span>
+          <span>{activeServer?.name ?? t("Jellyfin 媒体库")} · {sessionSaved ? t("登录已保存") : t("仅本次运行")}</span>
         </div>
         <ChevronRight size={18} className="settings-account__arrow" data-wallpaper-text="glass" />
       </button>
 
-      <SettingsGroup title="外观与交互">
-        <SettingsDisclosure icon={Palette} title="界面外观" detail="主题风格与手机背景" value={uiTheme === 'simpleUI' ? 'simpleUI' : 'Liquid UI'}>
+      <SettingsGroup title={t("外观与交互")}>
+        <SettingsDisclosure icon={Languages} title={t('语言')} detail={t('两端同步，自动保存。')} value={getLanguage() === 'system' ? t('跟随系统') : getLanguage() === 'zh-CN' ? '简体中文' : 'English'}>
+          <div className="stereo-depth-options language-options" role="group" aria-label={t('语言')}>
+            {['system', 'zh-CN', 'en'].map(language => <button key={language} type="button"
+              aria-pressed={getLanguage() === language} onClick={() => onLanguageChange(language)}>
+              {language === 'system' ? t('跟随系统') : language === 'zh-CN' ? '简体中文' : 'English'}
+            </button>)}
+          </div>
+        </SettingsDisclosure>
+        <SettingsDisclosure icon={Palette} title={t("界面外观")} detail={t("主题风格与手机背景")} value={uiTheme === 'simpleUI' ? 'simpleUI' : 'Liquid UI'}>
           <ThemeSelector value={uiTheme} onChange={onUiThemeChange} />
           {uiTheme === 'liquid-glass' && <>
             <GlassTransparencyControl value={glassTransparency} onChange={onGlassTransparencyChange} />
             <BackgroundPicker background={background} screenAspect={screenAspect} />
           </>}
         </SettingsDisclosure>
-        <SettingsDisclosure icon={Touchpad} title="遥控器背景" detail="纹理氛围或 OLED 纯黑"
-          value={touchpadBackground === 'black' ? '纯黑' : '纹理'}>
+        <SettingsDisclosure icon={Touchpad} title={t("遥控器背景")} detail={t("纹理氛围或 OLED 纯黑")}
+          value={touchpadBackground === 'black' ? t("纯黑") : t("纹理")}>
           <TouchpadBackgroundSelector value={touchpadBackground} onChange={onTouchpadBackgroundChange} />
         </SettingsDisclosure>
         <button className="setting-row" role="switch" aria-checked={haptics} onClick={() => {
@@ -1509,60 +1535,60 @@ function SettingsScreen({
           if (next) callNative('previewHaptic')
         }}>
           <span className="setting-row__icon mint"><Vibrate size={19} /></span>
-          <span className="setting-row__copy" data-wallpaper-text="glass"><strong>轻触震动</strong><small>触控板手势完成时的短促反馈</small></span>
+          <span className="setting-row__copy" data-wallpaper-text="glass"><strong>{t("轻触震动")}</strong><small>{t("触控板手势完成时的短促反馈")}</small></span>
           <Toggle checked={haptics} />
         </button>
       </SettingsGroup>
 
-      <SettingsGroup title="字幕大小">
+      <SettingsGroup title={t("字幕大小")}>
         <div className="settings-mode-wrap">
-          <div className="stereo-depth-options" role="group" aria-label="字幕大小">
+          <div className="stereo-depth-options" role="group" aria-label={t("字幕大小")}>
             {SUBTITLE_SIZES.map(option => <button key={option.value} type="button" data-liquid-surface="" data-wallpaper-text="glass"
-              aria-pressed={subtitleSize === option.value} onClick={() => onSubtitleSizeChange(option.value)}>{option.label}</button>)}
+              aria-pressed={subtitleSize === option.value} onClick={() => onSubtitleSizeChange(option.value)}>{t(option.label)}</button>)}
           </div>
-          <p className="stereo-help" data-wallpaper-text="glass">与眼镜同步，自动保存。适用于普通文字字幕；ASS/SSA 保留原有字号和排版，烧录字幕不受影响。</p>
+          <p className="stereo-help" data-wallpaper-text="glass">{t("与眼镜同步，自动保存。适用于普通文字字幕；ASS/SSA 保留原有字号和排版，烧录字幕不受影响。")}</p>
         </div>
       </SettingsGroup>
 
-      <SettingsGroup title="眼镜显示">
-        <SettingsDisclosure icon={Glasses} title="画面输出" detail="显示模式、银幕远近与大小"
-          value={displayMode === 'stereo' ? '虚拟银幕' : '镜像 2D'} onClose={() => onStereoTestPatternChange(false)}>
+      <SettingsGroup title={t("眼镜显示")}>
+        <SettingsDisclosure icon={Glasses} title={t("画面输出")} detail={t("显示模式、银幕远近与大小")}
+          value={displayMode === 'stereo' ? t("虚拟银幕") : t("镜像 2D")} onClose={() => onStereoTestPatternChange(false)}>
         <div className="settings-mode-wrap">
           <ModeSelector value={displayMode} onChange={setDisplayMode} />
           {isNative
             ? <DisplayModeStatus value={displayMode} state={nativeState} onRetry={() => setDisplayMode(displayMode)} />
-            : <p className="stereo-status" data-wallpaper-text="glass">演示预览：连接眼镜后可体验虚拟银幕。</p>}
+            : <p className="stereo-status" data-wallpaper-text="glass">{t("演示预览：连接眼镜后可体验虚拟银幕。")}</p>}
           {displayMode === 'stereo' && (
             <div className="stereo-settings">
               <div className="stereo-setting-label" data-wallpaper-text="glass" id="stereo-depth-label">
-                <strong>靠近程度</strong><span>{DEPTH_LABELS[stereoScreen.depthLevel]}</span>
+                <strong>{t("靠近程度")}</strong><span>{t(DEPTH_LABELS[stereoScreen.depthLevel])}</span>
               </div>
               <div className="stereo-depth-options" role="group" aria-labelledby="stereo-depth-label">
                 {DEPTH_LABELS.map((label, depthLevel) => (
                   <button key={label} type="button" data-liquid-surface="" data-wallpaper-text="glass" aria-pressed={stereoScreen.depthLevel === depthLevel}
-                    onClick={() => onStereoScreenChange({ depthLevel })}>{label}</button>
+                    onClick={() => onStereoScreenChange({ depthLevel })}>{t(label)}</button>
                 ))}
               </div>
-              <p className="stereo-help" data-wallpaper-text="glass">从「轻微」开始，让整块银幕更靠近。片中物体仍保持原有的 2D 画面。</p>
+              <p className="stereo-help" data-wallpaper-text="glass">{t("从「轻微」开始，让整块银幕更靠近。片中物体仍保持原有的 2D 画面。")}</p>
               <label className="stereo-setting-label" data-wallpaper-text="glass" htmlFor="stereo-size">
-                <strong>银幕大小</strong><output htmlFor="stereo-size">{stereoScreen.sizePercent}%</output>
+                <strong>{t("银幕大小")}</strong><output htmlFor="stereo-size">{stereoScreen.sizePercent}%</output>
               </label>
               <input id="stereo-size" className="stereo-size-range" type="range" min="80" max="95" step="1"
                 value={stereoScreen.sizePercent} aria-valuetext={`${stereoScreen.sizePercent}%`}
                 onChange={(event) => onStereoScreenChange({ sizePercent: Number(event.target.value) })} />
-              <div className="stereo-range-labels" data-wallpaper-text="glass"><span>80% · 较小</span><span>95% · 较大</span></div>
-              <p className="stereo-help" data-wallpaper-text="glass">大小与远近感独立调整。若有重影或不适，先选「基准」或切回镜像 2D。</p>
+              <div className="stereo-range-labels" data-wallpaper-text="glass"><span>{t("80% · 较小")}</span><span>{t("95% · 较大")}</span></div>
+              <p className="stereo-help" data-wallpaper-text="glass">{t("大小与远近感独立调整。若有重影或不适，先选「基准」或切回镜像 2D。")}</p>
               <button type="button" className="stereo-test-button" data-liquid-surface="" data-wallpaper-text="glass" aria-pressed={stereoTestPattern}
                 disabled={isNative && !(nativeState?.displayModeApplied && !nativeState?.displayModeTransitioning
                   && nativeState?.activeDisplayMode === 'stereo_screen' && nativeState?.stereoOutput?.stereoReady
                   && nativeState?.glassesPresentationReady)}
                 onClick={() => onStereoTestPatternChange(!stereoTestPattern)}>
-                <Eye size={16} /> {stereoTestPattern ? '结束左右眼检查' : '检查左右眼'}
+                <Eye size={16} /> {stereoTestPattern ? t("结束左右眼检查") : t("检查左右眼")}
               </button>
               {stereoTestPattern && (
                 <p className="stereo-help" data-wallpaper-text="glass" role="status">
-                  {isNative ? '交替闭眼：左眼应看到 L，右眼应看到 R。白框是基准，青色框随银幕移动；逐档靠近时应更靠前。离开设置会结束检查。'
-                    : '此处仅预览设置。眼镜上的检查图会显示 L / R、白色基准框与随银幕移动的青色框。'}
+                  {isNative ? t("交替闭眼：左眼应看到 L，右眼应看到 R。白框是基准，青色框随银幕移动；逐档靠近时应更靠前。离开设置会结束检查。")
+                    : t("此处仅预览设置。眼镜上的检查图会显示 L / R、白色基准框与随银幕移动的青色框。")}
                 </p>
               )}
             </div>
@@ -1571,33 +1597,32 @@ function SettingsScreen({
         </SettingsDisclosure>
       </SettingsGroup>
 
-      <SettingsGroup title="关于与帮助">
+      <SettingsGroup title={t("关于与帮助")}>
         <div className="setting-row setting-row--static">
           <span className="setting-row__icon pearl"><Info size={19} /></span>
           <span className="setting-row__copy" data-wallpaper-text="glass">
-            <strong>当前版本</strong>
-            <small>tachi（塔奇）{nativeState?.appVersionName ? '' : ' · 浏览器预览'}</small>
+            <strong>{t("当前版本")}</strong>
+            <small>{t("tachi（塔奇）")}{nativeState?.appVersionName ? '' : t(" · 浏览器预览")}</small>
           </span>
           <span className="app-version" data-wallpaper-text="glass"><strong>{version}</strong><small>Build {versionCode}</small></span>
         </div>
-        <ProjectSettingLink page="project" icon={Github} title="项目地址" detail="GitHub · 源码与最新动态" />
-        <ProjectSettingLink page="issues" icon={MessageSquare} title="反馈问题" detail="提交 Issue，或查看已有反馈" />
-        <ProjectSettingLink page="guide" icon={BookOpen} title="使用指南" detail="连接、操作与常见问题" />
+        <ProjectSettingLink page="project" icon={Github} title={t("项目地址")} detail={t("GitHub · 源码与最新动态")} />
+        <ProjectSettingLink page="issues" icon={MessageSquare} title={t("反馈问题")} detail={t("提交 Issue，或查看已有反馈")} />
+        <ProjectSettingLink page="guide" icon={BookOpen} title={t("使用指南")} detail={t("连接、操作与常见问题")} />
         <button className="setting-row" onClick={onShareDiagnostics}>
           <span className="setting-row__icon blue"><Share2 size={19} /></span>
           <span className="setting-row__copy" data-wallpaper-text="glass">
-            <strong>分享诊断日志</strong>
-            <small>导出脱敏日志，帮助排查问题</small>
+            <strong>{t("分享诊断日志")}</strong>
+            <small>{t("导出脱敏日志，帮助排查问题")}</small>
           </span>
           <ChevronRight size={16} className="setting-chevron" data-wallpaper-text="glass" />
         </button>
       </SettingsGroup>
 
       <button className="reset-button" data-wallpaper-text="" disabled={background.busy} onClick={onReset}>
-        <RotateCcw size={16} /> 恢复默认偏好
-      </button>
+        <RotateCcw size={16} />  {t("恢复默认偏好")} </button>
 
-      <p className="settings-footer" data-wallpaper-text="">tachi（塔奇）<span>开源第三方客户端 · MIT License</span></p>
+      <p className="settings-footer" data-wallpaper-text="">{t("tachi（塔奇）")}<span>{t("开源第三方客户端 · MIT License")}</span></p>
     </section>
   )
 }
@@ -1618,19 +1643,19 @@ function SettingsDisclosure({ icon: Icon, title, detail, value, onClose, childre
 function TouchpadBackgroundSelector({ value, onChange }) {
   return (
     <div className="touchpad-background-selector">
-      <div className="touchpad-background-options" role="group" aria-label="遥控器背景">
+      <div className="touchpad-background-options" role="group" aria-label={t("遥控器背景")}>
         {[
-          { id: 'texture', title: '纹理', detail: '柔和暗纹与触摸微光' },
-          { id: 'black', title: '纯黑', detail: '适合 OLED 屏幕' },
+          { id: 'texture', get title() { return t("纹理") }, get detail() { return t("柔和暗纹与触摸微光") } },
+          { id: 'black', get title() { return t("纯黑") }, get detail() { return t("适合 OLED 屏幕") } },
         ].map((option) => (
           <button key={option.id} type="button" data-liquid-surface="" aria-pressed={value === option.id} onClick={() => onChange(option.id)}>
-            <span className={`touchpad-background-preview is-${option.id}`} aria-hidden="true"><i /><span>轻触 · 滑动</span></span>
+            <span className={`touchpad-background-preview is-${option.id}`} aria-hidden="true"><i /><span>{t("轻触 · 滑动")}</span></span>
             <span className="touchpad-background-option__title"><span data-wallpaper-text="glass">{option.title}</span><span className="radio-check">{value === option.id && <Check size={10} />}</span></span>
             <small data-wallpaper-text="glass">{option.detail}</small>
           </button>
         ))}
       </div>
-      <p data-wallpaper-text="glass">纯黑关闭背景纹理与触摸光晕，保留操作提示和震动反馈。</p>
+      <p data-wallpaper-text="glass">{t("纯黑关闭背景纹理与触摸光晕，保留操作提示和震动反馈。")}</p>
     </div>
   )
 }
@@ -1638,11 +1663,11 @@ function TouchpadBackgroundSelector({ value, onChange }) {
 function GlassTransparencyControl({ value, onChange }) {
   return (
     <div className="glass-transparency-control">
-      <label htmlFor="glass-transparency" data-wallpaper-text="glass"><strong>玻璃透明度</strong><output htmlFor="glass-transparency">{value}%</output></label>
+      <label htmlFor="glass-transparency" data-wallpaper-text="glass"><strong>{t("玻璃透明度")}</strong><output htmlFor="glass-transparency">{value}%</output></label>
       <input id="glass-transparency" type="range" min="0" max="100" step="1" value={value}
         aria-valuetext={`${value}%`} aria-describedby="glass-transparency-help" onChange={(event) => onChange(Number(event.target.value))} />
-      <div className="glass-transparency-ends"><span data-wallpaper-text="glass">0% · 实底</span><span data-wallpaper-text="glass">100% · 最通透</span></div>
-      <p id="glass-transparency-help" data-wallpaper-text="glass">统一调整手机卡片与底栏，文字保持清晰，中央触控键保持实心。</p>
+      <div className="glass-transparency-ends"><span data-wallpaper-text="glass">{t("0% · 实底")}</span><span data-wallpaper-text="glass">{t("100% · 最通透")}</span></div>
+      <p id="glass-transparency-help" data-wallpaper-text="glass">{t("统一调整手机卡片与底栏，文字保持清晰，中央触控键保持实心。")}</p>
     </div>
   )
 }
@@ -1650,25 +1675,25 @@ function GlassTransparencyControl({ value, onChange }) {
 function BackgroundPicker({ background, screenAspect }) {
   return (
     <div className="background-picker" aria-busy={background.busy}>
-      <div className="background-picker__heading" data-wallpaper-text="glass"><strong>手机背景</strong><span>LIQUID UI</span></div>
+      <div className="background-picker__heading" data-wallpaper-text="glass"><strong>{t("手机背景")}</strong><span>LIQUID UI</span></div>
       <div className="background-picker__body">
         <div className={`background-preview ${background.url ? 'has-image' : ''}`} aria-hidden="true">
           {background.url && <BackgroundArtwork background={background} screenAspect={screenAspect} />}
           <i /><i /><i />
         </div>
         <div className="background-picker__copy">
-          <strong data-wallpaper-text="glass">{background.url ? '自定义背景' : '默认冰蓝'}</strong>
-          <p data-wallpaper-text="glass">{background.url ? `透明度 ${background.layout.transparency}% · 可调整裁切与位置` : '换一张喜欢的图片，让玻璃映出你的色彩。'}</p>
+          <strong data-wallpaper-text="glass">{background.url ? t("自定义背景") : t("默认冰蓝")}</strong>
+          <p data-wallpaper-text="glass">{background.url ? t("透明度 {0}% · 可调整裁切与位置", { 0: background.layout.transparency }) : t("换一张喜欢的图片，让玻璃映出你的色彩。")}</p>
           <button className="background-choose" data-liquid-surface="" data-wallpaper-text="glass" disabled={background.busy} onClick={background.choose}>
             {background.busy ? <LoaderCircle className="is-spinning" size={15} /> : <ImagePlus size={15} />}
-            {background.busy ? '正在处理…' : background.url ? '更换图片' : '选择图片'}
+            {background.busy ? t("正在处理…") : background.url ? t("更换图片") : t("选择图片")}
           </button>
-          {background.url && <button className="background-adjust" data-wallpaper-text="glass" disabled={background.busy || !background.dimensions} onClick={background.edit}>调整背景</button>}
+          {background.url && <button className="background-adjust" data-wallpaper-text="glass" disabled={background.busy || !background.dimensions} onClick={background.edit}>{t("调整背景")}</button>}
         </div>
       </div>
       <div className="background-picker__footer">
-        <p data-wallpaper-text="glass">图片仅保存在本机，用于 Liquid 手机界面。</p>
-        {background.url && <button data-wallpaper-text="glass" disabled={background.busy} onClick={background.clear}>恢复默认背景</button>}
+        <p data-wallpaper-text="glass">{t("图片仅保存在本机，用于 Liquid 手机界面。")}</p>
+        {background.url && <button data-wallpaper-text="glass" disabled={background.busy} onClick={background.clear}>{t("恢复默认背景")}</button>}
       </div>
     </div>
   )
@@ -1702,38 +1727,38 @@ function AccountsScreen({ accounts, onBack, onAddServer, onAddAccount, onActivat
   return (
     <section className="screen accounts-screen">
       <header className="subpage-header">
-        <button className="icon-button glass-soft" onClick={onBack} aria-label="返回"><ArrowLeft size={20} /></button>
-        <div className="subpage-header__title" data-wallpaper-text=""><strong>服务器与账号</strong><span>{groups.length} 台服务器 · {accounts.length} 个账号</span></div>
+        <button className="icon-button glass-soft" onClick={onBack} aria-label={t("返回")}><ArrowLeft size={20} /></button>
+        <div className="subpage-header__title" data-wallpaper-text=""><strong>{t("服务器与账号")}</strong><span>{groups.length}  {t("台服务器 ·")} {accounts.length}  {t("个账号")}</span></div>
         <span className="account-header-icon"><Router size={22} /></span>
       </header>
       <div className="accounts-intro" data-wallpaper-text="">
-        <h1>连接你的媒体库</h1>
-        <p>切换已登录账号，无需重复输入密码。添加服务器或账号时，当前连接会保留到登录成功。</p>
+        <h1>{t("连接你的媒体库")}</h1>
+        <p>{t("切换已登录账号，无需重复输入密码。添加服务器或账号时，当前连接会保留到登录成功。")}</p>
       </div>
       {groups.map((group) => (
         <section className="account-server-card glass-panel" data-liquid-surface="" key={group.server.serverUrl}>
           <header>
             <span className="server-orb server-orb--small"><Server size={18} /></span>
-            <div data-wallpaper-text="glass"><h2>{group.server.serverName || 'Jellyfin 媒体库'}</h2><p>{group.server.serverUrl}</p></div>
+            <div data-wallpaper-text="glass"><h2>{group.server.serverName || t("Jellyfin 媒体库")}</h2><p>{group.server.serverUrl}</p></div>
           </header>
           <div className="saved-account-list">
             {group.accounts.map((account) => (
               <div className={`saved-account-row ${account.active ? 'is-active' : ''}`} key={account.id}>
-                <button className="saved-account-select" onClick={() => onActivate(account)} aria-label={`${account.active ? '继续使用' : '切换到'} ${account.username}`}>
+                <button className="saved-account-select" onClick={() => onActivate(account)} aria-label={`${account.active ? t("继续使用") : t("切换到")} ${account.username}`}>
                   <span className="saved-account-avatar">{profileInitials(account.username)}</span>
-                  <span className="saved-account-copy" data-wallpaper-text="glass"><strong>{account.username || 'Jellyfin 用户'}</strong><small>{account.saved ? '登录已保存' : '仅本次运行'}</small></span>
-                  <span className="saved-account-state" data-wallpaper-text="glass">{account.active ? <><Check size={13} /> 使用中</> : <>切换 <ChevronRight size={14} /></>}</span>
+                  <span className="saved-account-copy" data-wallpaper-text="glass"><strong>{account.username || t("Jellyfin 用户")}</strong><small>{account.saved ? t("登录已保存") : t("仅本次运行")}</small></span>
+                  <span className="saved-account-state" data-wallpaper-text="glass">{account.active ? <><Check size={13} />  {t("使用中")}</> : <>{t("切换")} <ChevronRight size={14} /></>}</span>
                 </button>
-                <button className="remove-account-button" data-wallpaper-text="glass" onClick={() => onRemove(account)} aria-label={`移除 ${account.username} 的登录`}><Trash2 size={17} /></button>
+                <button className="remove-account-button" data-wallpaper-text="glass" onClick={() => onRemove(account)} aria-label={t("移除 {0} 的登录", { 0: account.username })}><Trash2 size={17} /></button>
               </div>
             ))}
           </div>
-          <button className="add-account-button" data-wallpaper-text="glass" onClick={() => onAddAccount(group.server)}><Plus size={16} /> 添加账号</button>
+          <button className="add-account-button" data-wallpaper-text="glass" onClick={() => onAddAccount(group.server)}><Plus size={16} />  {t("添加账号")}</button>
         </section>
       ))}
-      {!accounts.length && <div className="accounts-empty glass-panel" data-liquid-surface="" data-wallpaper-text="glass"><UserRound size={28} /><strong>还没有已登录账号</strong><p>登录服务器后，账号会显示在这里。</p></div>}
-      <button className="primary-button pressable" onClick={onAddServer}><Plus size={18} /><span>添加服务器</span></button>
-      {accounts.length >= 12 && <p className="accounts-limit" data-wallpaper-text="glass" role="status">已达到 12 个账号的上限，添加前请先移除不再使用的账号。</p>}
+      {!accounts.length && <div className="accounts-empty glass-panel" data-liquid-surface="" data-wallpaper-text="glass"><UserRound size={28} /><strong>{t("还没有已登录账号")}</strong><p>{t("登录服务器后，账号会显示在这里。")}</p></div>}
+      <button className="primary-button pressable" onClick={onAddServer}><Plus size={18} /><span>{t("添加服务器")}</span></button>
+      {accounts.length >= 12 && <p className="accounts-limit" data-wallpaper-text="glass" role="status">{t("已达到 12 个账号的上限，添加前请先移除不再使用的账号。")}</p>}
     </section>
   )
 }
@@ -1755,10 +1780,10 @@ function RemoveAccountDialog({ account, onCancel, onConfirm }) {
 
   return (
     <dialog ref={dialogRef} className="account-dialog" aria-labelledby="remove-account-title" aria-describedby="remove-account-description" onCancel={(event) => { event.preventDefault(); onCancel() }}>
-      <h2 id="remove-account-title">移除这个登录账号？</h2>
+      <h2 id="remove-account-title">{t("移除这个登录账号？")}</h2>
       <p className="remove-account-name">{account.username} · {account.serverName || 'Jellyfin'}</p>
-      <p id="remove-account-description">移除本机保存的登录状态，重新使用需要登录。{account.active ? '当前连接也会断开。' : ''}</p>
-      <div className="account-dialog-actions"><button className="secondary-button" autoFocus onClick={onCancel}>取消</button><button className="remove-account-confirm" onClick={onConfirm}>移除登录</button></div>
+      <p id="remove-account-description">{t("移除本机保存的登录状态，重新使用需要登录。")}{account.active ? t("当前连接也会断开。") : ''}</p>
+      <div className="account-dialog-actions"><button className="secondary-button" autoFocus onClick={onCancel}>{t("取消")}</button><button className="remove-account-confirm" onClick={onConfirm}>{t("移除登录")}</button></div>
     </dialog>
   )
 }
@@ -1778,18 +1803,18 @@ function Toggle({ checked }) {
 
 function BottomNav({ active, onHome, onTouchpad, onSettings }) {
   return (
-    <nav className="bottom-nav glass-panel" data-liquid-surface="" aria-label="手机导航">
+    <nav className="bottom-nav glass-panel" data-liquid-surface="" aria-label={t("手机导航")}>
       <button data-wallpaper-text="navigation" aria-current={active === 'home' ? 'page' : undefined} className={active === 'home' ? 'is-active' : ''} onClick={onHome}>
         <span><Glasses size={20} /></span>
-        <small>设备</small>
+        <small>{t("设备")}</small>
       </button>
       <button data-wallpaper-text="navigation" className="nav-primary" onClick={onTouchpad}>
         <span><i /></span>
-        <small>触控</small>
+        <small>{t("触控")}</small>
       </button>
       <button data-wallpaper-text="navigation" aria-current={active === 'settings' ? 'page' : undefined} className={active === 'settings' ? 'is-active' : ''} onClick={onSettings}>
         <span><Settings2 size={20} /></span>
-        <small>设置</small>
+        <small>{t("设置")}</small>
       </button>
     </nav>
   )
@@ -1948,7 +1973,7 @@ function TouchpadScreen({
 
   const emitSeek = (seconds) => {
     if (!seconds || !circularEnabled) return
-    showFeedback(`${seconds > 0 ? '快进' : '快退'} ${Math.abs(seconds)} 秒`)
+    showFeedback(`seek:${seconds}`)
     // Continuous seeking has no repeated vibration.
     if (native) onCommand(`seek:${seconds}`, false)
   }
@@ -2036,13 +2061,13 @@ function TouchpadScreen({
     ? playback.state
     : 'stopped'
   const playbackLabels = {
-    preparing: '正在准备',
-    buffering: '正在缓冲',
-    playing: '正在播放',
-    paused: '已暂停',
-    ended: '播放结束',
-    error: '播放出错',
-    stopped: '未在播放',
+    get preparing() { return t("正在准备") },
+    get buffering() { return t("正在缓冲") },
+    get playing() { return t("正在播放") },
+    get paused() { return t("已暂停") },
+    get ended() { return t("播放结束") },
+    get error() { return t("播放出错") },
+    get stopped() { return t("未在播放") },
   }
   const durationTicks = Math.max(0, Number(playback?.durationTicks || 0))
   const positionTicks = Math.max(0, Number(playback?.positionTicks || 0))
@@ -2070,7 +2095,7 @@ function TouchpadScreen({
         <button
           onPointerDown={(event) => event.stopPropagation()}
           onClick={onExit}
-          aria-label="退出触控板"
+          aria-label={t("退出触控板")}
         >
           <X size={15} />
         </button>
@@ -2085,7 +2110,7 @@ function TouchpadScreen({
           onPointerMove={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
         >
-          <span className="touchpad-search-input__status"><i /> 眼镜搜索已连接</span>
+          <span className="touchpad-search-input__status"><i />  {t("眼镜搜索已连接")}</span>
           <label>
             <Search size={18} />
             <input
@@ -2098,8 +2123,8 @@ function TouchpadScreen({
               spellCheck="false"
               maxLength={48}
               value={searchValue}
-              placeholder="输入拼音首字母、完整拼音或英文"
-              aria-label="眼镜端剧集搜索"
+              placeholder={t("输入拼音首字母、完整拼音或英文")}
+              aria-label={t("眼镜端剧集搜索")}
               onFocus={() => onSearchAction('search-keyboard-visible')}
               onBlur={() => onSearchAction('search-keyboard-hidden')}
               onKeyDown={(event) => {
@@ -2117,7 +2142,7 @@ function TouchpadScreen({
             {searchValue && (
               <button
                 type="button"
-                aria-label="清空搜索"
+                aria-label={t("清空搜索")}
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={() => {
                   setSearchValue('')
@@ -2129,13 +2154,13 @@ function TouchpadScreen({
               </button>
             )}
           </label>
-          <small>手机键盘输入会实时显示在眼镜中</small>
+          <small>{t("手机键盘输入会实时显示在眼镜中")}</small>
         </aside>
       )}
 
       {circularEnabled && (
-        <div ref={seekRingRef} className="touchpad-seek-ring" aria-label="环形调节播放进度">
-          <span>↶　　↷</span><strong>{feedback.startsWith('快') ? feedback : '转动调节进度'}</strong><small>顺时针快进 · 逆时针快退<br />转得越快，调整越多</small>
+        <div ref={seekRingRef} className="touchpad-seek-ring" aria-label={t("环形调节播放进度")}>
+          <span>↶　　↷</span><strong>{feedback.startsWith('seek:') ? t("{0} {1} 秒", { 0: Number(feedback.slice(5)) > 0 ? t("快进") : t("快退"), 1: Math.abs(Number(feedback.slice(5))) }) : t("转动调节进度")}</strong><small>{t("顺时针快进 · 逆时针快退")}<br />{t("转得越快，调整越多")}</small>
         </div>
       )}
 
@@ -2153,26 +2178,26 @@ function TouchpadScreen({
           <div className="touchpad-playback__timeline"><i /></div>
           <div className="touchpad-playback__meta">
             <span>{formatPlaybackTime(positionTicks)} / {formatPlaybackTime(durationTicks)}</span>
-            <em>{playback.playMethod === 'Transcode' ? '服务器转码' : '直接播放'}</em>
+            <em>{playback.playMethod === 'Transcode' ? t("服务器转码") : t("直接播放")}</em>
           </div>
         </aside>
       )}
 
-      <div className={`touch-feedback ${feedback && !feedback.startsWith('快') ? 'is-visible' : ''}`}>
+      <div className={`touch-feedback ${feedback && !feedback.startsWith('seek:') ? 'is-visible' : ''}`}>
         <span>{feedbackGlyph}</span>
-        <small>{feedback === 'CONFIRM' ? '确认' : feedback === 'BACK' ? '返回' : feedback.startsWith('快') ? '环形调节' : feedback ? `向${{ UP: '上', DOWN: '下', LEFT: '左', RIGHT: '右' }[feedback]}` : ''}</small>
+        <small>{feedback === 'CONFIRM' ? t("确认") : feedback === 'BACK' ? t("返回") : feedback.startsWith('seek:') ? t("环形调节") : feedback ? t("向{0}", { 0: { get UP() { return t("上") }, get DOWN() { return t("下") }, get LEFT() { return t("左") }, get RIGHT() { return t("右") } }[feedback] }) : ''}</small>
       </div>
 
       <div ref={introRef} className={`touchpad-intro ${introVisible && !searchActive ? 'is-visible' : ''}`}>
         {!pureBlack && <span className="touchpad-intro__mark"><i /></span>}
-        <strong>触控已就绪</strong>
-        <small>在任意位置开始</small>
+        <strong>{t("触控已就绪")}</strong>
+        <small>{t("在任意位置开始")}</small>
       </div>
 
       <footer className={introVisible || searchActive ? 'is-visible' : ''}>
         {searchActive
-          ? '输入完成后点键盘“搜索”，焦点会进入眼镜端结果'
-          : '滑动移动 · 单击确认 · 双击返回'}
+          ? t("输入完成后点键盘“搜索”，焦点会进入眼镜端结果")
+          : t("滑动移动 · 单击确认 · 双击返回")}
       </footer>
     </section>
   )
@@ -2220,31 +2245,31 @@ function ManualServerSheet({ open, onClose, onContinue }) {
     const host = clean.replace(/\/+$/, '')
     onContinue({
       id: 'manual',
-      name: host.replace(/^https?:\/\//i, '') || '自定义媒体库',
+      name: host.replace(/^https?:\/\//i, '') || t("自定义媒体库"),
       host,
-      detail: '手动地址',
+      get detail() { return t("手动地址") },
       latency: '--',
       strength: 3,
     })
   }
 
   return (
-    <div className={`sheet-layer${open ? '' : ' is-leaving'}`} inert={!open} role="dialog" aria-modal="true" aria-hidden={!open} aria-label="手动添加服务器">
-      <button className="sheet-scrim" onClick={onClose} aria-label="关闭" tabIndex={-1} />
+    <div className={`sheet-layer${open ? '' : ' is-leaving'}`} inert={!open} role="dialog" aria-modal="true" aria-hidden={!open} aria-label={t("手动添加服务器")}>
+      <button className="sheet-scrim" onClick={onClose} aria-label={t("关闭")} tabIndex={-1} />
       <form ref={sheetRef} className="bottom-sheet" onSubmit={(event) => { event.preventDefault(); submit() }}>
         <div className="sheet-handle" />
         <div className="sheet-title">
           <div>
             <span className="eyebrow">MANUAL CONNECTION</span>
-            <h2>添加服务器地址</h2>
+            <h2>{t("添加服务器地址")}</h2>
           </div>
-          <button type="button" className="icon-button glass-soft" onClick={onClose} aria-label="关闭添加服务器"><X size={18} /></button>
+          <button type="button" className="icon-button glass-soft" onClick={onClose} aria-label={t("关闭添加服务器")}><X size={18} /></button>
         </div>
-        <p>支持域名、IPv4 和 IPv6；IPv6 带端口时需要使用方括号。</p>
+        <p>{t("支持域名、IPv4 和 IPv6；IPv6 带端口时需要使用方括号。")}</p>
         <label className="address-field">
           <Link2 size={18} />
           <span>
-            <small>Jellyfin 地址</small>
+            <small>{t("Jellyfin 地址")}</small>
             <input
               value={address}
               onChange={(event) => setAddress(event.target.value)}
@@ -2258,9 +2283,9 @@ function ManualServerSheet({ open, onClose, onContinue }) {
             />
           </span>
         </label>
-        <div className="address-example">例如：jellyfin.local:8096 或 http://[2001:db8::20]:8096</div>
+        <div className="address-example">{t("例如：jellyfin.local:8096 或 http://[2001:db8::20]:8096")}</div>
         <button className="primary-button pressable" type="submit" disabled={!address.trim()}>
-          <span>继续登录</span><ArrowRight size={19} />
+          <span>{t("继续登录")}</span><ArrowRight size={19} />
         </button>
       </form>
     </div>

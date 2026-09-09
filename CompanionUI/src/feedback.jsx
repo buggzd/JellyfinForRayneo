@@ -1,3 +1,4 @@
+import { nativeMessage } from '../../SharedUI/i18n.mjs'
 import React, { useEffect, useState } from 'react'
 import { Check, CircleAlert, Info } from 'lucide-react'
 
@@ -27,7 +28,7 @@ export function Toast({ message }) {
     <div className={`toast toast--${current.tone}${message ? ' is-visible' : ' is-leaving'}`}
       role="status" aria-atomic="true" aria-hidden={!message}>
       <Icon size={17} aria-hidden="true" />
-      <span>{current.text}</span>
+      <span>{nativeMessage(current.text)}</span>
     </div>
   )
 }

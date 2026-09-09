@@ -1,3 +1,4 @@
+import { resolveI18nImport } from './i18n-test-helper.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
@@ -11,13 +12,13 @@ const { code: progressCode } = await transformWithEsbuild(
   await readFile(new URL('../src/watchProgress.ts', import.meta.url), 'utf8'),
   'watchProgress.ts', { target: 'es2022' },
 )
-const progressUrl = `data:text/javascript;base64,${Buffer.from(progressCode).toString('base64')}`
+const progressUrl = `data:text/javascript;base64,${Buffer.from(resolveI18nImport(progressCode)).toString('base64')}`
 const isolated = code.replace(/from ["']\.\/watchProgress["']/, `from "${progressUrl}"`).replace(
   /import \{ getNativeHardwareVideoCodecs \} from ["']\.\/runtime["'];?/,
   'const getNativeHardwareVideoCodecs = () => ["h264"]; const window = globalThis; const __APP_VERSION__ = "0.0.0-test";',
 )
 assert.notEqual(isolated, code)
-const { JellyfinClient } = await import(`data:text/javascript;base64,${Buffer.from(isolated).toString('base64')}`)
+const { JellyfinClient } = await import(`data:text/javascript;base64,${Buffer.from(resolveI18nImport(isolated)).toString('base64')}`)
 const session = {
   serverUrl: 'https://media.example.invalid/jellyfin', accessToken: 'fixture-token',
   userId: 'user', deviceId: 'subtitle-test',

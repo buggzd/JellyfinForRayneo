@@ -41,6 +41,8 @@ const initialState = {
   touchpadBackground: 'texture',
   companionGlassTransparency: 88,
   subtitleSize: 'normal',
+  language: 'system',
+  systemLanguage: navigator.language,
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
   displayModeTransitioning: false,
@@ -160,6 +162,9 @@ export function installDevelopmentBridge() {
     },
     setCompanionGlassTransparency: (value) => {
       if (typeof value === 'string' && value.length <= 3 && /^(0|[1-9][0-9]?|100)$/.test(value) && String(Number(value)) === value) call('setCompanionGlassTransparency', [value])
+    },
+    selectLanguage: (language) => {
+      if (['system', 'zh-CN', 'en'].includes(language)) call('selectLanguage', [language])
     },
     selectSubtitleSize: (size) => {
       if (['small', 'normal', 'large', 'extra-large'].includes(size)) call('selectSubtitleSize', [size])

@@ -1,3 +1,4 @@
+import { t } from '../../SharedUI/i18n.mjs'
 import React, { useEffect, useRef, useState } from 'react'
 import { Check, Crop, LoaderCircle, Move, RotateCcw, X } from 'lucide-react'
 import { BACKGROUND_RATIOS, BACKGROUND_TEXT_COLORS, DEFAULT_BACKGROUND_LAYOUT, backgroundCrop, dragBackgroundCrop } from './backgroundLayout.mjs'
@@ -58,7 +59,7 @@ export default function BackgroundEditor({ background, screenAspect, glassTransp
   const apply = async () => {
     setError('')
     if (await background.applyLayout(draft)) background.closeEditor()
-    else setError('调整未能保存，请重试。原来的背景设置仍然保留。')
+    else setError(t("调整未能保存，请重试。原来的背景设置仍然保留。"))
   }
   const aspect = view === 'preview' ? screenAspect : crop ? crop.width / crop.height : screenAspect
 
@@ -66,20 +67,20 @@ export default function BackgroundEditor({ background, screenAspect, glassTransp
     <dialog ref={dialogRef} className="background-editor" aria-labelledby="background-editor-title"
       onCancel={(event) => { event.preventDefault(); background.cancelEditor() }}>
       <header className="background-editor__header">
-        <div><span>LIQUID UI</span><h2 id="background-editor-title">调整背景</h2></div>
-        <button type="button" disabled={background.saving} onClick={background.cancelEditor} aria-label="取消背景调整" autoFocus><X size={20} /></button>
+        <div><span>LIQUID UI</span><h2 id="background-editor-title">{t("调整背景")}</h2></div>
+        <button type="button" disabled={background.saving} onClick={background.cancelEditor} aria-label={t("取消背景调整")} autoFocus><X size={20} /></button>
       </header>
       <div className="background-editor__body">
-        <div className="background-editor__views" role="group" aria-label="背景预览方式">
-          <button type="button" aria-pressed={view === 'crop'} onClick={() => setView('crop')}><Crop size={15} />裁切图片</button>
-          <button type="button" aria-pressed={view === 'preview'} onClick={() => setView('preview')}>界面预览</button>
+        <div className="background-editor__views" role="group" aria-label={t("背景预览方式")}>
+          <button type="button" aria-pressed={view === 'crop'} onClick={() => setView('crop')}><Crop size={15} />{t("裁切图片")}</button>
+          <button type="button" aria-pressed={view === 'preview'} onClick={() => setView('preview')}>{t("界面预览")}</button>
         </div>
         <div className="background-editor__canvas">
           <div ref={previewRef} data-wallpaper-scope="preview" className={`background-crop-frame ${view === 'preview' ? 'is-preview' : ''} ${dragging ? 'is-dragging' : ''}`}
             style={{ width: `min(310px, calc(var(--background-preview-height) * ${aspect}))`, aspectRatio: aspect }}>
             <BackgroundArtwork background={background} layout={draft} screenAspect={screenAspect} raw={view === 'crop'} />
             {view === 'crop' ? (
-              <div className="background-crop-handle" role="group" aria-label="拖动图片调整裁切位置" tabIndex={0}
+              <div className="background-crop-handle" role="group" aria-label={t("拖动图片调整裁切位置")} tabIndex={0}
                 aria-describedby="background-crop-help"
                 onPointerDown={(event) => {
                   if (background.saving || !crop || !event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) return
@@ -99,60 +100,60 @@ export default function BackgroundEditor({ background, screenAspect, glassTransp
                   if (event.key === 'Home') { event.preventDefault(); update({ x: 500, y: 500 }) }
                 }}>
                 <i /><i /><i /><i />
-                <span><Move size={16} />拖动定位</span>
+                <span><Move size={16} />{t("拖动定位")}</span>
               </div>
             ) : (
               <div className="background-interface-preview" aria-hidden="true">
-                <span data-wallpaper-text="">09:41</span><strong data-wallpaper-text="">我的设备</strong>
+                <span data-wallpaper-text="">09:41</span><strong data-wallpaper-text="">{t("我的设备")}</strong>
                 <div className="background-interface-preview__device" data-liquid-surface=""><img src={`${import.meta.env.BASE_URL}art/rayneo-air-3s.webp`} alt="" /><b data-wallpaper-text="glass">RayNeo Air 3S</b></div>
-                <div className="background-interface-preview__remote">进入触控板</div>
-                <div className="background-interface-preview__server" data-liquid-surface=""><span data-wallpaper-text="glass">Jellyfin 媒体库</span></div>
+                <div className="background-interface-preview__remote">{t("进入触控板")}</div>
+                <div className="background-interface-preview__server" data-liquid-surface=""><span data-wallpaper-text="glass">{t("Jellyfin 媒体库")}</span></div>
               </div>
             )}
           </div>
         </div>
         <p className="background-editor__hint" id="background-crop-help">{view === 'crop'
-          ? '拖动图片或使用方向键，也可用下方滑杆精确定位。'
-          : '背景会铺满手机屏幕，透明度越高，图片越淡。'}</p>
+          ? t("拖动图片或使用方向键，也可用下方滑杆精确定位。")
+          : t("背景会铺满手机屏幕，透明度越高，图片越淡。")}</p>
         <fieldset className="background-editor__controls" disabled={background.saving}>
-          <legend>裁切与外观</legend>
-          <div className="background-editor__label" id="background-text-label"><strong>文字配色</strong><small>用于背景上的文字</small></div>
+          <legend>{t("裁切与外观")}</legend>
+          <div className="background-editor__label" id="background-text-label"><strong>{t("文字配色")}</strong><small>{t("用于背景上的文字")}</small></div>
           <div className="background-text-colors" role="group" aria-labelledby="background-text-label">
             {BACKGROUND_TEXT_COLORS.map(({ value, label }) => (
               <label key={value}><input type="radio" name="background-text-color" value={value} checked={draft.textColor === value}
-                onChange={() => update({ textColor: value }, 'preview')} /><span><i className={`text-color-swatch is-${value}`} aria-hidden="true">Aa</i>{label}</span></label>
+                onChange={() => update({ textColor: value }, 'preview')} /><span><i className={`text-color-swatch is-${value}`} aria-hidden="true">Aa</i>{t(label)}</span></label>
             ))}
           </div>
           <p className="background-text-help">{draft.textColor === 'auto'
-            ? background.dimensions && !background.samples ? '暂时无法自动识别，可手动选择浅色或深色。' : '根据文字所在区域的明暗自动调整，裁切和透明度也会一起考虑。'
-            : `背景文字固定为${draft.textColor === 'light' ? '浅色' : '深色'}，可切回自动配色。`} 玻璃卡片内的文字也会同步调整。</p>
-          <div className="background-editor__label" id="background-ratio-label"><strong>裁切比例</strong><small>保留导入图片，可再次调整</small></div>
+            ? background.dimensions && !background.samples ? t("暂时无法自动识别，可手动选择浅色或深色。") : t("根据文字所在区域的明暗自动调整，裁切和透明度也会一起考虑。")
+            : t("背景文字固定为{0}，可切回自动配色。", { 0: draft.textColor === 'light' ? t("浅色") : t("深色") })}  {t("玻璃卡片内的文字也会同步调整。")}</p>
+          <div className="background-editor__label" id="background-ratio-label"><strong>{t("裁切比例")}</strong><small>{t("保留导入图片，可再次调整")}</small></div>
           <div className="background-ratios" role="group" aria-labelledby="background-ratio-label">
             {BACKGROUND_RATIOS.map(({ value, label }) => (
               <label key={value}><input type="radio" name="background-ratio" value={value} checked={draft.ratio === value}
-                onChange={() => update({ ratio: value })} /><span>{label}</span></label>
+                onChange={() => update({ ratio: value })} /><span>{t(label)}</span></label>
             ))}
           </div>
-          <BackgroundSlider label="缩放" id="background-zoom" value={draft.zoom} min={100} max={300}
+          <BackgroundSlider label={t("缩放")} id="background-zoom" value={draft.zoom} min={100} max={300}
             display={`${(draft.zoom / 100).toFixed(2)}×`} onChange={(zoom) => update({ zoom })} />
           <div className="background-position-sliders">
-            <BackgroundSlider label="水平位置" id="background-x" value={draft.x} min={0} max={1000}
+            <BackgroundSlider label={t("水平位置")} id="background-x" value={draft.x} min={0} max={1000}
               display={`${Math.round(draft.x / 10)}%`} onChange={(x) => update({ x })} />
-            <BackgroundSlider label="垂直位置" id="background-y" value={draft.y} min={0} max={1000}
+            <BackgroundSlider label={t("垂直位置")} id="background-y" value={draft.y} min={0} max={1000}
               display={`${Math.round(draft.y / 10)}%`} onChange={(y) => update({ y })} />
           </div>
           <div className="background-transparency-control">
-            <BackgroundSlider label="背景透明度" id="background-transparency" value={draft.transparency} min={0} max={100}
+            <BackgroundSlider label={t("背景透明度")} id="background-transparency" value={draft.transparency} min={0} max={100}
               display={`${draft.transparency}%`} onChange={(transparency) => update({ transparency }, 'preview')} />
-            <div className="background-slider-ends"><span>0% · 原图清晰</span><span>100% · 完全透明</span></div>
+            <div className="background-slider-ends"><span>{t("0% · 原图清晰")}</span><span>{t("100% · 完全透明")}</span></div>
           </div>
         </fieldset>
         {error && <p className="background-editor__error" role="alert">{error}</p>}
       </div>
       <footer className="background-editor__footer">
-        <button type="button" disabled={background.saving} onClick={() => { setDraft({ ...DEFAULT_BACKGROUND_LAYOUT }); setError('') }}><RotateCcw size={15} />重置调整</button>
+        <button type="button" disabled={background.saving} onClick={() => { setDraft({ ...DEFAULT_BACKGROUND_LAYOUT }); setError('') }}><RotateCcw size={15} />{t("重置调整")}</button>
         <button type="button" className="background-editor__apply" disabled={background.saving || !crop} onClick={apply}>
-          {background.saving ? <LoaderCircle className="is-spinning" size={16} /> : <Check size={16} />}{background.saving ? '正在保存…' : '应用背景'}
+          {background.saving ? <LoaderCircle className="is-spinning" size={16} /> : <Check size={16} />}{background.saving ? t("正在保存…") : t("应用背景")}
         </button>
       </footer>
     </dialog>

@@ -1,3 +1,4 @@
+import { t } from '../../SharedUI/i18n.mjs'
 import type Hls from 'hls.js'
 import type { PlaybackPlan } from './jellyfin'
 
@@ -73,24 +74,24 @@ function fileSize(value: unknown) {
 }
 
 const joined = (...values: (string | undefined)[]) => values.filter(Boolean).join(' · ')
-const row = (label: string, value: string): PlaybackInfoRow => ({ label, value: value || '未提供' })
+const row = (label: string, value: string): PlaybackInfoRow => ({ label, value: value || t("未提供") })
 
 const transcodeReasons: Record<string, string> = {
-  ContainerNotSupported: '封装不兼容',
-  VideoCodecNotSupported: '视频编码不兼容',
-  AudioCodecNotSupported: '音频编码不兼容',
-  SubtitleCodecNotSupported: '字幕需要烧录',
-  VideoProfileNotSupported: '视频规格不兼容',
-  VideoLevelNotSupported: '视频级别不兼容',
-  VideoBitDepthNotSupported: '视频位深不兼容',
-  VideoRangeTypeNotSupported: '动态范围不兼容',
-  VideoResolutionNotSupported: '分辨率超出支持范围',
-  VideoBitrateNotSupported: '视频码率超出限制',
-  AudioBitrateNotSupported: '音频码率超出限制',
-  ContainerBitrateExceedsLimit: '总码率超出限制',
-  AudioChannelsNotSupported: '声道数不兼容',
-  AudioSampleRateNotSupported: '采样率不兼容',
-  DirectPlayError: '直放失败',
+  get ContainerNotSupported() { return t("封装不兼容") },
+  get VideoCodecNotSupported() { return t("视频编码不兼容") },
+  get AudioCodecNotSupported() { return t("音频编码不兼容") },
+  get SubtitleCodecNotSupported() { return t("字幕需要烧录") },
+  get VideoProfileNotSupported() { return t("视频规格不兼容") },
+  get VideoLevelNotSupported() { return t("视频级别不兼容") },
+  get VideoBitDepthNotSupported() { return t("视频位深不兼容") },
+  get VideoRangeTypeNotSupported() { return t("动态范围不兼容") },
+  get VideoResolutionNotSupported() { return t("分辨率超出支持范围") },
+  get VideoBitrateNotSupported() { return t("视频码率超出限制") },
+  get AudioBitrateNotSupported() { return t("音频码率超出限制") },
+  get ContainerBitrateExceedsLimit() { return t("总码率超出限制") },
+  get AudioChannelsNotSupported() { return t("声道数不兼容") },
+  get AudioSampleRateNotSupported() { return t("采样率不兼容") },
+  get DirectPlayError() { return t("直放失败") },
 }
 
 function streamParameters(plan: PlaybackPlan) {
@@ -102,10 +103,10 @@ function streamParameters(plan: PlaybackPlan) {
 }
 
 export function playbackMethodLabel(plan: PlaybackPlan | null) {
-  if (!plan) return '正在准备'
-  if (plan.playMethod === 'Transcode') return '服务器转码'
-  if (plan.playMethod === 'DirectStream') return '直接串流'
-  return '直接播放'
+  if (!plan) return t("正在准备")
+  if (plan.playMethod === 'Transcode') return t("服务器转码")
+  if (plan.playMethod === 'DirectStream') return t("直接串流")
+  return t("直接播放")
 }
 
 export function samplePlaybackStats(video: HTMLVideoElement, hls: Hls | null): PlaybackStats {
@@ -148,41 +149,41 @@ export function playbackInfoRows(plan: PlaybackPlan, stats: PlaybackStats, hardw
   const videoCodec = stats.videoCodec || (originalStream ? plan.videoCodec : '')
   const audioCodec = stats.audioCodec || (originalStream ? plan.audioCodec : '')
   const videoFamily = codecFamily(videoCodec)
-  const hardware = !videoFamily ? '等待播放格式'
-    : hardwareCodecs === null ? '未提供能力信息'
-      : hardwareCodecs.includes(videoFamily) ? `支持 ${codecLabel(videoCodec)}` : `未报告 ${codecLabel(videoCodec)} 支持`
+  const hardware = !videoFamily ? t("等待播放格式")
+    : hardwareCodecs === null ? t("未提供能力信息")
+      : hardwareCodecs.includes(videoFamily) ? t("支持 {0}", { 0: codecLabel(videoCodec) }) : t("未报告 {0} 支持", { 0: codecLabel(videoCodec) })
   const outputFrameRate = stats.frameRate ?? (originalStream ? source.frameRate : undefined)
   const outputBitrate = stats.bitrate ?? (originalStream ? source.bitrate : undefined)
   const selectedSubtitle = plan.subtitleTracks.find((track) => track.index === plan.subtitleStreamIndex)
-  const subtitle = plan.subtitleStreamIndex < 0 ? '关闭'
-    : joined(codecLabel(selectedSubtitle?.codec), plan.subtitleBurnedIn ? '烧录到视频' : plan.subtitleFormat === 'ass' ? '本地样式字幕' : '文字字幕')
-  const frames = stats.totalFrames === undefined ? '当前 WebView 未提供'
-    : `${stats.droppedFrames ?? 0} / ${stats.totalFrames} 帧${stats.totalFrames > 0 ? ` · ${decimal((stats.droppedFrames ?? 0) / stats.totalFrames * 100)}%` : ''}`
+  const subtitle = plan.subtitleStreamIndex < 0 ? t("关闭")
+    : joined(codecLabel(selectedSubtitle?.codec), plan.subtitleBurnedIn ? t("烧录到视频") : plan.subtitleFormat === 'ass' ? t("本地样式字幕") : t("文字字幕"))
+  const frames = stats.totalFrames === undefined ? t("当前 WebView 未提供")
+    : t("{0} / {1} 帧{2}", { 0: stats.droppedFrames ?? 0, 1: stats.totalFrames, 2: stats.totalFrames > 0 ? ` · ${decimal((stats.droppedFrames ?? 0) / stats.totalFrames * 100)}%` : '' })
   const current = [
-    row('播放视频', joined(codecLabel(videoCodec), resolution(stats.width, stats.height)) || '等待媒体数据'),
-    row('帧率 / 码率', joined(frameRate(outputFrameRate) || '帧率未提供', bitrate(outputBitrate) || '码率未提供')),
-    row('音频 / 字幕', joined(codecLabel(audioCodec) || '编码待确认', subtitle)),
-    row('向前缓冲', stats.bufferSeconds === undefined ? '等待媒体数据' : `${decimal(stats.bufferSeconds, 1)} 秒`),
-    row('丢帧 / 总帧', frames),
-    row('解码方式', '系统自动（WebView）'),
-    row('硬解能力', hardware),
+    row(t("播放视频"), joined(codecLabel(videoCodec), resolution(stats.width, stats.height)) || t("等待媒体数据")),
+    row(t("帧率 / 码率"), joined(frameRate(outputFrameRate) || t("帧率未提供"), bitrate(outputBitrate) || t("码率未提供"))),
+    row(t("音频 / 字幕"), joined(codecLabel(audioCodec) || t("编码待确认"), subtitle)),
+    row(t("向前缓冲"), stats.bufferSeconds === undefined ? t("等待媒体数据") : t("{0} 秒", { 0: decimal(stats.bufferSeconds, 1) })),
+    row(t("丢帧 / 总帧"), frames),
+    row(t("解码方式"), t("系统自动（WebView）")),
+    row(t("硬解能力"), hardware),
   ]
   if (!originalStream) {
     const target = joined(codecLabel(params.get('videocodec')), codecLabel(params.get('audiocodec')))
-    if (target) current.push(row('请求编码', target))
+    if (target) current.push(row(t("请求编码"), target))
     const reasons = (params.get('transcodereasons') ?? '').slice(0, 1024).split(',').slice(0, 12)
     const knownReasons = [...new Set(reasons.map((reason) => Object.hasOwn(transcodeReasons, reason) ? transcodeReasons[reason] : '').filter(Boolean))]
-    if (knownReasons.length) current.push(row('转码原因', knownReasons.slice(0, 2).join(' · ')
-      + (knownReasons.length > 2 ? ` 等 ${knownReasons.length} 项` : '')))
+    if (knownReasons.length) current.push(row(t("转码原因"), knownReasons.slice(0, 2).join(' · ')
+      + (knownReasons.length > 2 ? t(" 等 {0} 项", { 0: knownReasons.length }) : '')))
   }
   const original = [
-    row('封装 / 大小', joined(token(plan.container), fileSize(source.size))),
-    row('源视频', joined(codecLabel(plan.videoCodec), resolution(plan.width, plan.height))),
-    row('帧率 / 码率', joined(frameRate(source.frameRate), bitrate(source.videoBitrate))),
-    row('视频格式', joined(token(source.profile), positive(source.bitDepth) ? `${source.bitDepth} bit` : '', token(source.videoRange))),
-    row('像素 / 色彩', joined(token(source.pixelFormat), token(source.colorSpace))),
-    row('源音频', joined(codecLabel(plan.audioCodec), positive(source.audioChannels) ? `${source.audioChannels} 声道` : '',
+    row(t("封装 / 大小"), joined(token(plan.container), fileSize(source.size))),
+    row(t("源视频"), joined(codecLabel(plan.videoCodec), resolution(plan.width, plan.height))),
+    row(t("帧率 / 码率"), joined(frameRate(source.frameRate), bitrate(source.videoBitrate))),
+    row(t("视频格式"), joined(token(source.profile), positive(source.bitDepth) ? `${source.bitDepth} bit` : '', token(source.videoRange))),
+    row(t("像素 / 色彩"), joined(token(source.pixelFormat), token(source.colorSpace))),
+    row(t("源音频"), joined(codecLabel(plan.audioCodec), positive(source.audioChannels) ? t("{0} 声道", { 0: source.audioChannels }) : '',
       positive(source.audioSampleRate) ? `${decimal(Number(source.audioSampleRate) / 1000)} kHz` : '', bitrate(source.audioBitrate))),
-  ].filter((entry) => entry.value !== '未提供')
+  ].filter((entry) => entry.value !== t("未提供"))
   return { current, original }
 }

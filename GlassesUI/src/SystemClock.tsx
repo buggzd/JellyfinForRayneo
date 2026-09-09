@@ -1,3 +1,4 @@
+import { t } from '../../SharedUI/i18n.mjs'
 import { useEffect, useState } from 'react'
 import './systemClock.css'
 
@@ -29,5 +30,5 @@ export default function SystemClock({ active = true, overlay = false }: { active
     }
   }, [active])
 
-  return <time className={`system-clock${overlay ? ' system-clock--overlay' : ''}`} dateTime={time} aria-label={`当前时间 ${time}`} aria-live="off">{time}</time>
+  return <time className={`system-clock${overlay ? ' system-clock--overlay' : ''}`} dateTime={time} aria-label={t("当前时间 {0}", { 0: time })} aria-live="off">{time}</time>
 }

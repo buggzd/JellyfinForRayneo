@@ -19,7 +19,8 @@ final class GlassesMessage
         RUNTIME_STATE,
         SEARCH_STATE,
         SET_UI_THEME,
-        SET_SUBTITLE_SIZE
+        SET_SUBTITLE_SIZE,
+        SET_LANGUAGE
     }
 
     final Type type;
@@ -81,7 +82,7 @@ final class GlassesMessage
                 return null;
             }
             String preferenceValue = "";
-            if (type == Type.SET_UI_THEME || type == Type.SET_SUBTITLE_SIZE)
+            if (type == Type.SET_UI_THEME || type == Type.SET_SUBTITLE_SIZE || type == Type.SET_LANGUAGE)
             {
                 Object value = source.opt("value");
                 if (!(value instanceof String))
@@ -90,7 +91,8 @@ final class GlassesMessage
                 }
                 preferenceValue = (String) value;
                 if (type == Type.SET_UI_THEME
-                        ? !UiTheme.isValid(preferenceValue) : !SubtitleSize.isValid(preferenceValue))
+                        ? !UiTheme.isValid(preferenceValue) : type == Type.SET_LANGUAGE
+                        ? !UiLanguage.isValid(preferenceValue) : !SubtitleSize.isValid(preferenceValue))
                 {
                     return null;
                 }
@@ -173,6 +175,8 @@ final class GlassesMessage
                 return Type.SEARCH_STATE;
             case "set_ui_theme":
                 return Type.SET_UI_THEME;
+            case "set_language":
+                return Type.SET_LANGUAGE;
             case "set_subtitle_size":
                 return Type.SET_SUBTITLE_SIZE;
             default:

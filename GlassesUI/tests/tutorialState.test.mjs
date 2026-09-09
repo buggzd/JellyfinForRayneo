@@ -1,3 +1,4 @@
+import { resolveI18nImport } from './i18n-test-helper.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
@@ -9,7 +10,7 @@ const { code } = await transformWithEsbuild(
   { target: 'es2022' },
 )
 const { initialTutorialState, tutorialReducer, tutorialCommandForKey, hasSeenRemoteTutorial, rememberRemoteTutorial, tutorialStorageKey } =
-  await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`)
+  await import(`data:text/javascript;base64,${Buffer.from(resolveI18nImport(code)).toString('base64')}`)
 const command = (state, value) => tutorialReducer(state, { type: 'command', command: value })
 const advance = (state) => tutorialReducer(state, { type: 'advance' })
 

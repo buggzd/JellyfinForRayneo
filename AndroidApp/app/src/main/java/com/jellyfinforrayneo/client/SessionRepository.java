@@ -402,6 +402,19 @@ final class SessionRepository
         }
     }
 
+    String getLanguage()
+    {
+        return UiLanguage.normalize(store.getString("ui_language", UiLanguage.DEFAULT));
+    }
+
+    void setLanguage(String language)
+    {
+        if (UiLanguage.isValid(language))
+        {
+            store.putString("ui_language", language);
+        }
+    }
+
     String getSubtitleSize()
     {
         return SubtitleSize.normalize(store.getString(KEY_SUBTITLE_SIZE, SubtitleSize.DEFAULT));

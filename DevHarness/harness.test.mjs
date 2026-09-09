@@ -299,3 +299,20 @@ test('circular seeking forwards only bounded deltas while progress focus is enab
   app.call('handleGlassesMessage', { type: 'playback_state', state: 'stopped', seekEnabled: true })
   assert.equal(app.state().playback.seekEnabled, false)
 })
+
+test('language persists and synchronizes both surfaces without replacing catalog or session', async () => {
+  const app = await harness()
+  app.command('selectLanguage', 'en')
+  const generation = app.bootstrap().catalogGeneration
+  assert.equal(app.state().language, 'en')
+  assert.equal(app.bootstrap().language, 'en')
+  app.call('handleGlassesMessage', { type: 'set_language', value: 'zh-CN' })
+  assert.equal(app.state().language, 'zh-CN')
+  assert.equal(app.bootstrap().language, 'zh-CN')
+  for (const value of [null, {}, 5, ' en', 'EN', 'zh-TW']) {
+    app.command('selectLanguage', value)
+    app.call('handleGlassesMessage', { type: 'set_language', value })
+    assert.equal(app.state().language, 'zh-CN')
+  }
+  if (generation !== undefined) assert.equal(app.bootstrap().catalogGeneration, generation)
+})

@@ -1,3 +1,4 @@
+import * as i18n from '../../SharedUI/i18n.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import vm from 'node:vm'
@@ -25,6 +26,7 @@ test('theme bootstrap preserves catalog identity, deduplicates updates and uses 
   vm.runInNewContext(compiled, {
     window, exports,
     require: (path) => {
+      if (path === '../../SharedUI/i18n.mjs') return i18n
       if (path === '../../SharedUI/subtitles.mjs') return subtitles
       assert.equal(path, '../../SharedUI/theme.mjs')
       return themes
@@ -53,7 +55,7 @@ test('glasses preferences wait for native acknowledgement, reject invalid edits 
   const sent = []
   const window = { RayNeoGlasses: { getBootstrapState: () => JSON.stringify(initial), ready() {}, postMessage: value => sent.push(JSON.parse(value)) } }
   const exports = {}
-  vm.runInNewContext(compiled, { window, exports, require: path => path.endsWith('/theme.mjs') ? themes : subtitles })
+  vm.runInNewContext(compiled, { window, exports, require: path => path.endsWith('/i18n.mjs') ? i18n : path.endsWith('/theme.mjs') ? themes : subtitles })
   const runtime = await exports.discoverRuntime()
   const received = []
   exports.subscribeRuntime(value => received.push(value))
@@ -80,7 +82,7 @@ test('standalone preview edits merge without changing runtime identity or persis
   const stored = new Map()
   const exports = {}
   const window = {}
-  vm.runInNewContext(compiled, { window, exports, require: path => path.endsWith('/theme.mjs')
+  vm.runInNewContext(compiled, { window, exports, require: path => path.endsWith('/i18n.mjs') ? i18n : path.endsWith('/theme.mjs')
     ? { ...themes, savePreviewTheme: value => stored.set(themes.PREVIEW_THEME_KEY, value) }
     : { ...subtitles, savePreviewSubtitleSize: value => stored.set(subtitles.PREVIEW_SUBTITLE_SIZE_KEY, value) } })
   const runtime = { source: 'development', displayMode: 'Mirror2D', catalogGeneration: 7, uiTheme: 'liquid-glass', subtitleSize: 'normal', session: { userId: 'synthetic' } }
@@ -94,4 +96,24 @@ test('standalone preview edits merge without changing runtime identity or persis
   assert.equal(received.at(-1).session, runtime.session)
   assert.equal(received.at(-1).catalogGeneration, 7)
   assert.deepEqual([...stored.values()], ['simpleUI', 'extra-large'])
+})
+
+test('language waits for native acknowledgement without changing session or catalog generation', async () => {
+  const initial = { source: 'android', language: 'zh-CN', systemLanguage: 'zh-TW', catalogGeneration: 19,
+    session: { serverUrl: 'https://media.example.invalid', userId: 'viewer', accessToken: 'fixture', deviceId: 'fixture' } }
+  const sent = []
+  const window = { RayNeoGlasses: { getBootstrapState: () => JSON.stringify(initial), ready() {}, postMessage: value => sent.push(JSON.parse(value)) } }
+  const exports = {}
+  vm.runInNewContext(compiled, { window, exports, require: path => path.endsWith('/i18n.mjs') ? i18n : path.endsWith('/theme.mjs') ? themes : subtitles })
+  const runtime = await exports.discoverRuntime()
+  assert.equal(exports.requestUiPreference({ type: 'set_language', value: 'en' }, runtime), true)
+  assert.equal(runtime.language, 'zh-CN')
+  for (const value of [null, {}, 1, 'EN', 'en ', 'zh-TW']) assert.equal(exports.requestUiPreference({ type: 'set_language', value }, runtime), false)
+  assert.deepEqual(sent, [{ type: 'set_language', value: 'en' }])
+  const received = []
+  exports.subscribeRuntime(value => received.push(value))
+  window.LucentNative.receiveBootstrapState({ ...initial, language: 'en' })
+  assert.equal(received.at(-1).language, 'en')
+  assert.equal(received.at(-1).catalogGeneration, 19)
+  assert.equal(JSON.stringify(received.at(-1).session), JSON.stringify(runtime.session))
 })

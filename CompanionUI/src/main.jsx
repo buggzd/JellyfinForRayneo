@@ -1,3 +1,4 @@
+import { applyLanguage, readPreviewLanguage } from '../../SharedUI/i18n.mjs'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
@@ -12,6 +13,10 @@ import './touchpadBackground.css'
 import { applyUiTheme, normalizeUiTheme, readPreviewTheme } from '../../SharedUI/theme.mjs'
 
 async function start() {
+  try {
+    const state = window.JellyfinNative ? JSON.parse(window.JellyfinNative.getState()) : null
+    applyLanguage(state?.language ?? readPreviewLanguage(), state?.systemLanguage)
+  } catch { applyLanguage('system') }
   if (import.meta.env.DEV) {
     const { installDevelopmentBridge } = await import('./developmentBridge.js')
     installDevelopmentBridge()

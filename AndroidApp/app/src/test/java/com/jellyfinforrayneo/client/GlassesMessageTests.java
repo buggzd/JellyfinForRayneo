@@ -120,6 +120,14 @@ public final class GlassesMessageTests
             assertEquals(GlassesMessage.Type.SET_UI_THEME, message.type);
             assertEquals(theme, message.preferenceValue);
         }
+        for (String language : new String[]{"system", "zh-CN", "en"})
+        {
+            GlassesMessage message = GlassesMessage.parse(new JSONObject()
+                    .put("type", "set_language").put("value", language).toString());
+            assertNotNull(message);
+            assertEquals(GlassesMessage.Type.SET_LANGUAGE, message.type);
+            assertEquals(language, message.preferenceValue);
+        }
         for (String size : new String[]{"small", "normal", "large", "extra-large"})
         {
             GlassesMessage message = GlassesMessage.parse(new JSONObject()
@@ -128,7 +136,7 @@ public final class GlassesMessageTests
             assertEquals(GlassesMessage.Type.SET_SUBTITLE_SIZE, message.type);
             assertEquals(size, message.preferenceValue);
         }
-        for (String type : new String[]{"set_ui_theme", "set_subtitle_size"})
+        for (String type : new String[]{"set_ui_theme", "set_subtitle_size", "set_language"})
         {
             assertNull(GlassesMessage.parse(new JSONObject().put("type", type).toString()));
             for (Object invalid : new Object[]{JSONObject.NULL, true, 125, new JSONObject(), "", " LARGE", "simpleui", "large ", repeat('x', 8193)})

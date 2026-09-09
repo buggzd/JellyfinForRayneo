@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">tachi（塔奇）</string>
+    <string name="choose_phone_wallpaper">"选择手机背景"</string>
+    <string name="image_picker_unavailable">"无法打开图片选择器"</string>
+    <string name="image_read_failed">"无法读取这张图片，请重新选择"</string>
+    <string name="wallpaper_updated">"手机背景已更新"</string>
+    <string name="wallpaper_save_failed">"图片未能保存，请选择 20 MB 以内的 JPG、PNG 或 WebP 图片"</string>
+    <string name="wallpaper_remove_failed">"背景未能移除，请重试"</string>
+    <string name="quick_connect_copied">"快速登录码已复制"</string>
+    <string name="authorization_page_unavailable">"无法打开授权页，请在 Jellyfin App 中手动授权。"</string>
+    <string name="diagnostics_subject_suffix">" 诊断日志"</string>
+    <string name="share_redacted_diagnostics">"分享已脱敏诊断日志"</string>
+    <string name="share_app_unavailable">"没有可接收诊断日志的分享应用。"</string>
+    <string name="browser_unavailable">"未找到可打开链接的浏览器"</string>
+</resources>

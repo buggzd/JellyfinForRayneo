@@ -1,6 +1,10 @@
+import { t } from '../../SharedUI/i18n.mjs'
 import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_BACKGROUND_LAYOUT, centeredBackgroundLayout, normalizeBackgroundLayout, sameBackgroundLayout, validBackgroundLayout } from './backgroundLayout.mjs'
 import { sampleBackground } from './backgroundContrast.mjs'
+
+// Only locally constructed errors may be shown; never classify by translated text.
+class BackgroundError extends Error {}
 
 const DATABASE = 'jellyfin-companion-appearance'
 const MAX_BYTES = 20 * 1024 * 1024
@@ -12,7 +16,7 @@ async function storedBackground(operation, value) {
     const request = indexedDB.open(DATABASE, 1)
     request.onupgradeneeded = () => request.result.createObjectStore('images')
     request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(new Error('图片存储不可用'))
+    request.onerror = () => reject(new BackgroundError(t("图片存储不可用")))
   })
   try {
     return await new Promise((resolve, reject) => {
@@ -21,7 +25,7 @@ async function storedBackground(operation, value) {
       const request = operation === 'read' ? images.get('background')
         : operation === 'clear' ? images.delete('background') : images.put(value, 'background')
       transaction.oncomplete = () => resolve(request.result)
-      transaction.onabort = transaction.onerror = () => reject(new Error('图片未能保存，请重试'))
+      transaction.onabort = transaction.onerror = () => reject(new BackgroundError(t("图片未能保存，请重试")))
     })
   } finally {
     database.close()
@@ -30,7 +34,7 @@ async function storedBackground(operation, value) {
 
 async function prepareBackground(file) {
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || !file.size || file.size > MAX_BYTES) {
-    throw new Error('请选择 20 MB 以内的 JPG、PNG 或 WebP 图片')
+    throw new BackgroundError(t("请选择 20 MB 以内的 JPG、PNG 或 WebP 图片"))
   }
   const source = URL.createObjectURL(file)
   try {
@@ -38,7 +42,7 @@ async function prepareBackground(file) {
     image.src = source
     await image.decode()
     if (!image.naturalWidth || !image.naturalHeight || image.naturalWidth > 16000 || image.naturalHeight > 16000
-      || image.naturalWidth * image.naturalHeight > 64_000_000) throw new Error('图片尺寸过大，请选择较小的图片')
+      || image.naturalWidth * image.naturalHeight > 64_000_000) throw new BackgroundError(t("图片尺寸过大，请选择较小的图片"))
     const scale = Math.min(1, MAX_EDGE / Math.max(image.naturalWidth, image.naturalHeight))
     const canvas = document.createElement('canvas')
     canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
@@ -48,7 +52,7 @@ async function prepareBackground(file) {
     context.fillRect(0, 0, canvas.width, canvas.height)
     context.drawImage(image, 0, 0, canvas.width, canvas.height)
     return await new Promise((resolve, reject) => canvas.toBlob(
-      (blob) => blob ? resolve(blob) : reject(new Error('无法处理这张图片，请换一张重试')), 'image/jpeg', 0.88,
+      (blob) => blob ? resolve(blob) : reject(new BackgroundError(t("无法处理这张图片，请换一张重试"))), 'image/jpeg', 0.88,
     ))
   } finally {
     URL.revokeObjectURL(source)
@@ -144,10 +148,10 @@ export function usePhoneBackground(nativeState, notify) {
       await storedBackground('write', { image: prepared, layout: nextLayout })
       setBlob(prepared)
       setLayout(nextLayout)
-      notify('手机背景已更新', 'success')
+      notify(t("手机背景已更新"), 'success')
     } catch (error) {
-      notify(error instanceof Error && /^(请选择|图片|无法处理)/.test(error.message)
-        ? error.message : '无法读取这张图片，请重新选择', 'error')
+      notify(error instanceof BackgroundError
+        ? error.message : t("无法读取这张图片，请重新选择"), 'error')
     } finally {
       pending.current = false
       setBusy(false)
@@ -169,7 +173,7 @@ export function usePhoneBackground(nativeState, notify) {
       setLayout(DEFAULT_BACKGROUND_LAYOUT)
       return true
     } catch {
-      notify('背景未能移除，请重试', 'error')
+      notify(t("背景未能移除，请重试"), 'error')
       return false
     } finally {
       pending.current = false

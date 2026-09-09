@@ -15,6 +15,24 @@ import static org.junit.Assert.assertTrue;
 public final class SessionRepositoryTests
 {
     @Test
+    public void language_PersistsAcrossRestartAndLogoutWithoutChangingSession()
+    {
+        FakeStore store = new FakeStore();
+        SessionRepository repository = new SessionRepository(store);
+        assertEquals("system", repository.getLanguage());
+        repository.save(validSession(), true);
+        repository.setLanguage("en");
+        assertNotNull(repository.getSession());
+        assertEquals("en", new SessionRepository(store).getLanguage());
+        repository.setLanguage(" en");
+        assertEquals("en", repository.getLanguage());
+        repository.clear();
+        assertEquals("en", new SessionRepository(store).getLanguage());
+        repository.setLanguage("system");
+        assertEquals("system", new SessionRepository(store).getLanguage());
+    }
+
+    @Test
     public void saveWithoutPersistence_KeepsOnlyProcessSession()
     {
         FakeStore store = new FakeStore();

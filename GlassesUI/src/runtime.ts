@@ -1,3 +1,4 @@
+import { applyLanguage, isLanguage, normalizeLanguage, readPreviewLanguage, savePreviewLanguage, type Language, t } from '../../SharedUI/i18n.mjs'
 import { normalizeUiTheme, readPreviewTheme, savePreviewTheme, type UiTheme } from '../../SharedUI/theme.mjs'
 import { isSubtitleSize, normalizeSubtitleSize, readPreviewSubtitleSize, savePreviewSubtitleSize, type SubtitleSize } from '../../SharedUI/subtitles.mjs'
 
@@ -17,6 +18,8 @@ export type RuntimeBootstrap = {
   displayMode: string
   uiTheme: UiTheme
   subtitleSize: SubtitleSize
+  language: Language
+  systemLanguage?: string
   glassesConnected: boolean
   catalogGeneration: number
   session: JellyfinSession | null
@@ -102,6 +105,8 @@ function parseBootstrap(value: string | RuntimeBootstrap | unknown): RuntimeBoot
       displayMode: text(source.displayMode) || 'Mirror2D',
       uiTheme: normalizeUiTheme(source.uiTheme),
       subtitleSize: normalizeSubtitleSize(source.subtitleSize),
+      language: normalizeLanguage(source.language),
+      systemLanguage: text(source.systemLanguage),
       glassesConnected: source.glassesConnected !== false,
       catalogGeneration: boundedGeneration(source.catalogGeneration),
       session: normalizeSession(source.session),
@@ -118,6 +123,7 @@ function publishNativeBootstrap(value: string | RuntimeBootstrap) {
 }
 
 function publishBootstrap(bootstrap: RuntimeBootstrap) {
+  applyLanguage(bootstrap.language, bootstrap.systemLanguage || undefined)
   const signature = JSON.stringify(bootstrap)
   if (signature === latestNativeBootstrapSignature) return
   latestNativeBootstrap = bootstrap
@@ -147,7 +153,7 @@ async function developmentBootstrap(): Promise<RuntimeBootstrap> {
   try {
     const configResponse = await fetch('/__jellyfin-dev-config', { cache: 'no-store' })
     if (!configResponse.ok) {
-      throw new Error('未找到开发环境 Jellyfin 配置。')
+      throw new Error(t("未找到开发环境 Jellyfin 配置。"))
     }
 
     const config = await configResponse.json() as Record<string, unknown>
@@ -155,7 +161,7 @@ async function developmentBootstrap(): Promise<RuntimeBootstrap> {
     const username = text(config.username)
     const password = typeof config.password === 'string' ? config.password : ''
     if (!/^https?:\/\//i.test(serverUrl) || !username) {
-      throw new Error('开发环境 Jellyfin 配置不完整。')
+      throw new Error(t("开发环境 Jellyfin 配置不完整。"))
     }
 
     const deviceId = 'lucent-rayneo-web-development'
@@ -174,8 +180,8 @@ async function developmentBootstrap(): Promise<RuntimeBootstrap> {
 
     if (!infoResponse.ok || !authenticationResponse.ok) {
       throw new Error(authenticationResponse.status === 401
-        ? '开发账号认证失败。'
-        : `Jellyfin 连接失败（${authenticationResponse.status || infoResponse.status}）。`)
+        ? t("开发账号认证失败。")
+        : t("Jellyfin 连接失败（{0}）。", { 0: authenticationResponse.status || infoResponse.status }))
     }
 
     const publicInfo = await infoResponse.json() as Record<string, unknown>
@@ -183,13 +189,14 @@ async function developmentBootstrap(): Promise<RuntimeBootstrap> {
     const user = authentication.User as Record<string, unknown> | undefined
     const accessToken = text(authentication.AccessToken)
     const userId = text(user?.Id)
-    if (!accessToken || !userId) throw new Error('Jellyfin 没有返回有效会话。')
+    if (!accessToken || !userId) throw new Error(t("Jellyfin 没有返回有效会话。"))
 
     return {
       source: 'development',
       displayMode: 'Mirror2D',
       uiTheme: readPreviewTheme(),
       subtitleSize: readPreviewSubtitleSize(),
+      language: readPreviewLanguage(),
       glassesConnected: true,
       catalogGeneration: 0,
       session: {
@@ -209,10 +216,11 @@ async function developmentBootstrap(): Promise<RuntimeBootstrap> {
       displayMode: 'Mirror2D',
       uiTheme: readPreviewTheme(),
       subtitleSize: readPreviewSubtitleSize(),
+      language: readPreviewLanguage(),
       glassesConnected: true,
       catalogGeneration: 0,
       session: null,
-      error: error instanceof Error ? error.message : '无法读取开发环境 Jellyfin 会话。',
+      error: error instanceof Error ? error.message : t("无法读取开发环境 Jellyfin 会话。"),
     }
   }
 }
@@ -232,6 +240,8 @@ export async function discoverRuntime(): Promise<RuntimeBootstrap> {
       }
     }
 
+    if (latestNativeBootstrap) applyLanguage(latestNativeBootstrap.language, latestNativeBootstrap.systemLanguage || undefined)
+
     try {
       native.ready()
     } catch {
@@ -243,10 +253,11 @@ export async function discoverRuntime(): Promise<RuntimeBootstrap> {
       displayMode: 'Mirror2D',
       uiTheme: 'liquid-glass',
       subtitleSize: 'normal',
+      language: 'system',
       glassesConnected: true,
       catalogGeneration: 0,
       session: null,
-      error: '无法读取手机端 Jellyfin 会话。',
+      get error() { return t("无法读取手机端 Jellyfin 会话。") },
     }
   }
 
@@ -256,10 +267,11 @@ export async function discoverRuntime(): Promise<RuntimeBootstrap> {
     displayMode: 'Mirror2D',
     uiTheme: readPreviewTheme(),
     subtitleSize: readPreviewSubtitleSize(),
+      language: readPreviewLanguage(),
     glassesConnected: true,
     catalogGeneration: 0,
     session: null,
-    error: '生产网页仅在 RayNeo 眼镜 WebView 中运行。',
+    get error() { return t("生产网页仅在 RayNeo 眼镜 WebView 中运行。") },
   }
 }
 
@@ -312,10 +324,20 @@ export function postNativeMessage(message: Record<string, unknown>) {
 }
 
 type UiPreferenceMessage =
+  | { type: 'set_language'; value: Language }
   | { type: 'set_ui_theme'; value: UiTheme }
   | { type: 'set_subtitle_size'; value: SubtitleSize }
 
 export function requestUiPreference(message: UiPreferenceMessage, runtime: RuntimeBootstrap | null) {
+  if (message.type === 'set_language') {
+    if (!isLanguage(message.value)) return false
+    if (window.RayNeoGlasses) return postNativeMessage(message)
+    const current = latestNativeBootstrap ?? runtime
+    if (!current) return false
+    savePreviewLanguage(message.value)
+    publishBootstrap({ ...current, language: message.value })
+    return true
+  }
   const themeChange = message.type === 'set_ui_theme'
   if (themeChange
     ? message.value !== 'liquid-glass' && message.value !== 'simpleUI'

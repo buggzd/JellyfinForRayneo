@@ -127,3 +127,21 @@
 @media (prefers-reduced-motion: reduce) {
   .setting-current svg { transition: none; }
 }
+
+/* Language labels must remain readable on narrow phones in either theme. */
+.language-select {
+  max-width: 44%;
+  margin-left: auto;
+  border: 1px solid currentColor;
+  border-radius: 12px;
+  padding: 8px 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+}
+.language-select option { background: #fff; color: #172c40; }
+.language-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.language-options button { white-space: normal; overflow-wrap: anywhere; }
+html[lang="en"] .setting-row__copy,
+html[lang="en"] .settings-disclosure__copy { min-width: 0; }

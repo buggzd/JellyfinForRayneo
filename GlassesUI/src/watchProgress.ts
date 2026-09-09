@@ -1,3 +1,4 @@
+import { t } from '../../SharedUI/i18n.mjs'
 import type { MediaItem } from './data'
 
 const ticksPerSecond = 10_000_000
@@ -13,7 +14,7 @@ export function resumeProgress(item?: MediaItem) {
 export function watchedTime(item?: MediaItem) {
   const ticks = item?.playbackPositionTicks ?? 0
   const seconds = Number.isFinite(ticks) ? Math.max(0, Math.floor(ticks / ticksPerSecond)) : 0
-  return `${Math.floor(seconds / 60)} 分 ${String(seconds % 60).padStart(2, '0')} 秒`
+  return t("{0} 分 {1} 秒", { 0: Math.floor(seconds / 60), 1: String(seconds % 60).padStart(2, '0') })
 }
 
 export function latestWatchedEpisode(episodes: MediaItem[]) {
@@ -42,7 +43,7 @@ export class WatchProgress {
     const duration = durationTicks > 0 ? durationTicks : item.runtimeTicks
     const position = duration ? Math.min(positionTicks, duration) : positionTicks
     const completed = Boolean(duration && position >= duration)
-    const next = { ...item, runtimeTicks: duration, playbackPositionTicks: completed ? 0 : position,
+    const next = { ...item, get subtitle() { return item.subtitle }, get duration() { return item.duration }, runtimeTicks: duration, playbackPositionTicks: completed ? 0 : position,
       watched: completed || Boolean(item.watched), lastPlayedDate: new Date().toISOString() }
     next.progress = completed ? undefined : resumeProgress(next)
     this.items.delete(item.id)
@@ -58,7 +59,7 @@ export class WatchProgress {
   patch(item: MediaItem) {
     const local = this.items.get(item.id)
     if (!local || (Date.parse(item.lastPlayedDate ?? '') || 0) > (this.confirmedAt.get(local) ?? Date.parse(local.lastPlayedDate!))) return item
-    return { ...item, runtimeTicks: local.runtimeTicks, playbackPositionTicks: local.playbackPositionTicks,
+    return { ...item, get subtitle() { return item.subtitle }, get duration() { return item.duration }, runtimeTicks: local.runtimeTicks, playbackPositionTicks: local.playbackPositionTicks,
       progress: local.progress, watched: Boolean(item.watched || local.watched), lastPlayedDate: local.lastPlayedDate }
   }
 

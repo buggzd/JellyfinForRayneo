@@ -1,3 +1,4 @@
+import { t } from '../../SharedUI/i18n.mjs'
 import { WatchProgress, latestWatchedEpisode } from './watchProgress'
 import type { MediaItem, MediaKind, MediaShelf } from './data'
 import { getNativeHardwareVideoCodecs, type JellyfinSession } from './runtime'
@@ -214,7 +215,7 @@ export function describeJellyfinFailure(reason: unknown): {
   const message = reason instanceof Error ? reason.message.trim() : ''
   return {
     code: 'unknown',
-    message: (message || '无法读取 Jellyfin 数据。').slice(0, 240),
+    message: (message || t("无法读取 Jellyfin 数据。")).slice(0, 240),
   }
 }
 
@@ -470,10 +471,10 @@ function resolveStream(
 }
 
 function trackLabel(stream: JellyfinMediaStream, type: 'Audio' | 'Subtitle') {
-  const language = stream.Language?.trim() || (type === 'Audio' ? '未知语言' : '字幕')
+  const language = stream.Language?.trim() || (type === 'Audio' ? t("未知语言") : t("字幕"))
   const codec = normalizeCodec(stream.Codec).toLocaleUpperCase()
-  const channels = type === 'Audio' && stream.Channels ? `${stream.Channels} 声道` : ''
-  const forced = stream.IsForced ? '强制' : ''
+  const channels = type === 'Audio' && stream.Channels ? t("{0} 声道", { 0: stream.Channels }) : ''
+  const forced = stream.IsForced ? t("强制") : ''
   return stream.DisplayTitle?.trim()
     || stream.Title?.trim()
     || [language, codec, channels, forced].filter(Boolean).join(' · ')
@@ -482,7 +483,7 @@ function trackLabel(stream: JellyfinMediaStream, type: 'Audio' | 'Subtitle') {
 function mapTrack(stream: JellyfinMediaStream, type: 'Audio' | 'Subtitle'): PlaybackTrack {
   return {
     index: stream.Index ?? 0,
-    label: trackLabel(stream, type),
+    get label() { return trackLabel(stream, type) },
     language: stream.Language?.trim() || '',
     codec: normalizeCodec(stream.Codec).toLocaleUpperCase(),
     channels: stream.Channels,
@@ -511,9 +512,9 @@ function formatDuration(ticks: number | undefined) {
   const minutes = Math.max(1, Math.round(ticks / 600_000_000))
   const hours = Math.floor(minutes / 60)
   const remainder = minutes % 60
-  if (!hours) return `${minutes} 分钟`
-  if (!remainder) return `${hours} 小时`
-  return `${hours} 小时 ${String(remainder).padStart(2, '0')} 分`
+  if (!hours) return t("{0} 分钟", { 0: minutes })
+  if (!remainder) return t("{0} 小时", { 0: hours })
+  return t("{0} 小时 {1} 分", { 0: hours, 1: String(remainder).padStart(2, '0') })
 }
 
 function mediaKind(item: JellyfinItemDto): MediaKind {
@@ -540,34 +541,34 @@ function mediaKind(item: JellyfinItemDto): MediaKind {
 function libraryLabel(collectionType: string | undefined) {
   switch (collectionType?.toLocaleLowerCase()) {
     case 'boxsets':
-      return '合集组'
+      return t("合集组")
     case 'movies':
-      return '电影库'
+      return t("电影库")
     case 'tvshows':
-      return '剧集库'
+      return t("剧集库")
     case 'music':
-      return '音乐库'
+      return t("音乐库")
     case 'homevideos':
-      return '家庭视频'
+      return t("家庭视频")
     case 'photos':
-      return '照片库'
+      return t("照片库")
     case 'musicvideos':
-      return '音乐视频'
+      return t("音乐视频")
     default:
-      return '媒体库'
+      return t("媒体库")
   }
 }
 
 function itemSubtitle(item: JellyfinItemDto) {
   if (item.Type === 'Episode') {
-    return `S${padEpisode(item.ParentIndexNumber)} E${padEpisode(item.IndexNumber)} · ${item.Name ?? item.SeasonName ?? '剧集'}`
+    return `S${padEpisode(item.ParentIndexNumber)} E${padEpisode(item.IndexNumber)} · ${item.Name ?? item.SeasonName ?? t('剧集')}`
   }
   if (item.Type === 'Series') {
-    const count = item.ChildCount ? `${item.ChildCount} 集` : '剧集'
+    const count = item.ChildCount ? t("{0} 集", { 0: item.ChildCount }) : '剧集'
     return [count, ...(item.Genres ?? []).slice(0, 2)].join(' · ')
   }
   if (item.Type === 'CollectionFolder' || item.Type === 'Folder' || item.Type === 'UserView') {
-    return `${libraryLabel(item.CollectionType)}${item.ChildCount ? ` · ${item.ChildCount} 项` : ''}`
+    return `${libraryLabel(item.CollectionType)}${item.ChildCount ? t(" · {0} 项", { 0: item.ChildCount }) : ''}`
   }
 
   const facts = [
@@ -668,8 +669,8 @@ export class JellyfinClient {
         throw new JellyfinRequestError(
           'network',
           controller.signal.aborted
-            ? '眼镜端连接 Jellyfin 超过 20 秒，请检查 WebView 网络与服务器可达性。'
-            : '眼镜端无法访问 Jellyfin。请检查当前网络和服务器地址；IPv6 带端口时必须使用方括号。',
+            ? t("眼镜端连接 Jellyfin 超过 20 秒，请检查 WebView 网络与服务器可达性。")
+            : t("眼镜端无法访问 Jellyfin。请检查当前网络和服务器地址；IPv6 带端口时必须使用方括号。"),
         )
       }
       if (!response.ok) {
@@ -679,7 +680,7 @@ export class JellyfinClient {
         }
         throw new JellyfinRequestError(
           'http',
-          `Jellyfin 请求失败（HTTP ${response.status}）。`,
+          t("Jellyfin 请求失败（HTTP {0}）。", { 0: response.status }),
         )
       }
       if (response.status === 204 || response.headers.get('Content-Length') === '0') {
@@ -691,12 +692,12 @@ export class JellyfinClient {
         if (controller.signal.aborted) {
           throw new JellyfinRequestError(
             'network',
-            '眼镜端读取 Jellyfin 响应超过 20 秒，请检查网络质量。',
+            t("眼镜端读取 Jellyfin 响应超过 20 秒，请检查网络质量。"),
           )
         }
         throw new JellyfinRequestError(
           'response',
-          'Jellyfin 已响应，但返回的数据格式无法解析。',
+          t("Jellyfin 已响应，但返回的数据格式无法解析。"),
         )
       }
     } finally {
@@ -819,7 +820,7 @@ export class JellyfinClient {
 
   mapItem = (source: JellyfinItemDto): MediaItem => {
     const id = source.Id ?? `missing-${hash(source.Name ?? 'item')}`
-    const sourceName = source.Name?.trim() || '未命名媒体'
+    const sourceName = source.Name?.trim() || t("未命名媒体")
     const title = source.Type === 'Episode' && source.SeriesName?.trim()
       ? source.SeriesName.trim()
       : sourceName
@@ -850,10 +851,10 @@ export class JellyfinClient {
         : source.OriginalTitle?.trim() || undefined,
       sortName: source.ForcedSortName?.trim() || source.SortName?.trim() || undefined,
       aliases: (source.Aliases ?? []).map((alias) => alias.trim()).filter(Boolean),
-      subtitle: itemSubtitle(source),
+      get subtitle() { return itemSubtitle(source) },
       kind: mediaKind(source),
       year: source.ProductionYear ? String(source.ProductionYear) : undefined,
-      duration: formatDuration(source.RunTimeTicks ?? mediaSource?.RunTimeTicks),
+      get duration() { return formatDuration(source.RunTimeTicks ?? mediaSource?.RunTimeTicks) },
       rating: typeof source.CommunityRating === 'number'
         ? source.CommunityRating.toFixed(1)
         : undefined,
@@ -964,18 +965,18 @@ export class JellyfinClient {
     const featured = playable[0] ?? allItems[0] ?? libraries[0] ?? {
       id: 'empty-library',
       title: this.session.serverName || 'Jellyfin',
-      subtitle: '媒体库暂无可显示内容',
+      get subtitle() { return t("媒体库暂无可显示内容") },
       kind: '文件夹',
       art: 0,
       folder: true,
-      overview: '请在 Jellyfin 服务器中添加媒体，然后刷新页面。',
+      get overview() { return t("请在 Jellyfin 服务器中添加媒体，然后刷新页面。") },
     }
     const shelves: MediaShelf[] = [
-      { id: 'libraries', title: '我的媒体', eyebrow: 'LIBRARIES', items: libraries, library: true },
-      { id: 'resume', title: '继续观看', eyebrow: 'RESUME', items: resume },
-      { id: 'next-up', title: '下一集', eyebrow: 'UP NEXT', items: nextUp },
-      { id: 'latest', title: '最近添加', eyebrow: 'JUST IN', items: latest },
-      { id: 'all', title: '探索媒体库', eyebrow: 'DISCOVER', items: allItems.slice(0, 14) },
+      { id: 'libraries', title: "我的媒体", eyebrow: 'LIBRARIES', items: libraries, library: true },
+      { id: 'resume', title: "继续观看", eyebrow: 'RESUME', items: resume },
+      { id: 'next-up', title: "下一集", eyebrow: 'UP NEXT', items: nextUp },
+      { id: 'latest', title: "最近添加", eyebrow: 'JUST IN', items: latest },
+      { id: 'all', title: "探索媒体库", eyebrow: 'DISCOVER', items: allItems.slice(0, 14) },
     ].filter((shelf) => shelf.items.length)
 
     return { featured, shelves, libraries, allItems, favorites }
@@ -1131,7 +1132,7 @@ export class JellyfinClient {
     startPositionTicks = 0,
     selection: PlaybackSelection = {},
   ): Promise<PlaybackPlan> {
-    if (!item.id || !item.canPlay) throw new Error('这个项目没有可播放的媒体源。')
+    if (!item.id || !item.canPlay) throw new Error(t("这个项目没有可播放的媒体源。"))
     this.playbackItems.set(item.id, item)
     if (this.playbackItems.size > 64) this.playbackItems.delete(this.playbackItems.keys().next().value!)
 
@@ -1151,8 +1152,8 @@ export class JellyfinClient {
       : sources[0]
     if (!source) {
       throw new Error(directResponse.ErrorCode
-        ? `Jellyfin 没有返回可播放源：${directResponse.ErrorCode}`
-        : 'Jellyfin 没有返回可播放源。')
+        ? t("Jellyfin 没有返回可播放源：{0}", { 0: directResponse.ErrorCode })
+        : t("Jellyfin 没有返回可播放源。"))
     }
 
     const audioTracks = streamsOfType(source, 'Audio').map((stream) => mapTrack(stream, 'Audio'))
@@ -1236,8 +1237,8 @@ export class JellyfinClient {
     const endpoint = directEndpoint ?? transcodeEndpoint
     if (!endpoint) {
       throw new Error(transcodeResponse?.ErrorCode || directResponse.ErrorCode
-        ? `当前设备与服务器没有可用的播放路径：${transcodeResponse?.ErrorCode || directResponse.ErrorCode}`
-        : '当前设备与服务器没有可用的播放路径。')
+        ? t("当前设备与服务器没有可用的播放路径：{0}", { 0: transcodeResponse?.ErrorCode || directResponse.ErrorCode })
+        : t("当前设备与服务器没有可用的播放路径。"))
     }
 
     return {

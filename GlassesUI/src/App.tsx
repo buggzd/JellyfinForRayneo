@@ -1,3 +1,5 @@
+import { useLanguage } from './useLanguage'
+import { getLocale, t } from '../../SharedUI/i18n.mjs'
 import { parseSeekCommand } from '../../SharedUI/seekCommand.mjs'
 import { latestWatchedEpisode, resumeProgress, watchedTime } from './watchProgress'
 import AssSubtitles from './AssSubtitles'
@@ -469,10 +471,10 @@ function FocusButton({
 
 function Logo({ compact = false }: { compact?: boolean }) {
   return (
-    <span className={cx('wordmark', compact && 'wordmark--compact')} aria-label="tachi（塔奇）">
+    <span className={cx('wordmark', compact && 'wordmark--compact')} aria-label={t("tachi（塔奇）")}>
       <span className="wordmark__spark" />
       <span className="wordmark__name">tachi</span>
-      {!compact && <span className="wordmark__sub">塔奇 / MEDIA</span>}
+      {!compact && <span className="wordmark__sub">{t("塔奇 / MEDIA")}</span>}
     </span>
   )
 }
@@ -593,12 +595,12 @@ function MediaIndicators({ item }: { item: MediaItem }) {
     <>
       {(item.watched || item.favorite) && (
         <span className="media-status-badges">
-          {item.watched && <span className="is-watched"><Check size={14} />已看</span>}
-          {item.favorite && <span aria-label="已收藏" title="已收藏"><Heart size={14} fill="currentColor" /></span>}
+          {item.watched && <span className="is-watched"><Check size={14} />{t("已看")}</span>}
+          {item.favorite && <span aria-label={t("已收藏")} title={t("已收藏")}><Heart size={14} fill="currentColor" /></span>}
         </span>
       )}
       {progress > 0 && !item.watched && (
-        <span className="media-progress" aria-label={`已观看 ${Math.round(progress)}%`}>
+        <span className="media-progress" aria-label={t("已观看 {0}%", { 0: Math.round(progress) })}>
           <i style={{ transform: `scaleX(${progress / 100})` }} />
         </span>
       )}
@@ -619,42 +621,42 @@ type HeaderProps = {
 
 function PageHeader({ active, onNavigate, onRefresh, onExit, serverName, userName, refreshing = false, minimal = false }: HeaderProps) {
   return (
-    <aside className={cx('page-header', 'side-navigation', minimal && 'side-navigation--minimal')} aria-label="全局导航">
+    <aside className={cx('page-header', 'side-navigation', minimal && 'side-navigation--minimal')} aria-label={t("全局导航")}>
       <span className="side-navigation__backdrop" aria-hidden="true" />
       <div className="side-navigation__inner">
         <FocusButton
           variant="ghost"
           className="logo-button side-navigation__brand"
           icon={<span className="side-navigation__brand-mark">T</span>}
-          label="回到首页"
+          label={t("回到首页")}
           sound="home"
           onClick={() => onNavigate('home')}
         >
           <Logo compact />
         </FocusButton>
 
-        <div className="side-navigation__profile" aria-label={`当前用户 ${userName}`}>
+        <div className="side-navigation__profile" aria-label={t("当前用户 {0}", { 0: userName })}>
           <span className="side-navigation__avatar"><UserRound size={19} /></span>
-          <span className="side-navigation__profile-copy"><small>已登录</small><strong>{userName || 'Jellyfin 用户'}</strong></span>
+          <span className="side-navigation__profile-copy"><small>{t("已登录")}</small><strong>{userName || t("Jellyfin 用户")}</strong></span>
         </div>
 
-        <nav className="main-nav" aria-label="主导航">
-          <FocusButton className="side-navigation__item" variant="ghost" icon={<Home size={22} />} sound="home" active={active === 'home'} onClick={() => onNavigate('home')}>首页</FocusButton>
-          <FocusButton className="side-navigation__item" variant="ghost" icon={<Search size={22} />} active={active === 'search'} onClick={() => onNavigate('search')}>搜索</FocusButton>
-          <FocusButton className="side-navigation__item" variant="ghost" icon={<Grid3X3 size={22} />} active={active === 'browse'} onClick={() => onNavigate('browse')}>媒体库</FocusButton>
-          <FocusButton className="side-navigation__item" variant="ghost" icon={<Heart size={22} />} active={active === 'favorites'} onClick={() => onNavigate('favorites')}>我的收藏</FocusButton>
-          <FocusButton className="side-navigation__item settings-launch" variant="ghost" icon={<Settings2 size={22} />} sound="open" active={active === 'settings'} onClick={() => onNavigate('settings')}>设置</FocusButton>
+        <nav className="main-nav" aria-label={t("主导航")}>
+          <FocusButton className="side-navigation__item" variant="ghost" icon={<Home size={22} />} sound="home" active={active === 'home'} onClick={() => onNavigate('home')}>{t("首页")}</FocusButton>
+          <FocusButton className="side-navigation__item" variant="ghost" icon={<Search size={22} />} active={active === 'search'} onClick={() => onNavigate('search')}>{t("搜索")}</FocusButton>
+          <FocusButton className="side-navigation__item" variant="ghost" icon={<Grid3X3 size={22} />} active={active === 'browse'} onClick={() => onNavigate('browse')}>{t("媒体库")}</FocusButton>
+          <FocusButton className="side-navigation__item" variant="ghost" icon={<Heart size={22} />} active={active === 'favorites'} onClick={() => onNavigate('favorites')}>{t("我的收藏")}</FocusButton>
+          <FocusButton className="side-navigation__item settings-launch" variant="ghost" icon={<Settings2 size={22} />} sound="open" active={active === 'settings'} onClick={() => onNavigate('settings')}>{t("设置")}</FocusButton>
         </nav>
 
         <div className="header-spacer" />
-        <div className="side-navigation__server" aria-label={`当前 Jellyfin 服务器 ${serverName}`}>
+        <div className="side-navigation__server" aria-label={t("当前 Jellyfin 服务器 {0}", { 0: serverName })}>
           <span className="server-pill__pulse" />
           <span><small>JELLYFIN SERVER</small><strong>{serverName || 'Jellyfin'}</strong></span>
         </div>
-        <nav className="side-navigation__utilities" aria-label="服务器操作">
-          <FocusButton sound="open" className="side-navigation__item tutorial-launch" variant="ghost" icon={<BookOpen size={21} />} onClick={() => onNavigate('tutorial')}>遥控教学</FocusButton>
-          <FocusButton className="side-navigation__item" variant="ghost" sound="loading" disabled={refreshing} busy={refreshing} icon={<RefreshCw className={cx(refreshing && 'is-spinning')} size={21} />} onClick={onRefresh}>{refreshing ? '正在刷新' : '刷新媒体库'}</FocusButton>
-          <FocusButton className="side-navigation__item" variant="ghost" icon={<LogOut size={21} />} onClick={onExit}>管理登录</FocusButton>
+        <nav className="side-navigation__utilities" aria-label={t("服务器操作")}>
+          <FocusButton sound="open" className="side-navigation__item tutorial-launch" variant="ghost" icon={<BookOpen size={21} />} onClick={() => onNavigate('tutorial')}>{t("遥控教学")}</FocusButton>
+          <FocusButton className="side-navigation__item" variant="ghost" sound="loading" disabled={refreshing} busy={refreshing} icon={<RefreshCw className={cx(refreshing && 'is-spinning')} size={21} />} onClick={onRefresh}>{refreshing ? t("正在刷新") : t("刷新媒体库")}</FocusButton>
+          <FocusButton className="side-navigation__item" variant="ghost" icon={<LogOut size={21} />} onClick={onExit}>{t("管理登录")}</FocusButton>
         </nav>
       </div>
     </aside>
@@ -662,7 +664,7 @@ function PageHeader({ active, onNavigate, onRefresh, onExit, serverName, userNam
 }
 
 function MetaRow({ item }: { item: MediaItem }) {
-  const facts = [item.year, item.kind, item.duration].filter(Boolean)
+  const facts = [item.year, t(item.kind), item.duration].filter(Boolean)
   return (
     <div className="meta-row">
       {facts.map((fact, index) => <span className="meta-row__fact" key={fact}>{fact}{index < facts.length - 1 && <i />}</span>)}
@@ -700,9 +702,9 @@ const MediaCard = memo(function MediaCard({
       <span className="media-card__glow" />
       <ArtFrame item={item} wide={wide || library}><MediaIndicators item={item} /></ArtFrame>
       <span className="media-card__badges">
-        {item.folder && <span><Folder size={14} /> {item.sourceType === 'BoxSet' ? '合集' : item.collectionType === 'boxsets' ? '合集组' : '文件夹'}</span>}
-        {!item.folder && <span>{item.kind}</span>}
-        {item.unwatched && <span className="count-badge">{item.unwatched} 未看</span>}
+        {item.folder && <span><Folder size={14} /> {item.sourceType === 'BoxSet' ? t('合集') : item.collectionType === 'boxsets' ? t("合集组") : t('文件夹')}</span>}
+        {!item.folder && <span>{t(item.kind)}</span>}
+        {item.unwatched && <span className="count-badge">{item.unwatched}  {t("未看")}</span>}
       </span>
       <span className="media-card__copy">
         <strong title={item.title}>{item.title}</strong>
@@ -769,7 +771,7 @@ function HomePage({
       <PageHeader active="home" serverName={serverName} userName={userName} refreshing={refreshing} onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
       <section className="hero-section">
         <div className="hero-section__copy">
-          <div className="hero-eyebrow"><Sparkles size={17} /> tachi 为你推荐</div>
+          <div className="hero-eyebrow"><Sparkles size={17} />  {t("tachi 为你推荐")}</div>
           <p className="hero-original">{featured.original}</p>
           <h1 className={cx('hero-title', `hero-title--${titleDensity}`)}>{featured.title}</h1>
           {featured.tagline && <p className="hero-tagline">「{featured.tagline}」</p>}
@@ -777,25 +779,25 @@ function HomePage({
           <p className="hero-overview">{featured.overview || featured.subtitle}</p>
           {featured.progress !== undefined && featured.progress > 0 && (
             <div className="hero-progress">
-              <div><span>继续观看</span><strong>{featured.subtitle}</strong></div>
+              <div><span>{t("继续观看")}</span><strong>{featured.subtitle}</strong></div>
               <span>{featured.progress}%</span>
               <i><b style={{ width: `${featured.progress}%` }} /></i>
             </div>
           )}
           <div className="hero-actions">
-            <FocusButton variant="primary" autoFocusTarget icon={featured.folder ? <Grid3X3 size={22} /> : <Play size={22} fill="currentColor" />} onClick={() => onOpen(featured)} onFocus={() => onPreview(featured)}>{featured.folder ? '浏览媒体库' : featured.progress ? '继续观看' : '立即观看'}</FocusButton>
-            <FocusButton variant="glass" icon={<Info size={21} />} onClick={() => onOpen(featured)} onFocus={() => onPreview(featured)}>查看详情</FocusButton>
+            <FocusButton variant="primary" autoFocusTarget icon={featured.folder ? <Grid3X3 size={22} /> : <Play size={22} fill="currentColor" />} onClick={() => onOpen(featured)} onFocus={() => onPreview(featured)}>{featured.folder ? t("浏览媒体库") : featured.progress ? t("继续观看") : t("立即观看")}</FocusButton>
+            <FocusButton variant="glass" icon={<Info size={21} />} onClick={() => onOpen(featured)} onFocus={() => onPreview(featured)}>{t("查看详情")}</FocusButton>
           </div>
         </div>
-        <div className="hero-section__scroll-cue"><span /> 向下探索</div>
+        <div className="hero-section__scroll-cue"><span />  {t("向下探索")}</div>
       </section>
 
       <div className="shelves">
         {shelves.map((shelf, shelfIndex) => (
-          <section className="shelf" key={shelf.title}>
+          <section className="shelf" key={shelf.id}>
             <header className="shelf__header">
-              <div><small>{shelf.eyebrow}</small><h2>{shelf.title}<span className="section-count" aria-label={`${shelf.items.length} 项`}>{shelf.items.length}</span></h2></div>
-              <FocusButton variant="ghost" trailing={<ChevronRight size={18} />} onClick={() => onNavigate('browse')}>查看全部</FocusButton>
+              <div><small>{shelf.eyebrow}</small><h2>{t(shelf.title)}<span className="section-count" aria-label={t("{0} 项", { 0: shelf.items.length })}>{shelf.items.length}</span></h2></div>
+              <FocusButton variant="ghost" trailing={<ChevronRight size={18} />} onClick={() => onNavigate('browse')}>{t("查看全部")}</FocusButton>
             </header>
             <div className="shelf__rail">
               {shelf.items.map((item, cardIndex) => (
@@ -910,10 +912,10 @@ function BrowsePage({
     if (filter === 'unwatched') result = result.filter((item) => !item.watched)
     if (filter === 'continue') result = result.filter((item) => item.progress && item.progress > 0 && item.progress < 100)
     if (filter === 'favorite') result = result.filter((item) => item.favorite)
-    if (sort === '名称') result.sort((a, b) => a.title.localeCompare(b.title, 'zh-CN'))
+    if (sort === '名称') result.sort((a, b) => a.title.localeCompare(b.title, getLocale()))
     if (sort === '评分最高') result.sort((a, b) => Number(b.rating ?? 0) - Number(a.rating ?? 0))
     return result
-  }, [baseItems, filter, sort])
+  }, [baseItems, filter, sort, getLocale()])
 
   const visibleItems = shownItems.slice(0, visibleCount)
   const hasMore = visibleItems.length < shownItems.length
@@ -921,7 +923,7 @@ function BrowsePage({
   const usesWideCard = (item: MediaItem) => mode === 'library'
     && (showsLibraries || (item.sourceType !== 'Movie' && item.sourceType !== 'Series'))
   const showsWideGrid = mode === 'library' && baseItems.every(usesWideCard)
-  const title = mode === 'favorites' ? '我的收藏' : path.at(-1)?.item.title ?? '媒体库'
+  const title = mode === 'favorites' ? t("我的收藏") : path.at(-1)?.item.title ?? t("媒体库")
   const eyebrow = mode === 'favorites' ? 'SAVED MOMENTS' : path.length ? 'FOLDER VIEW' : 'ALL LIBRARIES'
 
   useEffect(() => {
@@ -989,47 +991,47 @@ function BrowsePage({
       />
       <main className="browse-content">
         <div className="breadcrumbs">
-          <FocusButton variant="round" sound="back" label="返回上一级" onClick={() => path.length > 1 ? truncatePath(path.length - 1) : path.length ? resetLibrary() : onNavigate('home')}><ArrowLeft size={20} /></FocusButton>
-          <FocusButton variant="ghost" onClick={() => { setPath([]); onNavigate('home') }}><Home size={16} /> 首页</FocusButton>
-          {mode === 'library' && <><ChevronRight size={15} /><FocusButton variant="ghost" active={!path.length} onClick={resetLibrary}>媒体库</FocusButton></>}
+          <FocusButton variant="round" sound="back" label={t("返回上一级")} className="browse-back" onClick={() => path.length > 1 ? truncatePath(path.length - 1) : path.length ? resetLibrary() : onNavigate('home')}><ArrowLeft size={20} /></FocusButton>
+          <FocusButton variant="ghost" onClick={() => { setPath([]); onNavigate('home') }}><Home size={16} />  {t("首页")}</FocusButton>
+          {mode === 'library' && <><ChevronRight size={15} /><FocusButton variant="ghost" active={!path.length} onClick={resetLibrary}>{t("媒体库")}</FocusButton></>}
           {path.map((crumb, index) => <span className="breadcrumb-part" key={crumb.item.id}><ChevronRight size={15} /><FocusButton variant="ghost" active={index === path.length - 1} onClick={() => truncatePath(index + 1)}>{crumb.item.title}</FocusButton></span>)}
         </div>
 
         <header className="browse-title-row">
-          <div><small>{eyebrow}</small><h1>{title}</h1><p>{folderLoading ? '正在读取内容…' : folderError ? '内容尚未载入' : `${baseItems.length} 个项目`} · Jellyfin / {serverName}</p></div>
-          <div className="layout-indicator"><Grid3X3 size={18} /><span>{showsWideGrid ? '横向缩略图' : '海报网格'}</span></div>
+          <div><small>{eyebrow}</small><h1>{title}</h1><p>{folderLoading ? t("正在读取内容…") : folderError ? t("内容尚未载入") : t("{0} 个项目", { 0: baseItems.length })} · Jellyfin / {serverName}</p></div>
+          <div className="layout-indicator"><Grid3X3 size={18} /><span>{showsWideGrid ? t("横向缩略图") : t("海报网格")}</span></div>
         </header>
 
         <section className="browse-toolbar glass-panel">
           <div className="toolbar-group">
-            <ListFilter size={18} /><span>筛选</span>
+            <ListFilter size={18} /><span>{t("筛选")}</span>
             {([
-              ['all', '全部'],
-              ['unwatched', '未观看'],
-              ['continue', '可继续'],
-              ['favorite', '已收藏'],
+              ['all', t("全部")],
+              ['unwatched', t("未观看")],
+              ['continue', t("可继续")],
+              ['favorite', t("已收藏")],
             ] as const).map(([value, label], index) => (
               <FocusButton key={value} variant="chip" active={filter === value} autoFocusTarget={index === 0} onClick={() => { setFilter(value); setVisibleCount(BROWSE_BATCH_SIZE) }}>{label}</FocusButton>
             ))}
           </div>
           <span className="toolbar-divider" />
           <div className="toolbar-group toolbar-group--sort">
-            <ArrowDownUp size={18} /><span>排序</span>
+            <ArrowDownUp size={18} /><span>{t("排序")}</span>
             {(['最近加入', '名称', '评分最高'] as const).map((value) => (
-              <FocusButton key={value} variant="chip" active={sort === value} onClick={() => setSort(value)}>{value}</FocusButton>
+              <FocusButton key={value} variant="chip" active={sort === value} onClick={() => setSort(value)}>{t(value)}</FocusButton>
             ))}
           </div>
         </section>
 
         {folderLoading ? (
-          <LoadingCards label="正在读取媒体库…" />
+          <LoadingCards label={t("正在读取媒体库…")} />
         ) : folderError ? (
           <section className="empty-state glass-panel is-error" role="alert">
             <div className="empty-state__orb"><Info size={32} /></div>
             <small>CONNECTION INTERRUPTED</small>
-            <h2>这个目录暂时无法加载</h2>
-            <p>请检查服务器连接，然后重新尝试。</p>
-            <FocusButton variant="primary" autoFocusTarget icon={<RefreshCw size={19} />} onClick={() => { void loadFolder(folderError.item, folderError.replace) }}>重新加载</FocusButton>
+            <h2>{t("这个目录暂时无法加载")}</h2>
+            <p>{t("请检查服务器连接，然后重新尝试。")}</p>
+            <FocusButton variant="primary" autoFocusTarget icon={<RefreshCw size={19} />} onClick={() => { void loadFolder(folderError.item, folderError.replace) }}>{t("重新加载")}</FocusButton>
           </section>
         ) : shownItems.length ? (
           <section className={cx(
@@ -1052,20 +1054,20 @@ function BrowsePage({
           <section className="empty-state glass-panel" role="status">
             <div className="empty-state__orb">{mode === 'favorites' && filter === 'all' ? <Heart size={32} /> : <Search size={32} />}</div>
             <small>{filter !== 'all' ? 'NO MATCHES' : mode === 'favorites' ? 'YOUR COLLECTION' : 'EMPTY LIBRARY'}</small>
-            <h2>{filter !== 'all' ? '没有符合条件的内容' : mode === 'favorites' ? '还没有收藏内容' : '这里还没有媒体内容'}</h2>
-            <p>{filter !== 'all' ? '试试其他筛选条件，或查看全部项目。' : mode === 'favorites' ? '在详情页点亮爱心，喜欢的作品就会出现在这里。' : '在 Jellyfin 中添加内容后，刷新媒体库即可查看。'}</p>
+            <h2>{filter !== 'all' ? t("没有符合条件的内容") : mode === 'favorites' ? t("还没有收藏内容") : t("这里还没有媒体内容")}</h2>
+            <p>{filter !== 'all' ? t("试试其他筛选条件，或查看全部项目。") : mode === 'favorites' ? t("在详情页点亮爱心，喜欢的作品就会出现在这里。") : t("在 Jellyfin 中添加内容后，刷新媒体库即可查看。")}</p>
             {filter !== 'all'
-              ? <FocusButton variant="primary" autoFocusTarget icon={<X size={19} />} onClick={() => setFilter('all')}>清除条件</FocusButton>
-              : <FocusButton variant="primary" autoFocusTarget icon={<Grid3X3 size={19} />} disabled={refreshing} onClick={() => mode === 'favorites' ? onNavigate('browse') : path.length ? resetLibrary() : onRefresh()}>{mode === 'favorites' || path.length ? '浏览媒体库' : refreshing ? '正在刷新' : '刷新媒体库'}</FocusButton>}
+              ? <FocusButton variant="primary" autoFocusTarget icon={<X size={19} />} onClick={() => setFilter('all')}>{t("清除条件")}</FocusButton>
+              : <FocusButton variant="primary" autoFocusTarget icon={<Grid3X3 size={19} />} disabled={refreshing} onClick={() => mode === 'favorites' ? onNavigate('browse') : path.length ? resetLibrary() : onRefresh()}>{mode === 'favorites' || path.length ? t("浏览媒体库") : refreshing ? t("正在刷新") : t("刷新媒体库")}</FocusButton>}
           </section>
         )}
 
         {!folderLoading && !folderError && shownItems.length > 0 && (
           <footer ref={loadMoreRef} className="infinite-scroll-status" aria-live="polite">
-            <span>已显示 {visibleItems.length} 项 / 共 {shownItems.length} 项</span>
+            <span>{t("已显示")} {visibleItems.length}  {t("项 / 共")} {shownItems.length}  {t("项")}</span>
             <span className={cx('infinite-scroll-status__state', hasMore && 'is-loading')}>
               {hasMore && <LoaderCircle size={15} />}
-              {hasMore ? '继续向下浏览，自动载入更多' : '已加载全部内容'}
+              {hasMore ? t("继续向下浏览，自动载入更多") : t("已加载全部内容")}
             </span>
           </footer>
         )}
@@ -1184,15 +1186,15 @@ function SearchPage({
   }
   const indexLoading = indexStatus === 'loading' || buildingLocalIndex
   const statusCopy = indexLoading
-    ? `正在同步完整剧集索引 · 已可搜索 ${entries.length} 部`
+    ? t("正在同步完整剧集索引 · 已可搜索 {0} 部", { 0: entries.length })
     : indexStatus === 'error'
-      ? `完整索引暂不可用 · 当前可搜索 ${entries.length} 部`
-      : `已索引 ${entries.length} 部剧集`
+      ? t("完整索引暂不可用 · 当前可搜索 {0} 部", { 0: entries.length })
+      : t("已索引 {0} 部剧集", { 0: entries.length })
   const phoneKeyboardCopy = phoneKeyboardState === 'visible'
-    ? '手机键盘已就绪 · 输入实时同步'
+    ? t("手机键盘已就绪 · 输入实时同步")
     : phoneKeyboardState === 'hidden'
-      ? '手机键盘已收起 · 点手机搜索框继续'
-      : '正在唤起手机键盘…'
+      ? t("手机键盘已收起 · 点手机搜索框继续")
+      : t("正在唤起手机键盘…")
 
   return (
     <div
@@ -1204,23 +1206,23 @@ function SearchPage({
         <header className="series-search-heading">
           <div>
             <small>SEARCH SERIES</small>
-            <h1>搜索剧集</h1>
+            <h1>{t("搜索剧集")}</h1>
           </div>
           <p><span /> {statusCopy}</p>
         </header>
 
         <div className="series-search-workspace">
-          <section className="compact-search-keyboard" aria-label="Apple TV 风格单行搜索键盘">
+          <section className="compact-search-keyboard" aria-label={t("Apple TV 风格单行搜索键盘")}>
             <div className="compact-search-query glass-panel" aria-live="polite">
               <Search size={24} />
               <span>
                 <strong className={cx(!query && 'is-placeholder')}>
-                  {query || '输入拼音首字母、完整拼音或英文'}<i />
+                  {query || t("输入拼音首字母、完整拼音或英文")}<i />
                 </strong>
-                <small>搜索单位：Series</small>
+                <small>{t("搜索单位：Series")}</small>
               </span>
               {parsedQuery.episodeHint && (
-                <em>{parsedQuery.seasonHint ? `S${parsedQuery.seasonHint} · ` : ''}定位 E{parsedQuery.episodeHint}</em>
+                <em>{parsedQuery.seasonHint ? `S${parsedQuery.seasonHint} · ` : ''}{t("定位 E")}{parsedQuery.episodeHint}</em>
               )}
               <div className={cx('compact-search-phone-state', `is-${phoneKeyboardState}`)}>
                 <Keyboard size={16} />
@@ -1251,8 +1253,7 @@ function SearchPage({
                 onClick={appendSpace}
                 onFocus={() => onKeyboardFocus('action-space')}
               >
-                空格
-              </button>
+                 {t("空格")} </button>
               {keyboardKeys.map((key) => {
                 const focusId = `${keyboardMode}-${key}`
                 return (
@@ -1264,7 +1265,7 @@ function SearchPage({
                     data-autofocus={focusPane === 'keyboard' && effectiveKeyboardFocusId === focusId ? 'true' : undefined}
                     className="compact-search-key"
                     key={key}
-                    aria-label={`输入 ${key}`}
+                    aria-label={t("输入 {0}", { 0: key })}
                     onClick={() => append(key)}
                     onFocus={(event) => {
                       onKeyboardFocus(focusId)
@@ -1285,8 +1286,7 @@ function SearchPage({
                 onClick={() => updateQuery('')}
                 onFocus={() => onKeyboardFocus('action-clear')}
               >
-                清空
-              </button>
+                 {t("清空")} </button>
               <button
                 type="button"
                 data-focusable="true"
@@ -1294,19 +1294,19 @@ function SearchPage({
                 data-search-focus-id="action-backspace"
                 data-autofocus={focusPane === 'keyboard' && effectiveKeyboardFocusId === 'action-backspace' ? 'true' : undefined}
                 className="compact-search-action compact-search-action--backspace"
-                aria-label="退格"
+                aria-label={t("退格")}
                 onClick={() => updateQuery(query.slice(0, -1))}
                 onFocus={() => onKeyboardFocus('action-backspace')}
               >
                 <DeleteIcon size={18} />
               </button>
             </div>
-            <footer><span>下滑进入封面结果</span><span>上滑返回字母带</span></footer>
+            <footer><span>{t("下滑进入封面结果")}</span><span>{t("上滑返回字母带")}</span></footer>
           </section>
 
-          <section className="series-search-results" aria-label="剧集搜索结果">
+          <section className="series-search-results" aria-label={t("剧集搜索结果")}>
             <header>
-              <div><small>{query ? 'REAL-TIME SERIES' : 'RECOMMENDED SERIES'}</small><h2>{query ? `搜索结果 · ${results.length}` : '推荐剧集'}</h2></div>
+              <div><small>{query ? 'REAL-TIME SERIES' : 'RECOMMENDED SERIES'}</small><h2>{query ? t("搜索结果 · {0}", { 0: results.length }) : t("推荐剧集")}</h2></div>
             </header>
 
             {results.length ? (
@@ -1323,7 +1323,7 @@ function SearchPage({
                       data-autofocus={focusPane === 'results' && previewed ? 'true' : undefined}
                       className={cx('series-search-result', previewed && 'is-previewed')}
                       key={item.id}
-                      aria-label={[item.title, item.year, result.reason].filter(Boolean).join('，')}
+                      aria-label={[item.title, item.year, t(result.reason)].filter(Boolean).join('，')}
                       onClick={() => onOpen(item, { season: parsedQuery.seasonHint, episode: parsedQuery.episodeHint })}
                       onFocus={() => { onResultFocus(item.id); onPreview(item) }}
                     >
@@ -1336,8 +1336,8 @@ function SearchPage({
             ) : (
               <div className={cx('series-search-empty', indexLoading && 'is-loading')} role="status">
                 {indexLoading ? <LoaderCircle className="is-spinning" size={30} /> : <Search size={30} />}
-                <strong>{indexLoading ? '正在建立剧集索引' : '没有匹配的剧集'}</strong>
-                <span>{indexLoading ? '索引到达后会自动显示在这里' : '试试标题拼音或拼音首字母'}</span>
+                <strong>{indexLoading ? t("正在建立剧集索引") : t("没有匹配的剧集")}</strong>
+                <span>{indexLoading ? t("索引到达后会自动显示在这里") : t("试试标题拼音或拼音首字母")}</span>
               </div>
             )}
           </section>
@@ -1438,8 +1438,8 @@ function DetailPage({
   const dimension = mediaItem.width && mediaItem.height ? `${mediaItem.width}×${mediaItem.height}` : ''
   const bitrate = mediaItem.bitrate ? `${(mediaItem.bitrate / 1_000_000).toFixed(1)} Mbps` : ''
   const premiere = resolvedItem.dateCreated
-    ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long' }).format(new Date(resolvedItem.dateCreated))
-    : '未提供'
+    ? new Intl.DateTimeFormat(getLocale(), { dateStyle: 'long' }).format(new Date(resolvedItem.dateCreated))
+    : t("未提供")
   const toggleFavorite = async () => {
     if (actionBusy) return
     setActionBusy('favorite')
@@ -1493,7 +1493,7 @@ function DetailPage({
     >
       <PageHeader active="none" minimal serverName={serverName} userName={userName} refreshing={refreshing} onNavigate={onNavigate} onRefresh={onRefresh} onExit={onExit} />
       <main className="detail-content">
-        <FocusButton variant="round" className="detail-back" sound="back" label="返回" onClick={() => onNavigate('home')}><ArrowLeft size={22} /></FocusButton>
+        <FocusButton variant="round" className="detail-back" sound="back" label={t("返回")} onClick={() => onNavigate('home')}><ArrowLeft size={22} /></FocusButton>
         <section className="detail-hero">
           <div className="detail-poster-wrap"><ArtFrame item={resolvedItem} className="detail-poster" /></div>
           <div className="detail-copy">
@@ -1503,7 +1503,7 @@ function DetailPage({
               {resolvedItem.original && <p className="detail-original">{resolvedItem.original}</p>}
               {resolvedItem.tagline && <p className="detail-tagline">{resolvedItem.tagline}</p>}
             </div>
-            <div className="detail-format-badges" aria-label="媒体格式">
+            <div className="detail-format-badges" aria-label={t("媒体格式")}>
               {resolvedItem.officialRating && <span className="detail-format-badges__rating">{resolvedItem.officialRating}</span>}
               {mediaItem.resolution && <span>{mediaItem.resolution}</span>}
               {mediaItem.videoCodec && <span>{mediaItem.videoCodec}</span>}
@@ -1513,51 +1513,51 @@ function DetailPage({
             <div className="detail-facts">
               {[
                 resolvedItem.year,
-                detail?.seasons.length ? `共 ${detail.seasons.length} 季` : '',
+                detail?.seasons.length ? t("共 {0} 季", { 0: detail.seasons.length }) : '',
                 resolvedItem.duration,
                 resolvedItem.genres?.slice(0, 4).join('、'),
               ].filter(Boolean).map((fact, index) => <span key={index}>{fact}</span>)}
               {resolvedItem.rating && <span className="detail-score"><Star size={14} fill="currentColor" /> {resolvedItem.rating}</span>}
             </div>
             <div className={cx('detail-overview', expanded && 'is-expanded')}>
-              <p>{resolvedItem.overview || 'Jellyfin 暂未提供这项内容的剧情简介。'}</p>
-              {resolvedItem.overview && resolvedItem.overview.length > 120 && <FocusButton variant="ghost" trailing={<ChevronRight size={17} />} onClick={() => setExpanded((value) => !value)}>{expanded ? '收起剧情' : '完整剧情'}</FocusButton>}
+              <p>{resolvedItem.overview || t("Jellyfin 暂未提供这项内容的剧情简介。")}</p>
+              {resolvedItem.overview && resolvedItem.overview.length > 120 && <FocusButton variant="ghost" trailing={<ChevronRight size={17} />} onClick={() => setExpanded((value) => !value)}>{expanded ? t("收起剧情") : t("完整剧情")}</FocusButton>}
             </div>
             {playTarget?.sourceType === 'Episode' && (
-              <p className="detail-resume-episode">{hasResume ? '上次看到' : '即将播放'} · {playTarget.subtitle}</p>
+              <p className="detail-resume-episode">{hasResume ? t("上次看到") : t("即将播放")} · {playTarget.subtitle}</p>
             )}
             <div className="detail-actions">
-              <FocusButton variant="primary" className={cx('detail-play-button', hasResume && 'has-progress')} progress={hasResume ? playProgress : undefined} autoFocusTarget={!initialEpisodeNumber} disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">单击</span>} onClick={() => playTarget && onPlay(playTarget)}>
-                <span className="detail-play-button__copy"><strong>{playTarget?.sourceType === 'Episode' && playTarget.indexNumber !== undefined ? `${hasResume ? '继续' : '播放'}第 ${playTarget.indexNumber} 集` : hasResume ? '继续播放' : '立即播放'}</strong>{hasResume && <small>已看到 {watchedTime(playTarget)}</small>}</span>
+              <FocusButton variant="primary" className={cx('detail-play-button', hasResume && 'has-progress')} progress={hasResume ? playProgress : undefined} autoFocusTarget={!initialEpisodeNumber} disabled={!playTarget || loading} icon={<Play size={23} fill="currentColor" />} trailing={<span className="key-hint">{t("单击")}</span>} onClick={() => playTarget && onPlay(playTarget)}>
+                <span className="detail-play-button__copy"><strong>{playTarget?.sourceType === 'Episode' && playTarget.indexNumber !== undefined ? t("{0}第 {1} 集", { 0: hasResume ? t("继续") : t("播放"), 1: playTarget.indexNumber }) : hasResume ? t("继续播放") : t("立即播放")}</strong>{hasResume && <small>{t("已看到")} {watchedTime(playTarget)}</small>}</span>
               </FocusButton>
-              <FocusButton variant="glass" disabled={!playTarget || loading} icon={<RotateCcw size={20} />} onClick={() => playTarget && onPlay(playTarget, true)}>从头播放</FocusButton>
-              {extras[0] && <FocusButton variant="round" label="播放预告片" onClick={() => onPlay(extras[0], true)}><MonitorPlay size={20} /></FocusButton>}
-              <FocusButton variant="round" className="detail-state-action" disabled={Boolean(actionBusy)} busy={actionBusy === 'favorite'} active={favorite} label={actionBusy === 'favorite' ? '正在更新收藏' : favorite ? '取消收藏' : '收藏'} onClick={() => { void toggleFavorite() }}>{actionBusy === 'favorite' ? <LoaderCircle className="is-spinning" size={20} /> : <Heart size={20} fill={favorite ? 'currentColor' : 'none'} />}</FocusButton>
-              <FocusButton variant="round" className="detail-state-action" disabled={Boolean(actionBusy)} busy={actionBusy === 'watched'} active={watched} label={actionBusy === 'watched' ? '正在更新观看状态' : watched ? '标记为未看' : '标记已看'} onClick={() => { void toggleWatched() }}>{actionBusy === 'watched' ? <LoaderCircle className="is-spinning" size={21} /> : <Check size={21} />}</FocusButton>
+              <FocusButton variant="glass" disabled={!playTarget || loading} icon={<RotateCcw size={20} />} onClick={() => playTarget && onPlay(playTarget, true)}>{t("从头播放")}</FocusButton>
+              {extras[0] && <FocusButton variant="round" label={t("播放预告片")} onClick={() => onPlay(extras[0], true)}><MonitorPlay size={20} /></FocusButton>}
+              <FocusButton variant="round" className="detail-state-action" disabled={Boolean(actionBusy)} busy={actionBusy === 'favorite'} active={favorite} label={actionBusy === 'favorite' ? t("正在更新收藏") : favorite ? t("取消收藏") : t("收藏")} onClick={() => { void toggleFavorite() }}>{actionBusy === 'favorite' ? <LoaderCircle className="is-spinning" size={20} /> : <Heart size={20} fill={favorite ? 'currentColor' : 'none'} />}</FocusButton>
+              <FocusButton variant="round" className="detail-state-action" disabled={Boolean(actionBusy)} busy={actionBusy === 'watched'} active={watched} label={actionBusy === 'watched' ? t("正在更新观看状态") : watched ? t("标记为未看") : t("标记已看")} onClick={() => { void toggleWatched() }}>{actionBusy === 'watched' ? <LoaderCircle className="is-spinning" size={21} /> : <Check size={21} />}</FocusButton>
             </div>
             <div className={cx('detail-sync', error && 'is-error')} role="status">
-              {loading ? <><LoaderCircle className="is-spinning" size={16} /> 正在同步详情…</> : error ? <><Info size={16} />{error}</> : null}
+              {loading ? <><LoaderCircle className="is-spinning" size={16} />  {t("正在同步详情…")}</> : error ? <><Info size={16} />{error}</> : null}
             </div>
           </div>
         </section>
 
-        <nav className="detail-tabs" aria-label="详情内容分类">
-          {(episodes.length > 0 || loading) && <FocusButton variant="ghost" active={detailSection === 'episodes'} onClick={() => setDetailSection('episodes')}>剧集</FocusButton>}
-          {similar.length > 0 && <FocusButton variant="ghost" active={detailSection === 'similar'} onClick={() => setDetailSection('similar')}>相关推荐</FocusButton>}
-          {extras.length > 0 && <FocusButton variant="ghost" active={detailSection === 'clips'} onClick={() => setDetailSection('clips')}>额外片段</FocusButton>}
-          <FocusButton variant="ghost" active={detailSection === 'details'} onClick={() => setDetailSection('details')}>详细信息</FocusButton>
+        <nav className="detail-tabs" aria-label={t("详情内容分类")}>
+          {(episodes.length > 0 || loading) && <FocusButton variant="ghost" active={detailSection === 'episodes'} onClick={() => setDetailSection('episodes')}>{t("剧集")}</FocusButton>}
+          {similar.length > 0 && <FocusButton variant="ghost" active={detailSection === 'similar'} onClick={() => setDetailSection('similar')}>{t("相关推荐")}</FocusButton>}
+          {extras.length > 0 && <FocusButton variant="ghost" active={detailSection === 'clips'} onClick={() => setDetailSection('clips')}>{t("额外片段")}</FocusButton>}
+          <FocusButton variant="ghost" active={detailSection === 'details'} onClick={() => setDetailSection('details')}>{t("详细信息")}</FocusButton>
         </nav>
 
         <div className="detail-tab-stage">
           {detailSection === 'episodes' && (
             <section className="episode-section detail-tab-panel">
               <header className="section-heading">
-                <div><small>EPISODES</small><h2>剧集与章节{!loading && <span className="section-count">{episodes.length}</span>}</h2></div>
+                <div><small>EPISODES</small><h2>{t("剧集与章节")}{!loading && <span className="section-count">{episodes.length}</span>}</h2></div>
                 <div className="season-switcher">
                   {detail?.seasons.map((season) => <FocusButton key={season.id} variant="chip" disabled={loading} busy={loading} active={detail.selectedSeasonId === season.id} onClick={() => { onPreview(resolvedItem); onSelectSeason(season.id) }}>{season.original || season.title}</FocusButton>)}
                 </div>
               </header>
-              {loading ? <LoadingCards label="正在读取剧集…" rail /> : <div ref={episodeRailRef} className="episode-rail">
+              {loading ? <LoadingCards label={t("正在读取剧集…")} rail /> : <div ref={episodeRailRef} className="episode-rail">
                 {episodes.map((episode, index) => {
                   const episodeNumber = episode.indexNumber ?? index + 1
                   const episodeTitle = `${episodeNumber}.${episode.original || episode.title}`
@@ -1567,9 +1567,9 @@ function DetailPage({
                         <span className="episode-card__number">{String(episodeNumber).padStart(2, '0')}</span>
                         <span className="episode-card__play"><Play size={19} fill="currentColor" /></span>
                         <MediaIndicators item={episode} />
-                        {recentEpisode?.id === episode.id && <span className="episode-card__resume">看到这</span>}
+                        {recentEpisode?.id === episode.id && <span className="episode-card__resume">{t("看到这")}</span>}
                       </ArtFrame>
-                      <span className="episode-card__copy"><strong title={episodeTitle}>{episodeTitle}</strong><small>{(episode.playbackPositionTicks ?? 0) > 0 ? `已看到 ${watchedTime(episode)}` : episode.duration || episode.subtitle}</small></span>
+                      <span className="episode-card__copy"><strong title={episodeTitle}>{episodeTitle}</strong><small>{(episode.playbackPositionTicks ?? 0) > 0 ? t("已看到 {0}", { 0: watchedTime(episode) }) : episode.duration || episode.subtitle}</small></span>
                     </button>
                   )
                 })}
@@ -1579,7 +1579,7 @@ function DetailPage({
 
           {detailSection === 'similar' && (
             <section className="similar-section detail-tab-panel">
-              <header className="section-heading"><div><small>SIMILAR FREQUENCIES</small><h2>更多类似内容<span className="section-count">{similar.length}</span></h2></div></header>
+              <header className="section-heading"><div><small>SIMILAR FREQUENCIES</small><h2>{t("更多类似内容")}<span className="section-count">{similar.length}</span></h2></div></header>
               <div className="shelf__rail">
                 {similar.map((related) => <MediaCard key={related.id} item={related} wide onOpen={onOpen} onPreview={onPreview} />)}
               </div>
@@ -1588,7 +1588,7 @@ function DetailPage({
 
           {detailSection === 'clips' && (
             <section className="similar-section detail-tab-panel">
-              <header className="section-heading"><div><small>EXTRAS</small><h2>额外片段<span className="section-count">{extras.length}</span></h2></div></header>
+              <header className="section-heading"><div><small>EXTRAS</small><h2>{t("额外片段")}<span className="section-count">{extras.length}</span></h2></div></header>
               <div className="shelf__rail">
                 {extras.map((clip) => <MediaCard key={clip.id} item={clip} wide onOpen={(selectedClip) => onPlay(selectedClip, true)} onPreview={onPreview} />)}
               </div>
@@ -1598,25 +1598,25 @@ function DetailPage({
           {detailSection === 'details' && (
             <section className="details-section detail-tab-panel">
               <header className="section-heading">
-                <div><small>BEHIND THE FRAME</small><h2>详细信息</h2></div>
+                <div><small>BEHIND THE FRAME</small><h2>{t("详细信息")}</h2></div>
                 <div className="season-switcher">
-                  <FocusButton variant="chip" active={infoTab === 'credits'} onClick={() => setInfoTab('credits')}>演职与资料</FocusButton>
-                  <FocusButton variant="chip" active={infoTab === 'media'} onClick={() => setInfoTab('media')}>媒体规格</FocusButton>
+                  <FocusButton variant="chip" active={infoTab === 'credits'} onClick={() => setInfoTab('credits')}>{t("演职与资料")}</FocusButton>
+                  <FocusButton variant="chip" active={infoTab === 'media'} onClick={() => setInfoTab('media')}>{t("媒体规格")}</FocusButton>
                 </div>
               </header>
               {infoTab === 'credits' ? (
                 <div key="credits" className="info-grid glass-panel detail-info-panel">
-                  <dl><dt>导演</dt><dd>{directors.join('、') || '未提供'}</dd><dt>编剧</dt><dd>{writers.join('、') || '未提供'}</dd></dl>
-                  <dl><dt>主演</dt><dd>{actors.slice(0, 8).join('、') || '未提供'}</dd><dt>工作室</dt><dd>{resolvedItem.studios?.join('、') || '未提供'}</dd></dl>
-                  <dl><dt>加入日期</dt><dd>{premiere}</dd><dt>分类</dt><dd>{resolvedItem.kind}</dd></dl>
-                  <dl><dt>标签</dt><dd>{resolvedItem.genres?.join('、') || '未提供'}</dd><dt>路径</dt><dd>{resolvedItem.path || '未提供'}</dd></dl>
+                  <dl><dt>{t("导演")}</dt><dd>{directors.join('、') || t("未提供")}</dd><dt>{t("编剧")}</dt><dd>{writers.join('、') || t("未提供")}</dd></dl>
+                  <dl><dt>{t("主演")}</dt><dd>{actors.slice(0, 8).join('、') || t("未提供")}</dd><dt>{t("工作室")}</dt><dd>{resolvedItem.studios?.join('、') || t("未提供")}</dd></dl>
+                  <dl><dt>{t("加入日期")}</dt><dd>{premiere}</dd><dt>{t("分类")}</dt><dd>{t(resolvedItem.kind)}</dd></dl>
+                  <dl><dt>{t("标签")}</dt><dd>{resolvedItem.genres?.join('、') || t("未提供")}</dd><dt>{t("路径")}</dt><dd>{resolvedItem.path || t("未提供")}</dd></dl>
                 </div>
               ) : (
                 <div key="media" className="spec-grid glass-panel detail-info-panel">
-                  <div><MonitorPlay size={23} /><span><small>视频</small><strong>{[mediaItem.videoCodec, dimension, mediaItem.resolution].filter(Boolean).join(' · ') || '播放时由 Jellyfin 选择规格'}</strong></span></div>
-                  <div><AudioLines size={23} /><span><small>音频</small><strong>{mediaItem.audioCodec || '播放时由 Jellyfin 选择音轨'}</strong></span></div>
-                  <div><Subtitles size={23} /><span><small>字幕</small><strong>播放时可选择服务器提供的字幕轨</strong></span></div>
-                  <div><Server size={23} /><span><small>文件</small><strong>{[mediaItem.container, bitrate].filter(Boolean).join(' · ') || serverName}</strong></span></div>
+                  <div><MonitorPlay size={23} /><span><small>{t("视频")}</small><strong>{[mediaItem.videoCodec, dimension, mediaItem.resolution].filter(Boolean).join(' · ') || t("播放时由 Jellyfin 选择规格")}</strong></span></div>
+                  <div><AudioLines size={23} /><span><small>{t("音频")}</small><strong>{mediaItem.audioCodec || t("播放时由 Jellyfin 选择音轨")}</strong></span></div>
+                  <div><Subtitles size={23} /><span><small>{t("字幕")}</small><strong>{t("播放时可选择服务器提供的字幕轨")}</strong></span></div>
+                  <div><Server size={23} /><span><small>{t("文件")}</small><strong>{[mediaItem.container, bitrate].filter(Boolean).join(' · ') || serverName}</strong></span></div>
                 </div>
               )}
             </section>
@@ -1799,7 +1799,7 @@ function PlayerPage({
       .then((source) => {
         if (controller.signal.aborted) return
         const cues = parseWebVtt(source)
-        if (!cues.length) throw new Error('WebVTT 没有可显示的字幕内容')
+        if (!cues.length) throw new Error(t("WebVTT 没有可显示的字幕内容"))
         setSubtitleCues(cues)
       })
       .catch((reason: unknown) => {
@@ -1905,7 +1905,7 @@ function PlayerPage({
       if (generation !== prepareGeneration.current) return
       planRef.current = null
       setPlan(null)
-      setError(reason instanceof Error ? reason.message : '无法准备 Jellyfin 播放。')
+      setError(reason instanceof Error ? reason.message : t("无法准备 Jellyfin 播放。"))
       updateStatus('error')
       updateChrome('controls')
     }
@@ -1943,7 +1943,7 @@ function PlayerPage({
     }
 
     stopPlan(active, true)
-    setError(message || '媒体流无法播放，请返回后重试。')
+    setError(message || t("媒体流无法播放，请返回后重试。"))
     updateStatus('error')
     updateChrome('controls')
   }, [positionTicks, stopPlan, updateChrome, updateStatus])
@@ -2001,7 +2001,7 @@ function PlayerPage({
                 // Fall through to the user-visible playback failure.
               }
             }
-            failPlayback('Jellyfin HLS 媒体流已中断。')
+            failPlayback(t("Jellyfin HLS 媒体流已中断。"))
           })
           hls.attachMedia(video)
           return
@@ -2011,7 +2011,7 @@ function PlayerPage({
       video.load()
     }
     void loadSource().catch(() => {
-      if (isCurrentSource()) failPlayback('Jellyfin 媒体流无法加载。')
+      if (isCurrentSource()) failPlayback(t("Jellyfin 媒体流无法加载。"))
     })
 
     return () => {
@@ -2431,12 +2431,12 @@ function PlayerPage({
   const titleDetail = item.original && item.original !== item.title ? item.original : item.subtitle
   const episodeLabel = item.sourceType === 'Episode'
     ? `S${String(item.parentIndexNumber ?? 0).padStart(2, '0')} E${String(item.indexNumber ?? 0).padStart(2, '0')}`
-    : item.kind
+    : t(item.kind)
   const playbackMethod = plan?.playMethod === 'Transcode'
-    ? '服务器转码'
+    ? t("服务器转码")
     : plan?.playMethod === 'DirectStream'
-      ? '直接串流'
-      : '直接播放'
+      ? t("直接串流")
+      : t("直接播放")
   const formatLabel = [
     plan?.width && plan?.height ? `${plan.width}×${plan.height}` : item.resolution,
     plan?.videoCodec,
@@ -2444,8 +2444,8 @@ function PlayerPage({
   const audioTracks = plan?.audioTracks ?? []
   const subtitleTracks = plan?.subtitleTracks ?? []
   const statusLabel = {
-    preparing: '正在加载', buffering: '缓冲中', playing: '正在播放',
-    paused: '已暂停', ended: '播放结束', error: '播放中断',
+    get preparing() { return t("正在加载") }, get buffering() { return t("缓冲中") }, get playing() { return t("正在播放") },
+    get paused() { return t("已暂停") }, get ended() { return t("播放结束") }, get error() { return t("播放中断") },
   }[status]
 
   return (
@@ -2469,7 +2469,7 @@ function PlayerPage({
         onTimeUpdate={(event) => { currentRef.current = event.currentTarget.currentTime; setCurrent(event.currentTarget.currentTime) }}
         onDurationChange={(event) => Number.isFinite(event.currentTarget.duration) && setTotal(event.currentTarget.duration)}
         onEnded={handleEnded}
-        onError={() => failPlayback('浏览器无法解码当前 Jellyfin 媒体流。')}
+        onError={() => failPlayback(t("浏览器无法解码当前 Jellyfin 媒体流。"))}
       />
 
       {backdropMounted && <div className={cx('player-backdrop', hasVideoFrame && 'is-leaving')} aria-hidden="true">
@@ -2478,9 +2478,9 @@ function PlayerPage({
 
       <div className={cx('player-chrome', chrome === 'hidden' && 'is-hidden')} inert={chrome === 'hidden'} aria-hidden={chrome === 'hidden'}>
         <header className="player-topbar">
-          <FocusButton className="player-back" variant="round" sound="back" label="退出播放器" onClick={onBack}><ArrowLeft size={22} /></FocusButton>
-          <div className="player-title"><small>正在播放 · {episodeLabel}</small><strong>{item.title} <span>·</span> {titleDetail}</strong></div>
-          {plan && <div className="player-direct"><span /> {playbackMethod} <i /> {plan.transcoding ? '源格式 ' : ''}{formatLabel}</div>}
+          <FocusButton className="player-back" variant="round" sound="back" label={t("退出播放器")} onClick={onBack}><ArrowLeft size={22} /></FocusButton>
+          <div className="player-title"><small>{t("正在播放 ·")} {episodeLabel}</small><strong>{item.title} <span>·</span> {titleDetail}</strong></div>
+          {plan && <div className="player-direct"><span /> {playbackMethod} <i /> {plan.transcoding ? t("源格式 ") : ''}{formatLabel}</div>}
           <SystemClock active={chrome !== 'hidden'} />
         </header>
       </div>
@@ -2490,7 +2490,7 @@ function PlayerPage({
       {(status === 'preparing' || status === 'buffering') && (
         <div className="player-state" role="status">
           <LoaderCircle className="is-spinning" size={34} />
-          <strong>{hasVideoFrame ? '正在缓冲' : '正在加载视频'}</strong>
+          <strong>{hasVideoFrame ? t("正在缓冲") : t("正在加载视频")}</strong>
           <small>{episodeLabel} · {item.original || item.title}</small>
         </div>
       )}
@@ -2499,11 +2499,11 @@ function PlayerPage({
         <div className="player-error glass-panel" role="alert">
           <Info size={30} />
           <small>PLAYBACK INTERRUPTED</small>
-          <h2>播放暂时中断</h2>
+          <h2>{t("播放暂时中断")}</h2>
           <p>{error}</p>
           <div>
-            <FocusButton variant="primary" autoFocusTarget icon={<RefreshCw size={18} />} onClick={() => { void prepare(positionTicks(), { mediaSourceId: plan?.mediaSourceId, audioStreamIndex: plan?.audioStreamIndex, subtitleStreamIndex: plan?.subtitleStreamIndex }) }}>重新尝试</FocusButton>
-            <FocusButton variant="glass" sound="back" onClick={onBack}>返回详情</FocusButton>
+            <FocusButton variant="primary" autoFocusTarget icon={<RefreshCw size={18} />} onClick={() => { void prepare(positionTicks(), { mediaSourceId: plan?.mediaSourceId, audioStreamIndex: plan?.audioStreamIndex, subtitleStreamIndex: plan?.subtitleStreamIndex }) }}>{t("重新尝试")}</FocusButton>
+            <FocusButton variant="glass" sound="back" onClick={onBack}>{t("返回详情")}</FocusButton>
           </div>
         </div>
       )}
@@ -2512,7 +2512,7 @@ function PlayerPage({
         <div className={cx('player-volume', 'glass-panel', !volumeVisible && 'is-leaving', volume === 0 && 'is-muted')}
           role="status" aria-atomic="true" aria-hidden={!volumeVisible}>
           {volume === 0 ? <VolumeX size={24} /> : volume < 50 ? <Volume1 size={24} /> : <Volume2 size={24} />}
-          <span><small>{volume === 0 ? '已静音' : '媒体音量'}</small><strong>{volume}<em>%</em></strong></span>
+          <span><small>{volume === 0 ? t("已静音") : t("媒体音量")}</small><strong>{volume}<em>%</em></strong></span>
           <i aria-hidden="true"><b style={{ transform: `scaleX(${volume / 100})` }} /></i>
         </div>
       )}
@@ -2520,7 +2520,7 @@ function PlayerPage({
       {subtitleLoadError && (
         <div className="player-subtitle-error glass-panel" role="status">
           <Captions size={18} />
-          <span>字幕加载失败，请重新选择字幕轨</span>
+          <span>{t("字幕加载失败，请重新选择字幕轨")}</span>
         </div>
       )}
 
@@ -2530,7 +2530,7 @@ function PlayerPage({
           className={cx('seek-feedback', `seek-feedback--${feedback.direction}`)}
           role="status"
           aria-live="polite"
-          aria-label={`${feedback.direction === 'forward' ? '快进' : '快退'} ${feedback.seconds} 秒`}
+          aria-label={t("{0} {1} 秒", { 0: feedback.direction === 'forward' ? t("快进") : t("快退"), 1: feedback.seconds })}
         >
           <div className="seek-feedback__field" aria-hidden="true"><i /><i /><i /></div>
           <div className="seek-feedback__content">
@@ -2538,8 +2538,8 @@ function PlayerPage({
               {feedback.direction === 'forward' ? <FastForward size={42} /> : <Rewind size={42} />}
             </span>
             <span className="seek-feedback__copy">
-              <small>{feedback.direction === 'forward' ? '快进' : '快退'}</small>
-              <strong>{feedback.seconds} <em>秒</em></strong>
+              <small>{feedback.direction === 'forward' ? t("快进") : t("快退")}</small>
+              <strong>{feedback.seconds} <em>{t("秒")}</em></strong>
               <b>{formatTime(current)}</b>
             </span>
           </div>
@@ -2551,11 +2551,11 @@ function PlayerPage({
       <div ref={bottomChromeRef} className={cx('player-chrome player-chrome--bottom', !controls && 'is-hidden')} inert={!controls} aria-hidden={!controls}>
         {panel && controls && (
           <aside ref={trackPanelRef} className="track-panel glass-panel" role="dialog" aria-modal="true" aria-labelledby="track-panel-title">
-            <header><div><small>PLAYBACK OPTIONS</small><h2 id="track-panel-title">{panel === 'audio' ? '选择音轨' : '选择字幕'}</h2></div><FocusButton className="track-panel__close" variant="round" sound="close" label="关闭面板" onClick={() => closeTrackPanel()}><X size={20} /></FocusButton></header>
+            <header><div><small>PLAYBACK OPTIONS</small><h2 id="track-panel-title">{panel === 'audio' ? t("选择音轨") : t("选择字幕")}</h2></div><FocusButton className="track-panel__close" variant="round" sound="close" label={t("关闭面板")} onClick={() => closeTrackPanel()}><X size={20} /></FocusButton></header>
             <div className="track-list">
               {(panel === 'audio'
                 ? audioTracks
-                : [{ index: -1, label: '关闭字幕', language: '', codec: '', default: false, forced: false, external: false, text: true }, ...subtitleTracks]
+                : [{ index: -1, get label() { return t("关闭字幕") }, language: '', codec: '', default: false, forced: false, external: false, text: true }, ...subtitleTracks]
               ).map((track) => {
                 const selected = panel === 'audio'
                   ? plan?.audioStreamIndex === track.index
@@ -2568,29 +2568,29 @@ function PlayerPage({
         <section className="player-controls glass-panel">
           <div className="player-progress" style={{ '--played': `${progress}%` } as CSSProperties}>
             <span className="player-progress__time">{formatTime(current)}</span>
-            <button type="button" data-focusable="true" aria-label="播放进度，左右滑动调整十秒，手机顺时针快进、逆时针快退，转得越快调整越多，单击播放或暂停" className="player-progress__bar" onClick={() => { togglePlayback(); reveal() }}><i><b /></i></button>
+            <button type="button" data-focusable="true" aria-label={t("播放进度，左右滑动调整十秒，手机顺时针快进、逆时针快退，转得越快调整越多，单击播放或暂停")} className="player-progress__bar" onClick={() => { togglePlayback(); reveal() }}><i><b /></i></button>
             <span className="player-progress__time">{formatTime(total)}</span>
           </div>
           <div className="player-control-row">
             <div className="player-control-group">
-              <FocusButton variant="round" disabled={!previousItem} label="上一集" onClick={() => previousItem && onPlayItem(previousItem, true)}><SkipBack size={21} /></FocusButton>
-              <FocusButton variant="round" label="后退十秒" onClick={() => seek(-10)}><RotateCcw size={22} /></FocusButton>
-              <FocusButton variant="round" disabled={status === 'preparing'} className="player-play" autoFocusTarget label={playing ? '暂停' : status === 'ended' ? '重新播放' : '播放'} onClick={() => { togglePlayback(); reveal() }}>{playing ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" />}</FocusButton>
-              <FocusButton variant="round" label="前进十秒" onClick={() => seek(10)}><FastForward size={22} /></FocusButton>
-              <FocusButton variant="round" disabled={!nextItem} label="下一集" onClick={() => nextItem && onPlayItem(nextItem, true)}><SkipForward size={21} /></FocusButton>
+              <FocusButton variant="round" disabled={!previousItem} label={t("上一集")} onClick={() => previousItem && onPlayItem(previousItem, true)}><SkipBack size={21} /></FocusButton>
+              <FocusButton variant="round" label={t("后退十秒")} onClick={() => seek(-10)}><RotateCcw size={22} /></FocusButton>
+              <FocusButton variant="round" disabled={status === 'preparing'} className="player-play" autoFocusTarget label={playing ? t("暂停") : status === 'ended' ? t("重新播放") : t("播放")} onClick={() => { togglePlayback(); reveal() }}>{playing ? <Pause size={26} fill="currentColor" /> : <Play size={26} fill="currentColor" />}</FocusButton>
+              <FocusButton variant="round" label={t("前进十秒")} onClick={() => seek(10)}><FastForward size={22} /></FocusButton>
+              <FocusButton variant="round" disabled={!nextItem} label={t("下一集")} onClick={() => nextItem && onPlayItem(nextItem, true)}><SkipForward size={21} /></FocusButton>
             </div>
             <div className="player-now"><span className={cx('playing-bars', !playing && 'is-paused')}><i /><i /><i /></span><div><small>{statusLabel}</small><strong>{titleDetail}</strong></div></div>
             <div className="player-control-group player-control-group--right">
-              <FocusButton sound={panel === 'audio' ? 'close' : 'open'} className="player-track-trigger--audio" variant="round" label="音轨" disabled={!audioTracks.length || status === 'preparing'} active={panel === 'audio'} onClick={() => toggleTrackPanel('audio')}><AudioLines size={21} /></FocusButton>
-              <FocusButton sound={panel === 'subtitles' ? 'close' : 'open'} className="player-track-trigger--subtitles" variant="round" label="字幕" disabled={!subtitleTracks.length || status === 'preparing'} active={panel === 'subtitles'} onClick={() => toggleTrackPanel('subtitles')}><Captions size={21} /></FocusButton>
-              <FocusButton sound={infoVisible ? 'toggle-off' : 'toggle-on'} className="player-info-trigger" variant="round" label="视频信息" active={infoVisible} onClick={() => { onToggleInfo(); reveal() }}><Info size={21} /></FocusButton>
+              <FocusButton sound={panel === 'audio' ? 'close' : 'open'} className="player-track-trigger--audio" variant="round" label={t("音轨")} disabled={!audioTracks.length || status === 'preparing'} active={panel === 'audio'} onClick={() => toggleTrackPanel('audio')}><AudioLines size={21} /></FocusButton>
+              <FocusButton sound={panel === 'subtitles' ? 'close' : 'open'} className="player-track-trigger--subtitles" variant="round" label={t("字幕")} disabled={!subtitleTracks.length || status === 'preparing'} active={panel === 'subtitles'} onClick={() => toggleTrackPanel('subtitles')}><Captions size={21} /></FocusButton>
+              <FocusButton sound={infoVisible ? 'toggle-off' : 'toggle-on'} className="player-info-trigger" variant="round" label={t("视频信息")} active={infoVisible} onClick={() => { onToggleInfo(); reveal() }}><Info size={21} /></FocusButton>
             </div>
           </div>
-          <div className="player-hints" aria-label="手机触控板手势">
-            <span><MoveHorizontal size={17} aria-hidden="true" /><b>进度条聚焦</b> 环形转动变速调整 · 左右滑动 10 秒</span>
-            <span><MoveVertical size={17} aria-hidden="true" /><b>上下滑动</b> 进度条上滑收起 · 再上滑返回按钮</span>
-            <span><Pointer size={17} aria-hidden="true" /><b>单击</b> 确认 / 播放暂停</span>
-            <span><RotateCcw size={17} aria-hidden="true" /><b>双击</b> {panel ? '关闭选项' : '返回详情'}</span>
+          <div className="player-hints" aria-label={t("手机触控板手势")}>
+            <span><MoveHorizontal size={17} aria-hidden="true" /><b>{t("进度条聚焦")}</b>  {t("环形转动变速调整 · 左右滑动 10 秒")}</span>
+            <span><MoveVertical size={17} aria-hidden="true" /><b>{t("上下滑动")}</b>  {t("进度条上滑收起 · 再上滑返回按钮")}</span>
+            <span><Pointer size={17} aria-hidden="true" /><b>{t("单击")}</b>  {t("确认 / 播放暂停")}</span>
+            <span><RotateCcw size={17} aria-hidden="true" /><b>{t("双击")}</b> {panel ? t("关闭选项") : t("返回详情")}</span>
           </div>
         </section>
       </div>
@@ -2602,10 +2602,10 @@ function PlayerPage({
 function RemoteHint({ dark = false }: { dark?: boolean }) {
   return (
     <div className={cx('remote-hint', dark && 'remote-hint--dark')}>
-      <span><Move size={16} aria-hidden="true" /> 滑动移动</span>
-      <span><Pointer size={16} aria-hidden="true" /> 单击确认</span>
-      <span><RotateCcw size={16} aria-hidden="true" /> 双击返回</span>
-      {import.meta.env.DEV && <span className="remote-hint__demo">1–5 页面预览</span>}
+      <span><Move size={16} aria-hidden="true" />  {t("滑动移动")}</span>
+      <span><Pointer size={16} aria-hidden="true" />  {t("单击确认")}</span>
+      <span><RotateCcw size={16} aria-hidden="true" />  {t("双击返回")}</span>
+      {import.meta.env.DEV && <span className="remote-hint__demo">{t("1–5 页面预览")}</span>}
     </div>
   )
 }
@@ -2623,15 +2623,15 @@ function RuntimeGate({
 }) {
   const busy = status === 'booting' || status === 'loading'
   const title = status === 'no-session'
-    ? '请在手机端登录 Jellyfin'
+    ? t("请在手机端登录 Jellyfin")
     : status === 'error'
-      ? '媒体库连接失败'
-      : '正在点亮你的媒体库'
+      ? t("媒体库连接失败")
+      : t("正在点亮你的媒体库")
   const description = status === 'no-session'
-    ? '眼镜画面已经就绪。请使用手机端完成账号登录，媒体内容会自动出现在这里。'
+    ? t("眼镜画面已经就绪。请使用手机端完成账号登录，媒体内容会自动出现在这里。")
     : status === 'error'
-      ? error || '无法读取 Jellyfin 数据，请检查手机端登录状态与服务器网络。'
-      : '正在读取媒体库、观看进度与收藏状态。'
+      ? error || t("无法读取 Jellyfin 数据，请检查手机端登录状态与服务器网络。")
+      : t("正在读取媒体库、观看进度与收藏状态。")
 
   return (
     <div className="runtime-gate page-enter">
@@ -2645,9 +2645,9 @@ function RuntimeGate({
         <h1>{title}</h1>
         <p>{description}</p>
         {!busy && status === 'error' && (
-          <FocusButton variant="primary" autoFocusTarget icon={<RefreshCw size={20} />} onClick={onRetry}>重新连接</FocusButton>
+          <FocusButton variant="primary" autoFocusTarget icon={<RefreshCw size={20} />} onClick={onRetry}>{t("重新连接")}</FocusButton>
         )}
-        {status === 'no-session' && <div className="runtime-gate__signal"><span /> 手机端登录完成后自动刷新</div>}
+        {status === 'no-session' && <div className="runtime-gate__signal"><span />  {t("手机端登录完成后自动刷新")}</div>}
       </main>
       <RemoteHint dark />
     </div>
@@ -2655,6 +2655,7 @@ function RuntimeGate({
 }
 
 export default function App() {
+  useLanguage()
   const jellyfin = useJellyfin()
   const uiTheme = normalizeUiTheme(jellyfin.runtime?.uiTheme ?? document.documentElement.dataset.uiTheme)
   const simpleUi = uiTheme === 'simpleUI'
@@ -2696,7 +2697,7 @@ export default function App() {
   const serverName = jellyfin.runtime?.session?.serverName
     || jellyfin.runtime?.session?.serverUrl.replace(/^https?:\/\//i, '')
     || 'Jellyfin'
-  const userName = jellyfin.runtime?.session?.userName || 'Jellyfin 用户'
+  const userName = jellyfin.runtime?.session?.userName || t("Jellyfin 用户")
   const searchSessionKey = jellyfin.runtime?.session
     ? `${jellyfin.runtime.session.serverUrl}\n${jellyfin.runtime.session.userId}\n${jellyfin.runtime.session.accessToken}`
     : ''
@@ -2843,7 +2844,7 @@ export default function App() {
       setBackdropItem(next.item)
     }).catch((reason) => {
       if (generation !== detailGeneration.current) return
-      setDetailError(reason instanceof Error ? reason.message : '详情加载失败。')
+      setDetailError(reason instanceof Error ? reason.message : t("详情加载失败。"))
     }).finally(() => {
       if (generation === detailGeneration.current) setDetailLoading(false)
     })
@@ -2907,10 +2908,10 @@ export default function App() {
   }, [])
 
   const changeUiTheme = (value: UiTheme) => {
-    if (!requestUiPreference({ type: 'set_ui_theme', value }, jellyfin.runtime)) showToast('设置未能保存，请重试', 'error')
+    if (!requestUiPreference({ type: 'set_ui_theme', value }, jellyfin.runtime)) showToast(t("设置未能保存，请重试"), 'error')
   }
   const changeSubtitleSize = (value: SubtitleSize) => {
-    if (!requestUiPreference({ type: 'set_subtitle_size', value }, jellyfin.runtime)) showToast('设置未能保存，请重试', 'error')
+    if (!requestUiPreference({ type: 'set_subtitle_size', value }, jellyfin.runtime)) showToast(t("设置未能保存，请重试"), 'error')
   }
   const closeSettings = useCallback(() => {
     restoreSettingsFocus.current = true
@@ -2919,13 +2920,13 @@ export default function App() {
 
   const refreshLibrary = useCallback(() => {
     void jellyfin.refresh().then((succeeded) => {
-      showToast(succeeded ? '媒体库已刷新' : '刷新失败，请检查 Jellyfin 服务器', succeeded ? 'success' : 'error')
+      showToast(succeeded ? t("媒体库已刷新") : t("刷新失败，请检查 Jellyfin 服务器"), succeeded ? 'success' : 'error')
     })
   }, [jellyfin.refresh, showToast])
 
   const manageLogin = useCallback(() => {
     postNativeMessage({ type: 'manage_login' })
-    showToast('请在手机端管理 Jellyfin 登录')
+    showToast(t("请在手机端管理 Jellyfin 登录"))
   }, [showToast])
 
   const openItem = useCallback((item: MediaItem) => {
@@ -2971,7 +2972,7 @@ export default function App() {
       if (generation === detailGeneration.current) setDetail(next)
     }).catch((reason) => {
       if (generation === detailGeneration.current) {
-        setDetailError(reason instanceof Error ? reason.message : '剧集加载失败。')
+        setDetailError(reason instanceof Error ? reason.message : t("剧集加载失败。"))
       }
     }).finally(() => {
       if (generation === detailGeneration.current) setDetailLoading(false)
@@ -3048,7 +3049,7 @@ export default function App() {
         } else if (page === 'settings') {
           closeSettings()
         } else if (page === 'browse') {
-          document.querySelector<HTMLButtonElement>('.breadcrumbs button[aria-label="返回上一级"]')?.click()
+          document.querySelector<HTMLButtonElement>('.breadcrumbs .browse-back')?.click()
         } else if (page === 'search') {
           const active = currentSpatialFocus()
           const searchPage = active?.closest<HTMLElement>('.series-search-page')
@@ -3136,8 +3137,8 @@ export default function App() {
     if (page === 'settings') return <div className="settings-page page-enter">
       <PageHeader active="settings" serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={navigateFromMenu} onRefresh={refreshLibrary} onExit={manageLogin} />
       <main className="glasses-settings-page">
-        <FocusButton variant="ghost" sound="back" icon={<ArrowLeft size={21} />} onClick={closeSettings}>返回</FocusButton>
-        <GlassesSettings theme={uiTheme} subtitleSize={subtitleSize} onThemeChange={changeUiTheme} onSubtitleSizeChange={changeSubtitleSize} />
+        <FocusButton variant="ghost" sound="back" icon={<ArrowLeft size={21} />} onClick={closeSettings}>{t("返回")}</FocusButton>
+        <GlassesSettings onLanguageChange={language => { if (!requestUiPreference({ type: 'set_language', value: language }, jellyfin.runtime)) showToast(t('设置未能保存，请重试'), 'error') }} theme={uiTheme} subtitleSize={subtitleSize} onThemeChange={changeUiTheme} onSubtitleSizeChange={changeSubtitleSize} />
       </main>
       <RemoteHint />
     </div>
@@ -3151,7 +3152,7 @@ export default function App() {
         : jellyfin.seriesIndex.length ? jellyfin.seriesIndex : fallbackSeries
       return <SearchPage series={searchableSeries} indexStatus={jellyfin.seriesIndexStatus} prioritySeriesIds={searchPrioritySeriesIds} query={searchQuery} focusPane={searchPane} keyboardMode={searchKeyboardMode} keyboardFocusId={searchKeyboardFocusId} resultFocusId={searchResultFocusId} phoneKeyboardState={phoneKeyboardState} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onQueryChange={setSearchQuery} onKeyboardModeChange={setSearchKeyboardMode} onKeyboardFocus={(id) => { setSearchPane('keyboard'); setSearchKeyboardFocusId(id) }} onResultFocus={(id) => { setSearchPane('results'); setSearchResultFocusId(id) }} onNavigate={navigateFromMenu} onOpen={openSearchSeries} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     }
-    if (page === 'detail') return <DetailPage key={selected.id} item={selected} detail={detail} loading={detailLoading} error={detailError} initialEpisodeNumber={searchEpisodeHint?.seriesId === selected.id ? searchEpisodeHint.episode : undefined} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigateFromMenu(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? '已加入收藏' : '已取消收藏', 'success'); return saved } catch { showToast('收藏状态更新失败，请重试', 'error'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? '已标记为看过' : '已标记为未看', 'success'); return saved } catch { showToast('观看状态更新失败，请重试', 'error'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
+    if (page === 'detail') return <DetailPage key={selected.id} item={selected} detail={detail} loading={detailLoading} error={detailError} initialEpisodeNumber={searchEpisodeHint?.seriesId === selected.id ? searchEpisodeHint.episode : undefined} serverName={serverName} userName={userName} refreshing={jellyfin.refreshing} onNavigate={(next) => next === 'home' ? goBack() : navigateFromMenu(next)} onPlay={playItem} onSelectSeason={selectSeason} onToggleFavorite={async (target, favorite) => { try { const saved = await jellyfin.setFavorite(target, favorite); if (saved) showToast(favorite ? t("已加入收藏") : t("已取消收藏"), 'success'); return saved } catch { showToast(t("收藏状态更新失败，请重试"), 'error'); return false } }} onToggleWatched={async (target, watched) => { try { const saved = await jellyfin.setPlayed(target, watched); if (saved) showToast(watched ? t("已标记为看过") : t("已标记为未看"), 'success'); return saved } catch { showToast(t("观看状态更新失败，请重试"), 'error'); return false } }} onOpen={openItem} onPreview={setBackdropItem} onRefresh={refreshLibrary} onExit={manageLogin} />
     const request = playback ?? {
       item: selected.canPlay
         ? selected

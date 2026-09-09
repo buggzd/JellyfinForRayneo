@@ -1,3 +1,4 @@
+import { t } from '../../SharedUI/i18n.mjs'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MediaItem } from './data'
 import {
@@ -23,7 +24,7 @@ function patchCatalogItem(
   itemId: string,
   values: Partial<MediaItem>,
 ) {
-  const patch = (item: MediaItem) => item.id === itemId ? { ...item, ...values } : item
+  const patch = (item: MediaItem) => item.id === itemId ? { ...item, ...values, get subtitle() { return item.subtitle }, get duration() { return item.duration } } : item
   return {
     ...snapshot,
     featured: patch(snapshot.featured),
@@ -176,7 +177,7 @@ export function useJellyfin() {
   }, [catalogGeneration, client, loadSeriesIndex])
 
   const loadDetail = useCallback(async (itemId: string, seasonId?: string) => {
-    if (!client) throw new Error('Jellyfin 会话不可用。')
+    if (!client) throw new Error(t("Jellyfin 会话不可用。"))
     return client.loadDetail(itemId, seasonId)
   }, [client])
 
@@ -228,7 +229,7 @@ export function useJellyfin() {
     startPositionTicks: number,
     selection?: PlaybackSelection,
   ) => {
-    if (!client) throw new Error('Jellyfin 会话不可用。')
+    if (!client) throw new Error(t("Jellyfin 会话不可用。"))
     return client.preparePlayback(item, startPositionTicks, selection)
   }, [client])
 

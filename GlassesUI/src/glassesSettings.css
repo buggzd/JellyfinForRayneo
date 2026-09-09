@@ -75,3 +75,22 @@
   .subtitle-size-options { gap: 7px; }
 }
 @media (max-width: 850px) { .glasses-settings-grid { grid-template-columns: 1fr; } }
+
+.glasses-language-setting {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-block: 18px;
+}
+.glasses-language-setting > header { margin-bottom: 0; }
+.glasses-language-setting .language-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(52%, 560px);
+  margin-top: 0;
+}
+@media (max-width: 850px) {
+  .glasses-language-setting { flex-direction: column; align-items: stretch; }
+  .glasses-language-setting .language-options { width: 100%; }
+}

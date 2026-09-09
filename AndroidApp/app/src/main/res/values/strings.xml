@@ -1,3 +1,15 @@
 <resources>
-    <string name="app_name">tachi（塔奇）</string>
+    <string name="app_name">tachi</string>
+    <string name="choose_phone_wallpaper">"Choose phone wallpaper"</string>
+    <string name="image_picker_unavailable">"Could not open the image picker"</string>
+    <string name="image_read_failed">"Could not read this image. Choose another."</string>
+    <string name="wallpaper_updated">"Phone wallpaper updated"</string>
+    <string name="wallpaper_save_failed">"Could not save image. Choose a JPG, PNG or WebP under 20 MB."</string>
+    <string name="wallpaper_remove_failed">"Could not remove wallpaper. Try again."</string>
+    <string name="quick_connect_copied">"Quick Connect code copied"</string>
+    <string name="authorization_page_unavailable">"Cannot open authorization page. Approve manually in the Jellyfin app."</string>
+    <string name="diagnostics_subject_suffix">" diagnostics"</string>
+    <string name="share_redacted_diagnostics">"Share redacted diagnostics"</string>
+    <string name="share_app_unavailable">"No app is available to share diagnostics."</string>
+    <string name="browser_unavailable">"No browser found to open this link"</string>
 </resources>

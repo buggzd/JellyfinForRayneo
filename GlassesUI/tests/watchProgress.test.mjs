@@ -1,3 +1,4 @@
+import { resolveI18nImport } from './i18n-test-helper.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
@@ -5,7 +6,7 @@ import { transformWithEsbuild } from 'vite'
 
 const moduleUrl = async (name, replace = value => value) => {
   const { code } = await transformWithEsbuild(await readFile(new URL(`../src/${name}.ts`, import.meta.url), 'utf8'), `${name}.ts`, { target: 'es2022' })
-  return `data:text/javascript;base64,${Buffer.from(replace(code)).toString('base64')}`
+  return `data:text/javascript;base64,${Buffer.from(resolveI18nImport(replace(code))).toString('base64')}`
 }
 const progressUrl = await moduleUrl('watchProgress')
 const { WatchProgress, latestWatchedEpisode, resumeProgress, watchedTime } = await import(progressUrl)
@@ -125,4 +126,22 @@ test('server completion at its watched threshold takes precedence over a partial
   history.record(item, ticks(1450), ticks(1500))
   assert.equal(history.patch({ ...item, watched: true }).watched, true)
   assert.equal(history.patch(item).watched, false)
+})
+
+test('switching language reformats generated metadata while retaining server text and watch progress', async () => {
+  const { applyLanguage } = await import('../../SharedUI/i18n.mjs')
+  const client = new JellyfinClient({ serverUrl: 'https://media.example.invalid', accessToken: 'fixture', userId: 'user', deviceId: 'test' })
+  const item = client.mapItem({ Id: 'localized', Type: 'Movie', Name: '设置', Overview: 'An original synopsis.', RunTimeTicks: 36000000000 })
+  const progress = new WatchProgress()
+  progress.record(item, 100000000, item.runtimeTicks)
+  const patched = progress.patch(item)
+  try {
+    applyLanguage('en')
+    assert.equal(patched.title, '设置')
+    assert.equal(patched.overview, 'An original synopsis.')
+    assert.equal(patched.duration, '1 h')
+    applyLanguage('zh-CN')
+    assert.equal(patched.duration, '1 小时')
+    assert.equal(patched.playbackPositionTicks, 100000000)
+  } finally { applyLanguage('zh-CN') }
 })

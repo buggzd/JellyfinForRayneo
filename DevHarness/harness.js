@@ -66,6 +66,8 @@ const companionState = {
   touchpadBackground: touchpadBackgroundChoice || (readUiTheme() === 'simpleUI' ? 'black' : 'texture'),
   companionGlassTransparency: readGlassTransparency(),
   subtitleSize: readSubtitleSize(),
+  language: readLanguage(),
+  systemLanguage: globalThis.navigator?.language ?? 'en',
   activeDisplayMode: 'mirror_2d',
   displayModeApplied: true,
   displayModeTransitioning: false,
@@ -151,6 +153,21 @@ function readSubtitleSize() {
     const value = window.localStorage.getItem('jellyfin-rayneo-preview-subtitle-size')
     return ['small', 'normal', 'large', 'extra-large'].includes(value) ? value : 'normal'
   } catch { return 'normal' }
+}
+
+function readLanguage() {
+  try {
+    const value = window.localStorage.getItem('tachi-preview-language')
+    return ['system', 'zh-CN', 'en'].includes(value) ? value : 'system'
+  } catch { return 'system' }
+}
+
+function setLanguage(value) {
+  if (!['system', 'zh-CN', 'en'].includes(value)) return
+  companionState.language = value
+  try { window.localStorage.setItem('tachi-preview-language', value) } catch { /* Keep preview usable. */ }
+  publishCompanionState()
+  publishGlassesBootstrap()
 }
 
 function setAppearancePreference(kind, value) {
@@ -274,6 +291,8 @@ function publishGlassesBootstrap() {
     displayMode: companionState.displayMode,
     uiTheme: companionState.uiTheme,
     subtitleSize: companionState.subtitleSize,
+    language: companionState.language,
+    systemLanguage: companionState.systemLanguage,
     glassesConnected: true,
     catalogGeneration,
     session,
@@ -701,6 +720,9 @@ function handleCompanionCall(payload) {
     case 'selectUiTheme':
       setAppearancePreference('uiTheme', args[0])
       break
+    case 'selectLanguage':
+      setLanguage(args[0])
+      break
     case 'selectSubtitleSize':
       setAppearancePreference('subtitleSize', args[0])
       break
@@ -843,6 +865,10 @@ function handleGlassesMessage(payload) {
     if (JSON.stringify(payload).length > 8192) return
   } catch { return }
   const type = boundedText(payload.type, 32).toLowerCase()
+  if (type === 'set_language') {
+    setLanguage(payload.value)
+    return
+  }
   if (type === 'set_ui_theme' || type === 'set_subtitle_size') {
     setAppearancePreference(type === 'set_ui_theme' ? 'uiTheme' : 'subtitleSize', payload.value)
     return

@@ -22,6 +22,7 @@ const glassesMessageTypes = new Set([
   'search_state',
   'set_ui_theme',
   'set_subtitle_size',
+  'set_language',
 ])
 
 type BridgeMessage = {
@@ -37,6 +38,8 @@ const initialBootstrap = {
   displayMode: 'mirror_2d',
   uiTheme: 'liquid-glass',
   subtitleSize: 'normal',
+  language: 'system',
+  systemLanguage: navigator.language,
   glassesConnected: true,
   catalogGeneration: 0,
   session: null,

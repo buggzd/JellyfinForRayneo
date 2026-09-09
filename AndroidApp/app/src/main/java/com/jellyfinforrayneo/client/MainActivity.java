@@ -260,7 +260,7 @@ public final class MainActivity extends Activity
                             }
                         }));
 
-        companionBackground = new CompanionBackground(this, this::onCompanionBackgroundChanged);
+        companionBackground = new CompanionBackground(this, this::onCompanionBackgroundChanged, this::localizeMessage);
         lastCompanionBackgroundUrl = companionBackground.getUrl();
         companionWebView = new CompanionWebViewController(
                 this,
@@ -570,6 +570,9 @@ public final class MainActivity extends Activity
             case SET_UI_THEME:
                 applyUiThemePreference(incoming.preferenceValue);
                 break;
+            case SET_LANGUAGE:
+                applyLanguagePreference(incoming.preferenceValue);
+                break;
             case SET_SUBTITLE_SIZE:
                 applySubtitleSizePreference(incoming.preferenceValue);
                 break;
@@ -675,6 +678,38 @@ public final class MainActivity extends Activity
         pushCompanionState();
     }
 
+    private String localizeMessage(String message)
+    {
+        return UiStrings.text(this, sessions == null ? UiLanguage.DEFAULT : sessions.getLanguage(), message);
+    }
+
+    private String systemLanguage()
+    {
+        return getResources().getConfiguration().getLocales().get(0).toLanguageTag();
+    }
+
+    private void applyLanguagePreference(String language)
+    {
+        if (destroyed || !UiLanguage.isValid(language))
+        {
+            return;
+        }
+        sessions.setLanguage(language);
+        glassesPresentation.refreshBootstrap();
+        pushCompanionState();
+    }
+
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration configuration)
+    {
+        super.onConfigurationChanged(configuration);
+        if (sessions != null && glassesPresentation != null)
+        {
+            glassesPresentation.refreshBootstrap();
+            pushCompanionState();
+        }
+    }
+
     private void applySubtitleSizePreference(String size)
     {
         if (destroyed || !SubtitleSize.isValid(size))
@@ -700,6 +735,8 @@ public final class MainActivity extends Activity
             result.put("catalogGeneration", glassesCatalogGeneration);
             result.put("uiTheme", sessions == null ? UiTheme.DEFAULT : sessions.getUiTheme());
             result.put("subtitleSize", sessions == null ? SubtitleSize.DEFAULT : sessions.getSubtitleSize());
+            result.put("language", sessions == null ? UiLanguage.DEFAULT : sessions.getLanguage());
+            result.put("systemLanguage", systemLanguage());
             SessionPayload session = sessions == null ? null : sessions.getSession();
             result.put("session", session == null ? JSONObject.NULL : session.toJsonObject());
         }
@@ -762,6 +799,8 @@ public final class MainActivity extends Activity
             result.put("uiTheme", sessions.getUiTheme());
             result.put("touchpadBackground", sessions.getTouchpadBackground());
             result.put("subtitleSize", sessions.getSubtitleSize());
+            result.put("language", sessions.getLanguage());
+            result.put("systemLanguage", systemLanguage());
             result.put("stereoOutput", glassesPresentation == null
                     ? DisplayOutputGeometry.EMPTY.toJson() : glassesPresentation.getOutputGeometry().toJson());
             result.put("stereoTestPattern", glassesPresentation != null
@@ -856,7 +895,7 @@ public final class MainActivity extends Activity
         {
             clipboard.setPrimaryClip(
                     ClipData.newPlainText("Jellyfin Quick Connect", quickConnectCode));
-            Toast.makeText(this, "快速登录码已复制", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, localizeMessage("快速登录码已复制"), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -877,7 +916,7 @@ public final class MainActivity extends Activity
         {
             Toast.makeText(
                     this,
-                    "无法打开授权页，请在 Jellyfin App 中手动授权。",
+                    localizeMessage("无法打开授权页，请在 Jellyfin App 中手动授权。"),
                     Toast.LENGTH_LONG).show();
         }
     }
@@ -887,15 +926,15 @@ public final class MainActivity extends Activity
         diagnosticLog.record(DiagnosticLog.Event.DIAGNOSTICS_SHARED);
         Intent share = new Intent(Intent.ACTION_SEND);
         share.setType("text/plain");
-        share.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.app_name) + " 诊断日志");
+        share.putExtra(Intent.EXTRA_SUBJECT, "tachi" + localizeMessage(" 诊断日志"));
         share.putExtra(Intent.EXTRA_TEXT, buildDiagnosticReport());
         try
         {
-            startActivity(Intent.createChooser(share, "分享已脱敏诊断日志"));
+            startActivity(Intent.createChooser(share, localizeMessage("分享已脱敏诊断日志")));
         }
         catch (RuntimeException exception)
         {
-            Toast.makeText(this, "没有可接收诊断日志的分享应用。", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, localizeMessage("没有可接收诊断日志的分享应用。"), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -1361,7 +1400,7 @@ public final class MainActivity extends Activity
                     }
                     catch (RuntimeException ignored)
                     {
-                        Toast.makeText(MainActivity.this, "未找到可打开链接的浏览器", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, localizeMessage("未找到可打开链接的浏览器"), Toast.LENGTH_SHORT).show();
                     }
                 }
             });
@@ -1588,6 +1627,16 @@ public final class MainActivity extends Activity
                 return;
             }
             runOnUiThread(() -> applyUiThemePreference(theme));
+        }
+
+        @JavascriptInterface
+        public void selectLanguage(String language)
+        {
+            if (!UiLanguage.isValid(language))
+            {
+                return;
+            }
+            runOnUiThread(() -> applyLanguagePreference(language));
         }
 
         @JavascriptInterface

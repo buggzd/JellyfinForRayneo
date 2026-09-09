@@ -117,6 +117,7 @@ length-limited, and whitelisted before use.
 | `setCompanionBackgroundLayout` | Save bounded crop/transparency metadata for the current image revision from settings; publish phone state only |
 | `setCompanionGlassTransparency` | Save an integer 0–100 glass transparency from settings, independently of wallpaper; publish phone state only |
 | `openProjectPage` | Open only the fixed public project, issue list or guide page in the system browser |
+| `selectLanguage` | Persist exactly `system`, `zh-CN` or `en` and publish language/system locale to both surfaces without reloading either WebView |
 | `selectSubtitleSize` | Persist exactly `small`, `normal`, `large`, or `extra-large` and publish it to both surfaces |
 | `setStereoScreen` | Save a bounded flat-screen disparity/size preference without switching hardware mode |
 | `setStereoTestPattern` | Enable/disable the temporary L/R reference overlay while stereo is applied |
@@ -151,7 +152,7 @@ keeps a glasses-side failure visible so field testing does not require ADB.
 
 Accepted glasses messages are `manage_login`, `logout`, `unauthorized`,
 `runtime_state`, `playback_state`, `search_state`, `set_ui_theme`, and
-`set_subtitle_size`. Appearance messages accept only an exact whitelisted string
+`set_subtitle_size`, and `set_language`. Appearance messages accept only an exact whitelisted string
 in `value`, with no coercion, trimming, or arbitrary style payload. The whole message and
 every individual field have fixed limits. `search_state` carries only
 `active`/`inactive` plus the bounded ASCII query; leaving search, logout, a lost
@@ -161,7 +162,8 @@ volume percentage, bounded `seek` deltas, bounded `search-text`, search submit, 
 signals; the pending queue holds at most 32 items.
 
 `runtime_state.errorCode` accepts only `none`, `network`, `http`, `response`, or
-`unknown`. Android maps those categories to fixed Chinese diagnostics and never
+`unknown`. Android maps those categories to fixed diagnostic source messages, localized by the
+phone UI, and never
 forwards a Jellyfin response body, URL, token, or arbitrary exception text to
 the phone. A `loading` or `ready` transition clears an older runtime error.
 
@@ -612,6 +614,7 @@ minimum device regression set for any device-facing change.
 | Eye reference overlay | Close each eye alternately; compare baseline and increased disparity; leave settings, switch mode, disconnect, logout and kill renderer | Left eye sees L, right sees R; cyan plane moves closer relative to white reference, no persistent overlay after exit/recovery |
 | Stereo video composition | Moving frame-number video with DOM controls and text subtitles in both modes, while changing depth/size | Both eyes receive the same frame, video/subtitles/DOM receive identical transforms, no frozen video, duplicate sound/reporting, clipped edge or cross-eye leakage |
 | Browse and focus | Home, search, filters, folders, details, long lists, dialogs, remote back; partial episode exit, short session, multiple unfinished episodes, cross-season resume, first downward episode entry in both themes | Exactly one visible spatial focus target exists and overlays prevent background input |
+| UI language | Chinese/English system, manual override, both surfaces, cold start/logout/reset, system locale change, renderer recovery and direct/HLS playback in 2D/SBS | Saved language agrees across surfaces; server metadata and subtitle content remain unchanged; no catalog reload, session switch, lost focus or duplicate WebView/video/audio/reporting |
 | UI themes | Default install, saved simpleUI cold launch, rapid switches during browse/direct play/HLS/tutorial in both 2D and SBS, disconnect/reconnect, renderer recovery, logout, reset preferences | Both surfaces and phone system bars agree; focus, document, video, audio and reporting remain single-instance; theme survives logout/recovery and reset restores liquid-glass; simpleUI has no decorative loops or blur |
 | Phone settings | Import/replace/cancel/reset wallpaper, malformed/oversized files, rotated photos, all crop ratios, zoom/position/opacity extremes, drag, save/cancel/Back, stale revision, cold launch, renderer recovery, theme changes, About links and installed version | Failed imports/cancelled edits retain the image and layout; saved crop restores; clear resets layout; only Liquid phone pages render it; wallpaper edits preserve glasses/video; source metadata stays private; links open fixed public pages outside the WebView; version matches the APK |
 | Remote background | Both themes, texture/black selection, cold launch, gestures, search/IME, playback panels and returning to settings | Choice persists without changing session/video; blank black regions and system-bar backgrounds measure RGB 0,0,0 in a lossless screenshot; no glow/texture/overscroll scrim; controls remain visible |
@@ -624,3 +627,5 @@ minimum device regression set for any device-facing change.
 | Renderer recovery | Kill or crash the glasses WebView renderer during browse and playback | The WebView is rebuilt, session bootstrap is republished, and the phone receives a safe state |
 | Codec selection | Representative H.264, HEVC/VP9/AV1 where hardware advertises support, plus an unsupported source | The actual Chromium `MediaCodec` component matches expectations; incompatible media requests the bounded HLS fallback |
 | Field diagnostics | Network, HTTP, response, and unknown failures; Android share flow | The phone shows the correct fixed category and the exported report contains no URL, account, title, code, token, password, body, or arbitrary exception text |
+
+Language state, localization boundaries and message maintenance are documented in [I18N.md](I18N.md).
