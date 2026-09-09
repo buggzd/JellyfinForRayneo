@@ -8,7 +8,7 @@
 
 > A third-party Jellyfin client for RayNeo Air glasses: the phone handles connection and remote control, the glasses handle browsing and playback, and one app provides both a 2D mirror and an SBS virtual screen.
 
-tachi is named after Tachikoma (TaChikoma) from *Ghost in the Shell*.
+tachi is named after Tachikoma from *Ghost in the Shell*.
 
 This project is not an official Jellyfin or RayNeo product and is not affiliated with or endorsed by either company.
 
