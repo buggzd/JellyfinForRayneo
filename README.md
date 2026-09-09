@@ -4,6 +4,8 @@
 
 <h1 align="center">tachi（塔奇）</h1>
 
+<p align="center"><a href="README.md">简体中文</a> · <a href="README.en.md">English</a></p>
+
 > 面向 RayNeo Air 系列眼镜的第三方 Jellyfin 客户端：手机负责连接与遥控，眼镜负责浏览与播放，一个应用提供 2D 镜像和 SBS 立体虚拟屏幕。
 
 tachi（塔奇）的名字源自《攻壳机动队》的塔奇克马（TaChikoma）。
@@ -95,6 +97,7 @@ https://github.com/user-attachments/assets/5dd75ead-3682-4bb2-9181-6368b4049c73
 | 已实现范围与后续工作 | [功能路线图](docs/JELLYFIN_FEATURE_ROADMAP.md) |
 | 版本、签名与发布 | [版本规则](docs/VERSIONING.md) · [发布手册](docs/RELEASE.md) |
 | 界面、SBS 几何、性能及历史资料 | [完整文档导航](docs/README.md) |
+| 中英文界面与词条维护 | [i18n 说明](docs/I18N.md) |
 
 文档导航区分现行维护说明、历史研究和真机实测；早期设计中的待办不代表当前功能缺口。
 
